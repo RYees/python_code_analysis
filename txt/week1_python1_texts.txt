@@ -1,0 +1,78 @@
+Repository Structure: '
+' └── Telecom Analysis
+    ├── Submit Files (1).py
+    └── Submit Files (2).ipynb
+ '
+' []
+Repository Structure: '
+' ├── week1py.py
+├── week 1.ipynb
+└── README.md
+ '
+' []
+Repository Structure: '
+' ├── Avd delay.png
+├── models
+│   └── satisfaction_model.joblib
+├── notebooks
+│   ├── overview_analysis.ipynb
+│   ├── experience_analytics.ipynb
+│   ├── satisfaction_analysis.ipynb
+│   ├── user_engagement_analysis.ipynb
+│   └── data_exploration.ipynb
+├── .gitignore
+├── scripts
+│   ├── data_exploration.py
+│   └── data_preprocessing.py
+├── social vs other.png
+├── dashboard
+│   ├── applications
+│   └── multiapp.py
+├── README.md
+├── .vscode
+├── total duration.png
+└── requirements.txt
+ '
+' []
+Repository Structure: '
+' ├── telecom.sql
+├── schema.sql
+├── ADD.py
+├── Extract_data.ipynb
+├── README.md
+└── EDA.py
+ '
+' []
+Repository Structure: '
+' ├── engagement_analysis.ipynb
+├── experience_analytics.ipynb
+├── some.ipynb
+├── cleaning_transform.ipynb
+└── satisfaction_analysi.ipynb
+ '
+' []
+Repository Structure: '
+' ├── DashBoard
+│   ├── dash_board_for_telecom.sql
+│   ├── dashboard.py
+│   ├── app.py
+│   └── requirements.txt
+├── .gitignore
+├── notebook
+│   ├── final.txt
+│   ├── Data
+│   ├── MSISDNNumber,Satisfaction Score,Cluster_csv_buffer.txt
+│   └── final_solution_all_tasks.ipynb
+├── data_cleaning.ipynb
+├── README.md
+├── .devcontainer
+└── all_task_2_to_5_in_one_python_file
+    ├── Data
+    ├── .gitignore
+    ├── all_task_2_to_5_solution.ipynb
+    └── script
+ '
+'  
+
+ 
+

@@ -1,0 +1,796 @@
+Repository Structure: '
+' └── Telecom Analysis
+    ├── Submit Files (1).py
+    └── Submit Files (2).ipynb
+ '
+' []
+Repository Structure: '
+' ├── week1py.py
+├── week 1.ipynb
+└── README.md
+ '
+' []
+Repository Structure: '
+' ├── setup.py
+├── user_overview_plots.py
+├── data_loader.py
+├── database_operations
+│   ├── mysql_integration.py
+│   └── data_export.py
+├── satisfaction_metrics
+│   ├── regression_model.py
+│   ├── k_means_satisfaction.py
+│   └── satisfaction_scores.py
+├── data_exploration
+│   ├── exploration_data_analysis.py
+│   └── visualizations.py
+├── engagement_metrics
+│   ├── k_means_clustering.py
+│   └── engagement_analysis.py
+├── experience_visualizations.py
+├── README.md
+├── user_overview_analysis.py
+├── bivariate_analysis.py
+├── engagement_visualizations.py
+├── model_deployment
+│   ├── mlops_tools
+│   └── docker_setup
+├── experience_metrics
+│   ├── experience_analysis.py
+│   └── experience_clustering.py
+└── requirements.txt
+ '
+'  
+
+Repository Structure: '
+' ├── Avd delay.png
+├── models
+│   └── satisfaction_model.joblib
+├── notebooks
+│   ├── overview_analysis.ipynb
+│   ├── experience_analytics.ipynb
+│   ├── satisfaction_analysis.ipynb
+│   ├── user_engagement_analysis.ipynb
+│   └── data_exploration.ipynb
+├── .gitignore
+├── scripts
+│   ├── data_exploration.py
+│   └── data_preprocessing.py
+├── social vs other.png
+├── dashboard
+│   ├── applications
+│   └── multiapp.py
+├── README.md
+├── .vscode
+├── total duration.png
+└── requirements.txt
+ '
+' []
+Repository Structure: '
+' ├── telecom.sql
+├── schema.sql
+├── ADD.py
+├── Extract_data.ipynb
+├── README.md
+└── EDA.py
+ '
+' []
+Repository Structure: '
+' ├── engagement_analysis.ipynb
+├── experience_analytics.ipynb
+├── some.ipynb
+├── cleaning_transform.ipynb
+└── satisfaction_analysi.ipynb
+ '
+' []
+Repository Structure: '
+' ├── DashBoard
+│   ├── dash_board_for_telecom.sql
+│   ├── dashboard.py
+│   ├── app.py
+│   └── requirements.txt
+├── .gitignore
+├── notebook
+│   ├── final.txt
+│   ├── Data
+│   ├── MSISDNNumber,Satisfaction Score,Cluster_csv_buffer.txt
+│   └── final_solution_all_tasks.ipynb
+├── data_cleaning.ipynb
+├── README.md
+├── .devcontainer
+└── all_task_2_to_5_in_one_python_file
+    ├── Data
+    ├── .gitignore
+    ├── all_task_2_to_5_solution.ipynb
+    └── script
+ '
+'  
+
+ 
+
+Repository Structure: '
+' ├── notebooks
+│   └── raw_data_analysis.ipynb
+├── .gitignore
+├── docker-compose.yaml
+├── .gitattributes
+├── dags
+│   ├── create_table_dag.py
+│   └── __pycache__
+├── README.md
+└── postgres_dbt
+    ├── models
+    ├── analyses
+    ├── macros
+    ├── snapshots
+    ├── dbt_project.yml
+    ├── .gitignore
+    ├── seeds
+    ├── tests
+    └── README.md
+ '
+'  
+
+Repository Structure: '
+' ├── notebooks
+│   └── read_data.ipynb
+├── redash
+│   ├── docker-compose.yml
+│   ├── .gitignore
+│   └── .env
+├── .gitignore
+├── docker-compose.yaml
+├── Screenshot
+│   ├── DAG 01.PNG
+│   ├── DAG.PNG
+│   └── DAG 2.PNG
+├── .gitattributes
+├── dags
+│   ├── data_extract_loader.py
+│   ├── dag_table.py
+│   ├── __pycache__
+│   └── load_dbt.py
+├── README.md
+└── postgres_dbt
+    ├── models
+    ├── analyses
+    ├── macros
+    ├── snapshots
+    ├── dbt_project.yml
+    ├── .gitignore
+    ├── seeds
+    ├── tests
+    └── README.md
+ '
+' []
+Repository Structure: '
+' ├── dbt
+│   ├── models
+│   ├── macros
+│   ├── dbt_project.yml
+│   ├── .gitignore
+│   ├── seeds
+│   └── README.md
+├── packages.txt
+├── dbt-requirements.txt
+├── docker-compose.override.yaml
+├── notebooks
+│   └── trial_load_the_data.ipynb
+├── Dockerfile
+├── .astro
+│   ├── test_dag_integrity_default.py
+│   └── config.yaml
+├── redash
+├── plugins
+│   └── __init__.py
+├── .gitignore
+├── tests
+│   └── dags
+├── dags
+│   ├── example_dag_basic.py
+│   └── data_loader_dag.py
+├── README.md
+├── .vscode
+├── .dockerignore
+├── dataset
+└── requirements.txt
+ '
+'  
+
+Commit History: 
+{"insertions": [26], "deletions": [0], "lines": [26], "committed_datetime": ["2023-12-23 09:05:11"], "commit_count": 1} 
+ Content: 
+name: 'jaffle_shop'
+
+config-version: 2
+version: '0.1'
+
+profile: 'jaffle_shop'
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+analysis-paths: ["analysis"]
+macro-paths: ["macros"]
+
+target-path: "target"
+clean-targets:
+    - "target"
+    - "dbt_modules"
+    - "logs"
+
+require-dbt-version: [">=1.0.0", "<2.0.0"]
+
+models:
+  jaffle_shop:
+      materialized: table
+      staging:
+        materialized: view
+ 
+
+ 
+
+Repository Structure: '
+' ├── dags
+│   ├── vehicle_dag.py
+│   ├── vehicle
+│   └── src
+└── README.md
+ '
+' []
+Repository Structure: '
+' ├── models
+│   └── my_dbt_model
+├── analyses
+├── macros
+│   └── generate_schema_name.sql
+├── snapshots
+├── dbt_project.yml
+├── .gitignore
+├── seeds
+├── screenshot
+│   ├── Documentation.png
+│   ├── route_optimization_dbt-dag.png
+│   ├── traffic_congestion_dbt-dag.png
+│   ├── lineage all.png
+│   ├── anomaly_detection_dbt-dag.png
+│   ├── materialized views.png
+│   └── identify_violation_dbt-dag.png
+├── tests
+│   ├── speed_test.sql
+│   ├── route_optimization_test.sql
+│   ├── violation_count_test.sql
+│   ├── timestamp_test.sql
+│   ├── anomaly_detection_test.sql
+│   └── car_type_test.sql
+└── README.md
+ '
+'  
+
+Repository Structure: '
+' ├── airflow
+│   ├── airflow.cfg
+│   ├── webserver_config.py
+│   ├── dags
+│   └── airflow-webserver.pid
+├── .gitignore
+└── README.md
+ '
+' []
+Repository Structure: '
+' ├── docker-compose.yml
+├── setup.py
+├── airflow
+│   ├── airflow.cfg
+│   ├── unittests.cfg
+│   ├── webserverConfig.py
+│   └── airflow-webserver.pid
+├── post
+│   ├── models
+│   ├── analyses
+│   ├── macros
+│   ├── snapshots
+│   ├── dbt_project.yml
+│   ├── .gitignore
+│   ├── seeds
+│   ├── tests
+│   └── README.md
+├── images
+│   ├── end-to-end-workflow.png
+│   ├── red-hash-viz.png
+│   ├── dbt-transf.png
+│   └── dag.png
+├── scripts
+│   ├── redhash.py
+│   ├── qur.py
+│   └── qur1.sql
+├── logs
+│   └── dbt.log
+├── data_warehouse
+│   ├── models
+│   ├── profiles.yml
+│   ├── analyses
+│   ├── macros
+│   ├── snapshots
+│   ├── dbt_project.yml
+│   ├── .gitignore
+│   ├── seeds
+│   ├── .user.yml
+│   ├── tests
+│   └── README.md
+└── README.md
+ '
+' []
+Repository Structure: '
+' ├── init-db.sql
+├── screenshots
+│   ├── Airflow_start.png
+│   ├── containers_status_12-19.png
+│   └── docker_stats_12-19.png
+├── .gitignore
+├── Jupyter URL and token.txt
+├── .env
+├── postgres-docker-compose.yaml
+├── airflow-dockerfile
+├── airflow-docker-compose.yaml
+├── requirements.txt
+└── Notebook
+    └── ExtractAndLoad.ipynb
+ '
+'  
+
+Repository Structure: '
+' ├── dbt
+│   ├── models
+│   ├── dbt_project.yml
+│   └── README.md
+├── airflow
+│   ├── docker-compose.yml
+│   ├── db
+│   ├── logs
+│   └── dags
+├── notebooks
+│   └── eda.ipynb
+├── pNEUMA_DBT
+│   ├── models
+│   ├── Dockerfile
+│   ├── profiles.yml
+│   ├── dbt_project.yml
+│   └── README.md
+├── redash
+│   ├── docker-compose.yml
+│   └── redash.env
+├── logs
+│   └── dbt.log
+├── README.md
+└── requirements.txt
+ '
+' []
+Repository Structure: '
+' └── README.md
+ '
+' []
+Repository Structure: '
+' ├── dbt
+│   ├── profiles.yml
+│   ├── .gitignore
+│   ├── .user.yml
+│   └── old
+├── models
+│   └── example
+├── airflow.cfg
+├── Dockerfile
+├── analyses
+├── macros
+├── snapshots
+├── dbt_project.yml
+├── .gitignore
+├── seeds
+├── requiremnts
+├── notebook
+│   └── EDA.ipynb
+├── webserver_config.py
+├── tests
+└── README.md
+ '
+'  
+
+Repository Structure: '
+' ├── data_exporter.py
+├── .gitignore
+ '
+' []
+Repository Structure: '
+' ├── certificate_issuance
+├── image_generation
+│   ├── cert1.png
+│   ├── image_gen.py
+│   ├── .gitignore
+│   └── cert.png
+├── README.md
+└── backend
+    ├── api_endpoint.py
+    ├── schemes.py
+    └── __pycache__
+ '
+' []
+Repository Structure: '
+' ├── screenshoot
+│   ├── algorand screen sheet.png
+│   └── certificate.png
+├── .gitignore
+├── algorand_dapp
+│   └── playground
+├── README.md
+├── frontend
+│   └── react
+└── backend
+    ├── main.py
+    └── dapp
+ '
+'  
+
+Repository Structure: '
+' ├── img_creation
+│   ├── dynamic.py
+│   ├── final_certificate.png
+│   ├── certification_image.png
+│   ├── .gitignore
+│   └── certification.py
+├── api
+│   ├── .gitignore
+│   ├── scripts
+│   └── app.py
+├── react
+│   ├── .ruby-version
+│   ├── yarn.lock
+│   ├── LICENSE
+│   ├── src
+│   ├── .gitignore
+│   ├── webpack.config
+│   ├── public
+│   ├── Gemfile
+│   ├── _config.yml
+│   ├── README.md
+├── README.md
+└── nft
+    ├── main.py
+    ├── closeout_account.py
+    ├── NFT
+    └── create_account.py
+ '
+' []
+Repository Structure: '
+' ├── docker-compose.yml
+├── back-end
+│   └── main.py
+├── front-end
+│   ├── src
+│   ├── .gitignore
+│   ├── public
+│   ├── index.html
+│   ├── README.md
+│   ├── vite.config.ts
+│   └── .eslintrc.cjs
+├── notebooks
+│   ├── rag-chatbot.ipynb
+│   ├── playground.ipynb
+│   ├── RAGAS.ipynb
+│   └── vector_db.ipynb
+├── Dockerfile
+├── Home.py
+├── .gitignore
+├── scripts
+│   └── __init__.py
+├── tests
+│   └── __init__.py
+├── README.md
+├── utility
+│   ├── __init__.py
+│   ├── __pycache__
+│   └── env_manager.py
+├── prompts
+│   ├── generic-evaluation-prompt.txt
+│   ├── data-generation-prompt.txt
+│   ├── context.txt
+│   └── automatic-prompt-generation.txt
+├── requirements.txt
+└── evaluation
+    ├── _data_generation.py
+    ├── __init__.py
+    ├── _evaluate.py
+    └── __pycache__
+ '
+' []
+Repository Structure: '
+' ├── ethereum.png
+├── .gitmodules
+├── .gitignore
+├── contract
+│   ├── contracts
+│   ├── .DS_Store
+│   ├── test
+│   ├── .gitignore
+│   ├── scripts
+│   ├── README.md
+├── flutterdapp
+│   ├── analysis_options.yaml
+│   ├── assets
+│   ├── accounts.txt
+│   ├── linux
+│   ├── ios
+│   ├── AppIcons
+│   ├── .metadata
+│   ├── .bash_profile
+│   ├── images
+│   ├── windows
+│   ├── test
+│   ├── .gitignore
+│   ├── pubspec.lock
+│   ├── web
+│   ├── android
+│   ├── contract
+│   ├── .bash_profile.save
+│   ├── pubspec.yaml
+│   ├── README.md
+│   ├── lib
+│   ├── macos
+│   └── AppIcons.zip
+└── README.md
+ '
+'  
+
+Repository Structure: '
+' ├── contracts
+│   ├── contracts
+│   ├── .gitignore
+│   ├── .gitattributes
+│   └── brownie-config.yaml
+├── LICENSE
+├── .gitignore
+├── my-app
+│   ├── my-app
+│   └── .expo
+├── tests
+│   ├── test_number_betting.py
+│   └── test_refund_location.py
+├── README.md
+├── app
+│   ├── src
+│   ├── .gitignore
+│   ├── public
+│   ├── README.md
+└── requirements.txt
+ '
+'  
+
+
+Repository Structure: '
+' ├── contracts
+│   ├── location.sol
+│   └── Lock.sol
+├── hardhat.config.js
+├── test
+│   └── Lock.js
+├── .gitignore
+├── scripts
+│   └── deploy.js
+├── README.md
+ '
+' []
+Repository Structure: '
+' └── README.md
+ '
+' []
+Repository Structure: '
+' ├── contracts
+│   └── Token.sol
+├── LICENSE
+├── tasks
+│   └── faucet.js
+├── artifacts
+│   ├── contracts
+│   ├── build-info
+│   └── hardhat
+├── casino-ethereum
+├── hardhat-ethers-react-ts-starter
+├── hardhat.config.js
+├── test
+│   └── Token.js
+├── .gitignore
+├── scripts
+│   └── deploy.js
+├── README.md
+├── cache
+└── frontend
+    ├── src
+    ├── mobile
+    ├── .gitignore
+    ├── public
+    ├── README.md
+ '
+'  
+
+Repository Structure: '
+' ├── LICENSE
+├── casino-ethereum
+│   ├── contracts
+│   ├── dist
+│   ├── webpack.config.js
+│   ├── truffle-config.js
+│   ├── src
+│   ├── test
+│   ├── migrations
+├── README.md
+└── GeoLocation_contract_ethereum
+    ├── contracts
+    ├── truffle-config.js
+    ├── test
+    ├── flutter_geoloc_ethereum_dapp
+    └── migrations
+ '
+' Commit History: 
+{"insertions": [13], "deletions": [0], "lines": [13], "committed_datetime": ["2024-02-07 20:56:13"], "commit_count": 1} 
+ Content: 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+   <meta charset="UTF-8">
+   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+   <link href='https://fonts.googleapis.com/css?family=Open+Sans:400,700' rel='stylesheet' type='text/css'>
+   <title>Casino Ethereum Dapp</title>
+</head>
+<body>
+   <div id="root"></div>
+   <script src="build.js"></script>
+</body>
+</html> 
+
+ 
+
+Repository Structure: '
+' ├── notebooks
+│   ├── diffusion_model.ipynb
+│   ├── CV_models_and_algorithms _tutorial.ipynb
+│   ├── __init__.py
+│   └── pipeline_diffusion_model.ipynb
+├── LICENSE
+├── screenshots
+│   ├── frame_1_Background_0.png
+│   ├── frame_3_Background_0.png
+│   ├── frame_good_Background_0.png
+│   ├── frame_2_Background_0.png
+│   ├── Screenshot from 2024-02-13 23-35-11.png
+│   ├── frame_6_Background_0.png
+│   ├── frame_8_Background_0.png
+│   ├── Screenshot from 2024-02-13 23-34-48.png
+│   ├── frame_4_Background_0.png
+│   ├── Screenshot from 2024-02-13 23-35-38.png
+│   ├── Screenshot from 2024-02-13 23-36-00.png
+│   └── frame_7_Background_0.png
+├── .gitignore
+├── scripts
+│   ├── image_generator.py
+│   ├── __init__.py
+│   ├── storyboard_visualizer.py
+│   ├── image_composer.py
+│   ├── script.py
+│   ├── __pycache__
+│   └── utils.py
+├── .github
+│   └── workflows
+├── tests
+│   └── test_script.py
+├── README.md
+└── requirements.txt
+ '
+'  
+
+Commit History: 
+{"insertions": [1, 1], "deletions": [0, 0], "lines": [1, 1], "committed_datetime": ["2024-02-18 01:29:22", "2024-02-18 01:33:55"], "commit_count": 2} 
+ Content: 
+import unittest
+import sys, os
+sys.path.append(os.path.abspath(os.path.join('..')))
+
+
+if __name__ == '__main__':
+    unittest.main()
+
+ 
+
+Repository Structure: '
+' ├── data-analysis
+│   ├── unlabeled_images
+│   ├── labeled_images
+│   └── object_detection_using_yolo.py
+├── yolov3.txt
+├── requirments.txt
+├── yolov3.cfg
+├── .gitignore
+├── generated-assets
+│   ├── image_20240216111624_f3092e.jpg
+│   ├── image_20240216111620_01c9e8.jpg
+│   ├── image_20240216111625_b6f8ec.jpg
+│   ├── image_20240216111623_0b91ea.jpg
+│   ├── image_20240216111619_1d843a.jpg
+│   ├── image_20240216111621_e4f278.jpg
+│   └── image_20240216111622_4c0c70.jpg
+├── .env
+├── README.md
+└── image-and-text-generation
+    ├── test_image_generation_using_openjoureny-v4.ipynb
+    └── generate_image.ipynb
+ '
+'  
+
+Repository Structure: '
+' ├── .gitignore
+├── data_processing
+│   └── data_processing.ipynb
+└── README.md
+ '
+'  
+
+Repository Structure: '
+' ├── back-end
+│   ├── cv_models_and_algorithms.ipynb
+│   └── requirements.txt
+├── .gitignore
+├── README.md
+└── requirements.txt
+ '
+'  
+
+Repository Structure: '
+' ├── notebooks
+│   ├── inference_proteousV0.2.ipynb
+│   ├── inference_stable-diffusion.ipynb
+│   └── pipeline.ipynb
+├── LICENSE
+├── .gitignore
+├── scripts
+│   ├── image_generator.py
+│   ├── dataextraction.py
+│   ├── images
+│   ├── storyboard_visualizer.py
+│   ├── image_composer.py
+│   ├── __pycache__
+│   ├── test.py
+│   └── Prote.py
+└── README.md
+ '
+' Commit History: 
+{"insertions": [109], "deletions": [18], "lines": [127], "committed_datetime": ["2024-02-15 10:30:02"], "commit_count": 1} 
+ Content: 
+! pip install diffusers==0.10.2 transformers scipy ftfy accelerate
+
+from diffusers import StableDiffusionPipeline
+
+
+
+pipe = StableDiffusionPipeline.from_pretrained("CompVis/stable-diffusion-v1-4")
+
+pipe.to("cuda")
+
+prompt = "a photograph of an astronaut riding a horse"
+
+
+
+image = pipe(prompt).images[0]
+
+
+
+
+
+image
+prompt = "A photograph of an Ethiopian king riding a horse"
+
+
+
+image2 = pipe(prompt).images[0]
+
+image2 
+
+ 
+

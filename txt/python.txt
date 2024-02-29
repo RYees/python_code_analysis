@@ -1,0 +1,698 @@
+class StoreResults:
+
+    def __call__(self, batch):
+
+        
+        with psycopg.connect(os.environ["DB_CONNECTION_STRING"]) as conn:
+
+            
+            register_vector(conn)
+
+            with conn.cursor() as cur:
+
+                
+                for question, solution, embeded_chunk in zip(batch["question"], batch["solution"], batch["embeded_chunk"]):
+
+                    cur.execute("INSERT INTO document (question, solution, embeded_chunk) VALUES (%s, %s, %s)",
+
+                                (question, solution, embeded_chunk,))
+
+        
+        return {}
+
+
+
+store_results = StoreResults()  
+
+
+
+for _, row in tqdm(embeded_chunk.iterrows(), total=len(embeded_chunk), desc="Processing"): 
+
+    StoreResults()(row)
+
+embedded_chunks.map_batches(
+
+    StoreResults,
+
+    batch_size=128,
+
+    num_cpus=1,
+
+    compute=ActorPoolStrategy(size=28),
+
+).count()
+import os
+
+from langchain.embeddings import OpenAIEmbeddings
+
+from langchain.embeddings.huggingface import HuggingFaceEmbeddings
+
+import numpy as np
+
+
+
+
+
+
+class EmbedChunks:
+
+    def __init__(self):
+
+       
+
+        self.embedding_model = OpenAIEmbeddings(
+
+            model="text-embedding-ada-002",
+
+            openai_api_base=os.getenv("OPENAI_API_BASE"),
+
+            openai_api_key=os.getenv("OPENAI_API_KEY"))
+
+      
+
+
+
+    def process_batch(self, batch):
+
+        embeddings = self.embedding_model.embed_documents(batch["question"])
+
+       
+
+        return pd.DataFrame({"question": batch["question"], "solution": batch["solution"], "embeddings": embeddings})
+
+
+def get_completion(
+    messages: list[dict[str, str]],
+    model: str = model,
+    max_tokens=500,
+    temperature=0,
+    stop=None,
+    seed=123,
+    tools=None,
+    logprobs=None,
+    top_logprobs=None,
+) -> str:
+    """Return the completion of the prompt.
+    @parameter messages: list of dictionaries with keys 'role' and 'content'.
+    @parameter model: the model to use for completion. Defaults to 'davinci'.
+    @parameter max_tokens: max tokens to use for each prompt completion.
+    @parameter temperature: the higher the temperature, the crazier the text
+    @parameter stop: token at which text generation is stopped
+    @parameter seed: random seed for text generation
+    @parameter tools: list of tools to use for post-processing the output.
+    @parameter logprobs: whether to return log probabilities of the output tokens or not.
+    @returns completion: the completion of the prompt.
+    """
+
+    params = {
+        "model": model,
+        "messages": messages,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+        "stop": stop,
+        "seed": seed,
+        "logprobs": logprobs,
+        "top_logprobs": top_logprobs,
+    }
+    if tools:
+        params["tools"] = tools
+
+    completion = client.chat.completions.create(**params)
+    return completion
+
+
+def file_reader(path: str, ) -> str:
+    fname = os.path.join(path)
+    with open(fname, 'r') as f:
+        system_message = f.read()
+    return system_message
+            
+
+def generate_test_data(prompt: str, context: str, num_test_output: str) -> str:
+    """Return the classification of the hallucination.
+    @parameter prompt: the prompt to be completed.
+    @parameter user_message: the user message to be classified.
+    @parameter context: the context of the user message.
+    @returns classification: the classification of the hallucination.
+    """
+    API_RESPONSE = get_completion(
+        [
+            {
+                "role": "user", 
+                "content": prompt.replace("{context}", context).replace("{num_test_output}", num_test_output)
+            }
+        ],
+        model=model,
+        logprobs=True,
+        top_logprobs=1,
+    )
+
+    system_msg = API_RESPONSE.choices[0].message.content
+    return system_msg
+
+
+def main(num_test_output: str):
+    context_message = file_reader("../prompts/context.txt")
+    prompt_message = file_reader("../prompts/test-prompt-generating-prompt.txt")
+    context = str(context_message)
+    prompt = str(prompt_message)
+
+    test_data = generate_test_data(prompt, context, num_test_output)
+
+    def save_txt(test_data) -> None:
+                file_path = "../prompts/automatically-generated-test-prompts.txt"
+        with open(file_path, 'w') as txt_file:
+            txt_file.write(test_data)
+        
+        print(f"Text data has been saved to {file_path}")
+
+    save_txt(test_data)
+
+    print("===========")
+    print("Prompts")
+    print("===========")
+    print(test_data)
+
+
+if __name__ == "__main__":
+    main("3")
+import requests
+import os
+import weaviate
+from weaviate.embedded import EmbeddedOptions
+from langchain.document_loaders import TextLoader
+from langchain.text_splitter import CharacterTextSplitter  
+from langchain.embeddings import OpenAIEmbeddings
+from langchain.vectorstores import Weaviate
+from langchain.chat_models import ChatOpenAI
+from langchain.prompts import ChatPromptTemplate
+from langchain.schema.runnable import RunnablePassthrough
+from langchain.schema.output_parser import StrOutputParser
+from datasets import Dataset
+from ragas import evaluate
+from ragas.metrics import (
+    faithfulness,
+    answer_relevancy,
+    context_recall,
+    context_precision,
+)
+
+from dotenv import load_dotenv,find_dotenv
+
+
+def chunk_loader(file_path= '../RAG/prompts/context.txt'):
+    loader = TextLoader(file_path)
+    documents = loader.load()
+
+        text_splitter = CharacterTextSplitter(chunk_size=500, chunk_overlap=50)
+    chunks = text_splitter.split_documents(documents)
+    return chunks
+
+
+def create_retriever(chunks):
+    load_dotenv(find_dotenv())
+
+    client = weaviate.Client(
+    embedded_options = EmbeddedOptions()
+  )
+
+    vectorstore = Weaviate.from_documents(
+      client = client,    
+      documents = chunks,
+      embedding = OpenAIEmbeddings(),
+      by_text = False
+  )
+
+    retriever = vectorstore.as_retriever()
+  return retriever
+
+
+def file_reader(path: str, ) -> str:
+    fname = os.path.join(path)
+    with open(fname, 'r') as f:
+        system_message = f.read()
+    return system_message
+
+
+def test_prompts():
+    prompts = file_reader("../prompts/automatically-generated-prompts.txt")
+    chunks =  chunk_loader()
+    retriever = create_retriever(chunks)
+
+        llm = ChatOpenAI(model_name="gpt-3.5-turbo-16k", temperature=0)
+
+    final_prompts = []
+
+    for prompt in prompts:
+       final_prompts.append(ChatPromptTemplate.from_template(prompt))
+
+    
+    for prompt in final_prompts:
+                rag_chain = (
+            {"context": retriever,  "question": RunnablePassthrough()} 
+            | prompt 
+            | llm
+            | StrOutputParser() 
+        )
+
+        test_cases = file_reader("../prompts/automatically-generated-test-prompts.txt")
+
+        questions = []
+        ground_truths = []
+        for test_case in test_cases:
+            questions.append(test_case["user"])
+            ground_truths.append(test_case["assistant"])
+
+        answers = []
+        contexts = []
+
+                for query in questions:
+            answers.append(rag_chain.invoke(query))
+            contexts.append([docs.page_content for docs in retriever.get_relevant_documents(query)])
+
+                data = {
+            "question": questions,             "answer": answers,             "contexts": contexts,             "ground_truths": ground_truths         }
+
+                dataset = Dataset.from_dict(data)
+
+        result = evaluate(
+            dataset = dataset, 
+            metrics=[
+                context_precision,
+                context_recall,
+                faithfulness,
+                answer_relevancy,
+            ],
+        )
+
+        df = result.to_pandas()
+        print(df)
+        
+        return result
+        
+def create_conn():
+    engine = None
+    try:
+                engine = create_engine('postgresql://postgres:telecom@localhost:5432/telecom')
+        print("Connection successful")
+    except Exception as error:
+        print(error)
+
+    return engine
+
+"""
+a function that that accept engine, and table_name as an argument and return pandas data fream
+"""
+def fetch_data(engine, table_name):
+    df = None
+    try:
+                df = pd.read_sql_query(f"SELECT * FROM {table_name};", engine)
+    except Exception as error:
+        print(error)
+
+    return df
+
+    
+if __name__ == "__main__":
+    test_prompts()
+    
+    
+    
+import pandas as pd
+from sklearn.cluster import KMeans
+from sklearn.impute import SimpleImputer
+from sqlalchemy import create_engine
+
+class UserSatisfactionAnalysis:
+    engagement_columns = [
+        'Dur. (ms)',
+        'TCP DL Retrans. Vol (Bytes)',
+        'DL TP < 50 Kbps (%)',
+        '50 Kbps < DL TP < 250 Kbps (%)',
+        '250 Kbps < DL TP < 1 Mbps (%)',
+        'DL TP > 1 Mbps (%)',
+        'Activity Duration DL (ms)',
+        'Activity Duration UL (ms)',
+        'Social Media DL (Bytes)',
+        'Google DL (Bytes)',
+        'Email DL (Bytes)',
+        'Youtube DL (Bytes)',
+        'Netflix DL (Bytes)',
+        'Gaming DL (Bytes)',
+        'Other DL (Bytes)',
+        'Total UL (Bytes)',
+        'Total DL (Bytes)'
+    ]
+
+    def __init__(self, db_params):
+        self.db_params = db_params
+        self.mydata = self.load_data_from_database()
+
+    def load_data_from_database(self):
+        """
+        Load data from the PostgreSQL database into a Pandas DataFrame.
+        """
+        engine = create_engine(f'postgresql+psycopg2://{self.db_params["user"]}:{self.db_params["password"]}@{self.db_params["host"]}:{self.db_params["port"]}/{self.db_params["dbname"]}')
+        sql_query = "SELECT * FROM xdr_data;"
+        mydata = pd.read_sql_query(sql_query, engine)
+        return mydata
+
+    def perform_user_satisfaction_analysis(self):
+        """
+        Perform user satisfaction analysis by calculating engagement and experience scores,
+        deriving a satisfaction score, identifying the top 10 satisfied customers, and clustering users.
+        """
+                engagement_score, experience_score = self.calculate_scores()
+
+                satisfaction_score = (engagement_score + experience_score) / 2
+
+                self.mydata['SatisfactionScore'] = satisfaction_score
+
+                top_satisfied_customers = self.mydata.nlargest(10, 'SatisfactionScore')
+
+                kmeans_clusters = self.run_kmeans()
+
+                cluster_aggregates = self.aggregate_scores_by_cluster(kmeans_clusters)
+
+        return top_satisfied_customers, cluster_aggregates
+
+    def calculate_scores(self):
+        """
+        Calculate engagement and experience scores based on relevant columns in the dataset.
+        """
+        
+        engagement_score = self.mydata[self.engagement_columns].mean(axis=1)
+
+                experience_score = 0
+
+        return engagement_score, experience_score
+
+    def run_kmeans(self):
+        """
+        Run k-means clustering on engagement and experience scores.
+        """
+                imputer = SimpleImputer(strategy='mean')
+        kmeans_data_imputed = imputer.fit_transform(self.mydata[self.engagement_columns])
+
+                kmeans_model = KMeans(n_clusters=2, random_state=42)
+        kmeans_clusters = kmeans_model.fit_predict(kmeans_data_imputed)
+
+        return kmeans_clusters
+
+    def aggregate_scores_by_cluster(self, kmeans_clusters):
+        """
+        Aggregate average satisfaction scores per cluster.
+        """
+                cluster_data = self.mydata.copy()
+        cluster_data['Cluster'] = kmeans_clusters
+        cluster_aggregates = cluster_data.groupby('Cluster').agg({
+            'SatisfactionScore': 'mean'
+        }).reset_index()
+
+        return cluster_aggregates
+        
+        
+        
+class MissingInformation:
+
+    def __init__(self,df:pd.DataFrame):
+
+        self.df = df
+
+        logging.basicConfig(filename='../logfile.log', filemode='a',
+
+                            encoding='utf-8', level=logging.DEBUG)
+        
+
+    def missing_values_table(self,df:pd.DataFrame)->pd.DataFrame:
+        mis_val = df.isnull().sum()
+        mis_val_percent = 100 * df.isnull().sum() / len(df)
+        mis_val_table = pd.concat([mis_val, mis_val_percent, mis_val_dtype], axis=1)
+        mis_val_table_ren_columns = mis_val_table.rename(columns={0: 'Missing Values', 1: '% of Total Values', 2: 'Dtype'})
+        mis_val_table_ren_columns = mis_val_table_ren_columns[
+            mis_val_table_ren_columns.iloc[:, 1] != 0].sort_values(
+            '% of Total Values', ascending=False).round(1)
+
+        logging.info("Your selected dataframe has " + str(df.shape[1]) + " columns.\n"
+
+                         "There are " + str(mis_val_table_ren_columns.shape[0]) +
+
+                         " columns that have missing values.")
+       
+        return mis_val_table_ren_columns
+
+    def percent_missing(self,df:pd.DataFrame):
+        totalCells = np.product(df.shape)
+        missingCount = df.isnull().sum()        
+        totalMissing = missingCount.sum()
+        return totalCells, missingCount, totalMissing
+        
+        
+class DataFrameInformation:
+    def __init__(self,data:pd.DataFrame):
+
+        self.data = data
+
+        logging.basicConfig(filename='../logfile.log', filemode='a',
+
+                            encoding='utf-8', level=logging.DEBUG)
+    
+    def get_skewness(self,data:pd.DataFrame):
+
+        skewness = data.skew(axis=0, skipna=True)
+
+        df_skewness = pd.DataFrame(skewness)
+
+        df_skewness = df_skewness.rename(
+
+            columns={0: 'skewness'})
+        return df_skewness
+    
+    def get_skewness_missing_count(self,data:pd.DataFrame):
+
+        df_skewness = self.get_skewness(data)
+
+        minfo = MissingInformation(data)
+        mis_val_table_ren_columns = minfo.missing_values_table(data)
+
+        df1 = pd.concat([df_skewness, mis_val_table_ren_columns], axis=1)
+
+        df1['Dtype'] = df1['Dtype'].fillna('float64')
+
+        df1['% of Total Values'] = df1['% of Total Values'].fillna(0.0)
+
+        df1['Missing Values'] = df1['Missing Values'].fillna(0)
+
+        df1 = df1.sort_values(by='Missing Values', ascending=False)
+
+        return df1
+
+    def get_column_with_string(self,df: pd.DataFrame, text):
+
+        return [col for col in df.columns if re.findall(text, col) != []]
+
+    def get_dataframe_information(self,df: pd.DataFrame):
+
+        columns = []
+
+        counts = []
+
+        i = 0
+
+        for key, item in df.isnull().sum().items():
+
+            if item != 0:
+
+                columns.append(key)
+
+                counts.append(item)
+
+                i += 1
+
+        logging.info(
+
+            'the dataset contain {} columns with missing values'.format(i))
+
+        return pd.DataFrame({'column name': columns, 'counts': counts})
+
+
+
+		numeric_columns = df.select_dtypes(include=np.number)
+
+		skewness = numeric_columns.skew(axis=0, skipna=True)
+
+
+
+
+		df_skewness = pd.DataFrame({'skewness': skewness})
+
+		df_skewness
+
+		df_skewness.plot(kind='bar')
+		d_f = pd.concat([df_skewness, mis_val_table_ren_columns], axis=1)
+
+		d_f['Dtype'] = d_f['Dtype'].fillna('float64')
+
+		d_f['% of Total Values'] = d_f['% of Total Values'].fillna(0.0)
+
+		d_f['Missing Values'] = d_f['Missing Values'].fillna(0)
+
+		d_f.sort_values(by='Missing Values', ascending=False)
+
+
+		df['Nb of sec with Vol UL < 1250B'].plot(kind='kde')
+
+		i = 0
+
+		for key, item in df.isnull().sum().items():
+
+		    if item==0:
+
+			i+=1
+
+			print(key)
+
+		print('the dataset contain {} columns with no missing values'.format(i))
+
+		columns = []
+
+		counts=[]
+
+		i=0
+
+		for key, item in df.isnull().sum().items():
+
+		    if item != 0:
+
+			columns.append(key)
+
+			counts.append(item)
+
+			i+=1
+
+		print('the dataset contain {} columns with missing values'.format(i))
+
+pd.DataFrame({'column name':columns,'counts':counts})
+from scipy.stats.mstats import winsorize
+
+class CleanData:
+
+    def __init__(self,df:pd.DataFrame):
+
+        self.df = df
+
+        logging.basicConfig(filename='../logfile.log', filemode='a',
+
+                            encoding='utf-8', level=logging.DEBUG)
+   
+
+    def convert_dtype(self, df: pd.DataFrame, columns, dtype):
+
+        for col in columns:
+
+            df[col] = df[col].astype(dtype=dtype)
+
+        return df
+
+    
+
+    def format_float(self,value):
+
+        return f'{value:,.2f}'
+
+
+
+    def convert_bytes_to_megabytes(self, df:pd.DataFrame, columns):
+
+
+
+        megabyte = 1*10e+5
+
+        for col in columns:
+
+            df[col] = df[col] / megabyte
+
+        return df
+
+    
+
+    def convert_ms_to_sec(self, df:pd.DataFrame, columns): 
+
+        s = 10e+3
+
+        for col in columns:
+
+            df[col] = df[col] / s
+
+        return df 
+
+    
+
+    def fix_missing_ffill(self, df: pd.DataFrame,col):
+
+        df[col] = df[col].fillna(method='ffill')
+
+        return df[col]
+
+  
+
+    def fix_missing_bfill(self, df: pd.DataFrame, col):
+
+        df[col] = df[col].fillna(method='bfill')
+
+        return df[col]
+
+    
+
+    def drop_column(self, df: pd.DataFrame, columns) -> pd.DataFrame:
+
+        for col in columns:
+
+            df = df.drop([col], axis=1)
+
+        return df
+
+
+
+    def drop_missing_count_greaterthan_20p(self,data:pd.DataFrame):
+
+        data_info = DataFrameInformation(data)
+
+        df = data_info.get_skewness_missing_count(data)
+
+        not_fill = df[(df['% of Total Values'] >= 20.0)].index.tolist()
+
+        df_clean = self.drop_column(data, not_fill)
+
+        return df_clean
+    
+
+    def fill_mode(self, df: pd.DataFrame, columns) -> pd.DataFrame:
+
+        for col in columns:
+
+            df[col] = df[col].fillna(df[col].mode()[0])
+
+        return df
+
+
+    def fix_outlier(self,df:pd.DataFrame, columns):
+
+        for column in columns:
+
+            df[column] = np.where(df[column] > df[column].quantile(0.95), df[column].median(), df[column])
+        return df
+
+
+
+    def handle_outliers(self, df: pd.DataFrame,lower,upper):
+
+        selected_columns = df.select_dtypes(include='float64').columns
+
+        for col in selected_columns:
+
+            df[col] = winsorize(df[col], (lower, upper))
+
+        return df
+
+

@@ -1,0 +1,29 @@
+Repository Structure: '
+' └── Telecom Analysis
+    ├── Submit Files (1).py
+    └── Submit Files (2).ipynb
+ '
+' []
+Repository Structure: '
+' ├── week1py.py
+├── week 1.ipynb
+└── README.md
+ '
+' []
+Repository Structure: '
+' ├── telecom.sql
+├── schema.sql
+├── ADD.py
+├── Extract_data.ipynb
+├── README.md
+└── EDA.py
+ '
+' []
+Repository Structure: '
+' ├── engagement_analysis.ipynb
+├── experience_analytics.ipynb
+├── some.ipynb
+├── cleaning_transform.ipynb
+└── satisfaction_analysi.ipynb
+ '
+' []

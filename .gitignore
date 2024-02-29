@@ -1,0 +1,7 @@
+.env
+/env
+/__pycache__
+/data_files
+/json_files
+output.py
+clearnoutput.py

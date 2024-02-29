@@ -1,0 +1,81 @@
+const App = () => {
+
+ 
+
+  const [accounts, setAccounts] = useState([]);
+  const [formData, setFormData] = useState({
+    user_name: '',
+    password: ''
+  });
+
+const fetchAccounts = async () => {
+  const response = await api.get('/accounts/')
+  setAccounts(response.data)
+};
+
+useEffect(() => {
+  fetchAccounts();
+},[]);
+
+  const handleInputChange = (event) => {
+    const value = event.target.type === 'checkbox'? event.target.checked: event.target.value;
+    setFormData({
+      ...formData,
+      [event.target.name]: value,
+    });
+  };
+
+  const handleFormatSumbit = async (event) => {
+    event.preventDefault();
+    await api.post('/accounts/',formData);
+    fetchAccounts();
+    setFormData({
+      user_name: '',
+      password: ''
+    });
+  };
+
+
+  return(
+    <div>
+      <Routes>
+        <Route path="/" exact element={<HomePage/>} />
+        <Route path="/trainee" element={<Trainee/>} />
+        <Route path="/admin" element={<AdminPage/>} />
+      </Routes>
+     
+     
+      {/* <Trainee /> */}
+    </div>
+  )
+}
+
+export default App;
+import React from "react";
+import Table from '../Components/Table'
+import Trainee from './Trainee'
+import {Routes, Route, useNavigate} from 'react-router-dom';
+const Home = () => {
+    const navigate = useNavigate();
+
+    const navigateToContacts = () => {
+      //  navigate to /Trainee
+      console.log('clicked')
+      navigate('/trainee', {replace: true});
+    };
+    return (
+        <div>
+        <Routes>
+          <Route path="/trainee" element={<Trainee />} />
+        </Routes>
+            <nav className= 'navbar navbar-dark bg-primary'>
+                <div className='container-fluid'>
+                    <a className='navbar-brand' href='                        Accounts
+                    </a>
+                </div>
+            </nav>
+        <Table onClick={navigateToContacts} />
+        </div>
+    )
+}
+

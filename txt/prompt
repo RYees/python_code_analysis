@@ -1,0 +1,21 @@
+1. "Evaluate the complexity level of the Python code collection and provide an assessment of its overall difficulty, ranging from beginner-friendly to advanced. Highlight any notable patterns or structures that contribute to its complexity."
+
+2. "Assess the proficiency level required to understand and work with the Python code collection. Identify any advanced concepts or techniques utilized and provide recommendations for developers at different skill levels who may interact with the code."
+
+3. "Examine the Python code collection and determine if it exhibits characteristics of well-structured and modular code. Comment on the presence of clear separation of concerns, code reusability, and adherence to coding best practices."
+
+4. "Analyze the Python code collection to identify any potential areas for improvement or optimization. Discuss opportunities for enhancing performance, readability, and maintainability, and suggest alternative approaches if applicable."
+
+5. "Investigate the dependencies and external libraries utilized within the Python code collection. Evaluate their relevance, compatibility, and potential impact on the overall codebase, and provide recommendations for managing dependencies effectively."
+
+6. "Evaluate the Python code collection for potential code smells or anti-patterns. Identify any instances of duplicated code, overly complex logic, or violations of coding conventions, and propose strategies for refactoring and improving the code quality."
+
+7. "Assess the documentation and comments within the Python code collection. Evaluate their clarity, comprehensiveness, and consistency, and offer recommendations for enhancing the documentation to improve code understanding and maintainability."
+
+8. "Examine the error handling and exception management practices employed in the Python code collection. Evaluate the robustness of error handling, identify potential vulnerabilities, and propose strategies for enhancing error handling and ensuring code reliability."
+
+9. "Analyze the testing approach adopted within the Python code collection. Assess the presence of unit tests, integration tests, or other testing methodologies, and provide suggestions for improving the overall test coverage and reliability of the codebase."
+
+10. "Evaluate the adherence to Python coding style guidelines, such as PEP 8. Discuss the consistency of naming conventions, code formatting, and overall code readability, and suggest ways to ensure consistent adherence to coding style guidelines throughout the codebase."
+
+These prompts can help guide the analysis of a collection of Python code snippets and provide insights into various aspects of the code's complexity, structure, quality, and best practices.
