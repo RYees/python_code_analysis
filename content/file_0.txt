@@ -1,0 +1,563 @@
+from sqlalchemy import create_engine
+import pandas as pd
+
+def create_conn():
+  engine = None
+  try:
+  engine = create_engine('postgresql://postgres:telecom@localhost:5432/telecom')
+  print("Connection successful")
+  except Exception as error:
+  print(error)
+  return engine
+
+def fetch_data(engine, table_name):
+  df = None
+  try:
+  df = pd.read_sql_query(f"SELECT * FROM {table_name};", engine)
+  except Exception as error:
+  print(error)
+  return df
+import  script
+
+import pandas as pd
+engine=script.create_conn()
+
+data=script.fetch_data(engine, "xdr_data")
+data
+missing_fields = data.isnull().sum()
+
+print(missing_fields)
+column_data_types = data.dtypes
+
+print(column_data_types)
+float_columns = data.select_dtypes(include=['float64'])
+
+float_columns
+filled_data = float_columns.fillna(float_columns.mean())
+
+print(filled_data)
+missing_fields = filled_data.isnull().sum()
+
+print(missing_fields)
+import pandas as pd
+ 
+non_float_columns = data.select_dtypes(exclude=['float64'])
+ 
+cleand_data = pd.concat([filled_data, non_float_columns], axis=1)
+ 
+print(cleand_data)
+from sqlalchemy import create_engine
+ 
+engine = create_engine('postgresql://postgres:telecom@localhost:5432/telecom')
+ 
+cleand_data.to_sql('xdr_cleaned_data', engine, if_exists='replace', index=False)
+from sqlalchemy import create_engine
+ 
+engine = create_engine('postgresql://postgres:telecom@localhost:5432/telecom')
+ 
+float_columns.to_sql('xdr_float_data', engine, if_exists='replace', index=False)
+import  script
+engine=script.create_conn()
+
+data=script.fetch_data(engine, "xdr_data")
+data
+column_names_list = data.columns.tolist()
+
+print(column_names_list)
+print(data['Handset Type'].head(20))
+top_10_handsets = data['Handset Type'].value_counts().head(10)
+
+print(top_10_handsets)
+top_3_manufactures = data['Handset Manufacturer'].value_counts().head(3)
+
+print(top_3_manufactures)
+ 
+top_3_manufacturers = data['Handset Manufacturer'].value_counts().head(3).index
+
+filtered_data = data[data['Handset Manufacturer'].isin(top_3_manufacturers)]
+ 
+top_5_handsets_per_manufacturer = filtered_data.groupby('Handset Manufacturer')['Handset Type'].value_counts().groupby(level=0, group_keys=False).nlargest(5)
+
+print(top_5_handsets_per_manufacturer)
+import  script
+engine=script.create_conn()
+
+cleaned_data=script.fetch_data(engine, "xdr_cleaned_data")
+
+sessions_per_user = cleaned_data.groupby('MSISDN/Number')['Bearer Id'].nunique()
+sessions_per_user
+import pandas as pd
+
+cleaned_data['Start'] = pd.to_datetime(cleaned_data['Start'])
+
+cleaned_data['End'] = pd.to_datetime(cleaned_data['End'])
+
+cleaned_data['Session Duration'] = (cleaned_data['End'] - cleaned_data['Start']).dt.total_seconds()
+
+total_session_duration = cleaned_data.groupby('MSISDN/Number')['Session Duration'].sum()
+total_session_duration
+import pandas as pd
+ 
+total_download_per_user = cleaned_data.groupby('MSISDN/Number')['Total DL (Bytes)'].sum()
+
+total_upload_per_user = cleaned_data.groupby('MSISDN/Number')['Total UL (Bytes)'].sum()
+ 
+total_data_per_user = pd.DataFrame({
+  'Total Download (Bytes)': total_download_per_user,
+  'Total Upload (Bytes)': total_upload_per_user
+
+}).reset_index()
+total_data_per_user
+column_headers = cleaned_data.columns
+
+column_headers
+import pandas as pd
+ 
+download_columns = ['Email DL (Bytes)', 'Youtube DL (Bytes)', 'Netflix DL (Bytes)', 'Gaming DL (Bytes)', 'Other DL (Bytes)']
+
+upload_columns = ['Email UL (Bytes)', 'Youtube UL (Bytes)', 'Netflix UL (Bytes)', 'Gaming UL (Bytes)', 'Other UL (Bytes)']
+ 
+total_data_per_user_per_app = cleaned_data.groupby('MSISDN/Number')[download_columns + upload_columns].sum().reset_index()
+
+total_data_per_user_per_app
+import  script
+engine=script.create_conn()
+
+float_data=script.fetch_data(engine, "xdr_float_data")
+float_data
+import pandas as pd
+ 
+selected_columns =float_data.drop(['Bearer Id', 'IMSI', 'IMEI', 'MSISDN/Number', 'Start ms', 'End ms'], axis=1)
+ 
+results = pd.DataFrame(index=['mean', 'median', 'mode', 'variance', 'std_dev', 'range', 'skewness', 'kurtosis'])
+ 
+for column in selected_columns:
+  mean = selected_columns[column].mean()
+  median = selected_columns[column].median()
+  mode = selected_columns[column].mode()[0]
+  variance = selected_columns[column].var()
+  std_dev = selected_columns[column].std()
+  data_range = selected_columns[column].max() - selected_columns[column].min()
+  skewness = selected_columns[column].skew()
+  kurtosis = selected_columns[column].kurtosis()
+  results[column] = [mean, median, mode, variance, std_dev, data_range, skewness, kurtosis]
+ 
+results
+float_data.head(10)
+import matplotlib.pyplot as plt
+ 
+columns_for_analysis = ["Dur. (ms)", "Avg RTT DL (ms)", "Avg RTT UL (ms)", "Avg Bearer TP DL (kbps)", "Total UL (Bytes)"]
+ 
+for column in columns_for_analysis:
+  plt.figure(figsize=(8, 5))
+  plt.hist(float_data[column].dropna(), bins=30, edgecolor='black', color='skyblue')
+  plt.title(f'Histogram of {column}')
+  plt.xlabel(column)
+  plt.ylabel('Frequency')
+  plt.show()
+
+import seaborn as sns
+ 
+columns_for_analysis = ["Total UL (Bytes)"]
+ 
+for column in columns_for_analysis:
+  plt.figure(figsize=(8, 5))
+  sns.boxplot(y=column, data=float_data, color='skyblue')
+  plt.title(f'Box Plot of {column}')
+  plt.show()
+
+import pandas as pd
+
+import seaborn as sns
+
+import matplotlib.pyplot as plt
+ 
+columns_for_analysis = ["Social Media DL (Bytes)", "Social Media UL (Bytes)", "Google DL (Bytes)", "Google UL (Bytes)",
+  "Email DL (Bytes)", "Email UL (Bytes)", "Youtube DL (Bytes)", "Youtube UL (Bytes)",
+  "Netflix DL (Bytes)", "Netflix UL (Bytes)", "Gaming DL (Bytes)", "Gaming UL (Bytes)",
+  "Other DL (Bytes)", "Other UL (Bytes)", "Total DL (Bytes)", "Total UL (Bytes)"]
+ 
+selected_data = float_data[columns_for_analysis]
+ 
+correlation_matrix = selected_data.corr()
+ 
+plt.figure(figsize=(12, 10))
+
+sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', fmt=".2f", linewidths=.5)
+
+plt.title('Correlation Heatmap - Applications vs Total DL+UL Data')
+
+plt.show()
+import  script
+engine=script.create_conn()
+
+float_data=script.fetch_data(engine, "xdr_float_data")
+float_data
+float_data
+import pandas as pd
+ 
+selected_columns =float_data.drop(['Bearer Id', 'IMSI', 'IMEI', 'MSISDN/Number', 'Start ms', 'End ms'], axis=1)
+ 
+results = pd.DataFrame(index=['mean', 'median', 'mode', 'variance', 'std_dev', 'range', 'skewness', 'kurtosis'])
+ 
+for column in selected_columns:
+  mean = selected_columns[column].mean()
+  median = selected_columns[column].median()
+  mode = selected_columns[column].mode()[0]
+  variance = selected_columns[column].var()
+  std_dev = selected_columns[column].std()
+  data_range = selected_columns[column].max() - selected_columns[column].min()
+  skewness = selected_columns[column].skew()
+  kurtosis = selected_columns[column].kurtosis()
+  results[column] = [mean, median, mode, variance, std_dev, data_range, skewness, kurtosis]
+ 
+results
+float_data.head(10)
+import matplotlib.pyplot as plt
+ 
+columns_for_analysis = ["Dur. (ms)", "Avg RTT DL (ms)", "Avg RTT UL (ms)", "Avg Bearer TP DL (kbps)", "Total UL (Bytes)"]
+ 
+for column in columns_for_analysis:
+  plt.figure(figsize=(8, 5))
+  plt.hist(float_data[column].dropna(), bins=50, edgecolor='black', color='skyblue')
+  plt.title(f'Histogram of {column}')
+  plt.xlabel(column)
+  plt.ylabel('Frequency')
+  plt.show()
+
+import numpy as np
+ 
+dur_percentile_12 = np.percentile(float_data["Dur. (ms)"].dropna(), 12)
+
+print(f"The value below which 12% of observations fall is: {dur_percentile_12}")
+
+import seaborn as sns
+ 
+columns_for_analysis = ["Total UL (Bytes)"]
+ 
+for column in columns_for_analysis:
+  plt.figure(figsize=(8, 5))
+  sns.boxplot(y=column, data=float_data, color='skyblue')
+  plt.title(f'Box Plot of {column}')
+  plt.show()
+
+import pandas as pd
+
+import seaborn as sns
+
+import matplotlib.pyplot as plt
+ 
+columns_for_analysis = ["Social Media DL (Bytes)", "Social Media UL (Bytes)", "Google DL (Bytes)", "Google UL (Bytes)",
+  "Email DL (Bytes)", "Email UL (Bytes)", "Youtube DL (Bytes)", "Youtube UL (Bytes)",
+  "Netflix DL (Bytes)", "Netflix UL (Bytes)", "Gaming DL (Bytes)", "Gaming UL (Bytes)",
+  "Other DL (Bytes)", "Other UL (Bytes)", "Total DL (Bytes)", "Total UL (Bytes)"]
+ 
+selected_data = float_data[columns_for_analysis]
+ 
+correlation_matrix = selected_data.corr()
+ 
+plt.figure(figsize=(12, 10))
+
+sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', fmt=".2f", linewidths=.5)
+
+plt.title('Correlation Heatmap - Applications vs Total DL+UL Data')
+
+plt.show()
+import  script
+
+import pandas as pd
+engine=script.create_conn()
+
+data=script.fetch_data(engine, "xdr_data")
+data
+missing_fields = data.isnull().sum()
+
+print(missing_fields)
+column_data_types = data.dtypes
+
+print(column_data_types)
+float_columns = data.select_dtypes(include=['float64'])
+
+float_columns
+filled_data = float_columns.fillna(float_columns.mean())
+
+print(filled_data)
+missing_fields = filled_data.isnull().sum()
+
+print(missing_fields)
+import pandas as pd
+ 
+non_float_columns = data.select_dtypes(exclude=['float64'])
+ 
+cleand_data = pd.concat([filled_data, non_float_columns], axis=1)
+ 
+print(cleand_data)
+from sqlalchemy import create_engine
+ 
+engine = create_engine('postgresql://postgres:telecom@localhost:5432/telecom')
+ 
+cleand_data.to_sql('xdr_cleaned_data', engine, if_exists='replace', index=False)
+from sqlalchemy import create_engine
+ 
+engine = create_engine('postgresql://postgres:telecom@localhost:5432/telecom')
+ 
+float_columns.to_sql('xdr_float_data', engine, if_exists='replace', index=False)
+from sqlalchemy import create_engine
+import pandas as pd
+"""
+a function that connect to the local database
+"""
+def create_conn():
+  engine = None
+  try:
+  engine = create_engine('postgresql://postgres:telecom@localhost:5432/telecom')
+  print("Connection successful")
+  except Exception as error:
+  print(error)
+  return engine
+
+"""
+a function that that accept engine, and table_name as an argument and return pandas data fream
+"""
+def fetch_data(engine, table_name):
+  df = None
+  try:
+  df = pd.read_sql_query(f"SELECT * FROM {table_name};", engine)
+  except Exception as error:
+  print(error)
+  return df
+import  script
+engine=script.create_conn()
+
+cleaned_data=script.fetch_data(engine, "xdr_cleaned_data")
+
+sessions_per_user = cleaned_data.groupby('MSISDN/Number')['Bearer Id'].nunique()
+sessions_per_user
+import pandas as pd
+
+cleaned_data['Start'] = pd.to_datetime(cleaned_data['Start'])
+
+cleaned_data['End'] = pd.to_datetime(cleaned_data['End'])
+
+cleaned_data['Session Duration'] = (cleaned_data['End'] - cleaned_data['Start']).dt.total_seconds()
+
+total_session_duration = cleaned_data.groupby('MSISDN/Number')['Session Duration'].sum()
+total_session_duration
+import pandas as pd
+ 
+total_download_per_user = cleaned_data.groupby('MSISDN/Number')['Total DL (Bytes)'].sum()
+
+total_upload_per_user = cleaned_data.groupby('MSISDN/Number')['Total UL (Bytes)'].sum()
+ 
+total_data_per_user = pd.DataFrame({
+  'Total Download (Bytes)': total_download_per_user,
+  'Total Upload (Bytes)': total_upload_per_user
+
+}).reset_index()
+total_data_per_user
+column_headers = cleaned_data.columns
+
+column_headers
+import pandas as pd
+ 
+download_columns = ['Email DL (Bytes)', 'Youtube DL (Bytes)', 'Netflix DL (Bytes)', 'Gaming DL (Bytes)', 'Other DL (Bytes)']
+
+upload_columns = ['Email UL (Bytes)', 'Youtube UL (Bytes)', 'Netflix UL (Bytes)', 'Gaming UL (Bytes)', 'Other UL (Bytes)']
+ 
+total_data_per_user_per_app = cleaned_data.groupby('MSISDN/Number')[download_columns + upload_columns].sum().reset_index()
+
+total_data_per_user_per_app
+import  script
+engine=script.create_conn()
+
+cleaned_data=script.fetch_data(engine, "xdr_cleaned_data")
+cleaned_data.columns
+
+import pandas as pd
+
+from sklearn.cluster import KMeans
+
+from sklearn.preprocessing import StandardScaler
+
+import matplotlib.pyplot as plt
+ 
+engagement_metrics = cleaned_data[['MSISDN/Number', 'Dur. (ms)', 'Total UL (Bytes)', 'Total DL (Bytes)']]
+ 
+agg_engagement = engagement_metrics.groupby('MSISDN/Number').agg({
+  'Dur. (ms)': 'sum',
+  'Total UL (Bytes)': 'sum',
+  'Total DL (Bytes)': 'sum'
+
+}).reset_index()
+ 
+agg_engagement['Total Engagement'] = agg_engagement['Dur. (ms)'] + agg_engagement['Total UL (Bytes)'] + agg_engagement['Total DL (Bytes)']
+ 
+top_10_customers = agg_engagement.sort_values('Total Engagement', ascending=False).head(10)
+ 
+top_10_customers
+import pandas as pd
+
+from sklearn.cluster import KMeans
+
+from sklearn.preprocessing import MinMaxScaler
+ 
+cluster_data = agg_engagement[['Dur. (ms)', 'Total UL (Bytes)', 'Total DL (Bytes)']]
+ 
+scaler = MinMaxScaler()
+
+normalized_data = scaler.fit_transform(cluster_data)
+ 
+kmeans = KMeans(n_clusters=3, random_state=42)
+
+agg_engagement['Cluster'] = kmeans.fit_predict(normalized_data)
+ 
+cluster_summary = agg_engagement.groupby('Cluster').agg({
+  'Dur. (ms)': ['min', 'max', 'mean', 'sum'],
+  'Total UL (Bytes)': ['min', 'max', 'mean', 'sum'],
+  'Total DL (Bytes)': ['min', 'max', 'mean', 'sum']
+
+}).reset_index()
+ 
+cluster_summary
+import pandas as pd
+ 
+cleaned_data['Social Media Traffic'] = cleaned_data['Social Media DL (Bytes)'] + cleaned_data['Social Media UL (Bytes)']
+
+cleaned_data['Google Traffic'] = cleaned_data['Google DL (Bytes)'] + cleaned_data['Google UL (Bytes)']
+
+cleaned_data['Email Traffic'] = cleaned_data['Email DL (Bytes)'] + cleaned_data['Email UL (Bytes)']
+
+cleaned_data['Youtube Traffic'] = cleaned_data['Youtube DL (Bytes)'] + cleaned_data['Youtube UL (Bytes)']
+
+cleaned_data['Netflix Traffic'] = cleaned_data['Netflix DL (Bytes)'] + cleaned_data['Netflix UL (Bytes)']
+
+cleaned_data['Gaming Traffic'] = cleaned_data['Gaming DL (Bytes)'] + cleaned_data['Gaming UL (Bytes)']
+
+cleaned_data['Other Traffic'] = cleaned_data['Other DL (Bytes)'] + cleaned_data['Other UL (Bytes)']
+ 
+agg_user_app_traffic = cleaned_data.groupby('MSISDN/Number')[['Social Media Traffic', 'Google Traffic', 'Email Traffic',
+  'Youtube Traffic', 'Netflix Traffic', 'Gaming Traffic', 'Other Traffic']].sum().reset_index()
+ 
+top_10_social_media_users = agg_user_app_traffic.nlargest(10, 'Social Media Traffic')
+
+top_10_google_users = agg_user_app_traffic.nlargest(10, 'Google Traffic')
+
+top_10_email_users = agg_user_app_traffic.nlargest(10, 'Email Traffic')
+
+top_10_youtube_users = agg_user_app_traffic.nlargest(10, 'Youtube Traffic')
+
+top_10_netflix_users = agg_user_app_traffic.nlargest(10, 'Netflix Traffic')
+
+top_10_gaming_users = agg_user_app_traffic.nlargest(10, 'Gaming Traffic')
+
+top_10_other_users = agg_user_app_traffic.nlargest(10, 'Other Traffic')
+ 
+top_10_social_media_users
+ 
+top_3_apps = agg_user_app_traffic[['Social Media Traffic', 'Google Traffic', 'Email Traffic',
+  'Youtube Traffic', 'Netflix Traffic', 'Gaming Traffic', 'Other Traffic']].sum().nlargest(3)
+ 
+top_3_apps.plot(kind='bar', rot=0, color='skyblue')
+
+plt.title('Top 3 Most Used Applications')
+
+plt.xlabel('Application')
+
+plt.ylabel('Total Traffic')
+
+plt.show()
+import streamlit as st
+from over_view import over_view
+from user_engagment import engagement
+from experience_analytics import experiencd
+from satisfaction_analytics import satisfaction
+
+page_options = ["Over view", "User Engagment", "Experience Analytics", "Satisfaction Analytics"]
+selected_page = st.sidebar.selectbox("Select a page", page_options)
+
+if selected_page == "Over view":
+  over_view()
+elif selected_page == "User Engagment":
+  engagement()
+elif selected_page == "Experience Analytics":
+  experiencd()
+elif selected_page == "Satisfaction Analytics":
+  satisfaction()
+from sqlalchemy import create_engine
+import pandas as pd
+"""
+a function that connect to the local database
+"""
+def create_conn():
+  engine = None
+  try:
+  engine = create_engine('postgresql://postgres:telecom@localhost:5432/telecom')
+  print("Connection successful")
+  except Exception as error:
+  print(error)
+  return engine
+
+"""
+a function that that accept engine, and table_name as an argument and return pandas data fream
+"""
+def fetch_data(engine, table_name):
+  df = None
+  try:
+  df = pd.read_sql_query(f"SELECT * FROM {table_name};", engine)
+  except Exception as error:
+  print(error)
+  return df
+import streamlit as st
+from other_module import fetch_data, create_conn
+from visualization import create_top_10_handsets_chart, create_top_3_manufacturers_chart, create_top_5_handsets_per_manufacturer_chart
+
+def over_view():
+  st.title("Over view")
+  st.write("This is Over view analysis TellCo's company")
+  engine = create_conn()
+  data = fetch_data(engine, "xdr_data")
+  cleaned_data = fetch_data(engine, "xdr_cleaned_data")
+  st.write("   create_top_10_handsets_chart(data)
+  st.write("   create_top_3_manufacturers_chart(data)
+  st.write("   create_top_5_handsets_per_manufacturer_chart(data)
+import streamlit as st
+import plotly.express as px
+import plotly.graph_objects as go
+import matplotlib.pyplot as plt
+import seaborn as sns
+import pandas as pd
+from other_module import fetch_data, create_conn
+"""
+  function that plot top 10 handsets type and it's count
+"""
+def create_top_10_handsets_chart(data):
+  top_10_handsets = data['Handset Type'].value_counts().head(10)
+  fig = px.bar(top_10_handsets, x=top_10_handsets.index, y=top_10_handsets.values, labels={'x': 'Handset Type', 'y': 'Count'})
+  fig.update_layout(title='Top 10 Handsets')
+  st.plotly_chart(fig)
+"""
+  function that plot top 3 manufacturers with it's count 
+"""
+def create_top_3_manufacturers_chart(data):
+  top_3_manufactures = data['Handset Manufacturer'].value_counts().head(3)
+  fig = px.bar(top_3_manufactures, x=top_3_manufactures.index, y=top_3_manufactures.values, labels={'x': 'Manufacturer', 'y': 'Count'})
+  fig.update_layout(title='Top 3 Handset Manufacturers')
+  st.plotly_chart(fig)
+"""
+  function that plot top 5 handsets per manufacturer with it's type
+"""
+def create_top_5_handsets_per_manufacturer_chart(data):
+  top_3_manufacturers = data['Handset Manufacturer'].value_counts().head(3).index
+  filtered_data = data[data['Handset Manufacturer'].isin(top_3_manufacturers)]
+  top_5_handsets_per_manufacturer = filtered_data.groupby(['Handset Manufacturer', 'Handset Type']).size().reset_index(name='Count')
+  fig = go.Figure(data=go.Heatmap(
+  z=top_5_handsets_per_manufacturer['Count'],
+  x=top_5_handsets_per_manufacturer['Handset Manufacturer'],
+  y=top_5_handsets_per_manufacturer['Handset Type'],
+  colorscale='Viridis',
+  colorbar=dict(title='Count'),
+  ))
+  fig.update_layout(title='Top 5 Handsets per Manufacturer',
+  xaxis=dict(title='Manufacturer'),
+  yaxis=dict(title='Handset Type'))
+  st.plotly_chart(fig)

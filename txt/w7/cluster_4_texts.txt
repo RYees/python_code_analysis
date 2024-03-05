@@ -1,0 +1,280 @@
+import sys, os
+import pandas as pd
+sys.path.append(os.path.abspath(os.path.join('..')))
+from utils.preprocessing import MyPreprocessing
+parsed_dir = "../data/parsed"
+cleaned_dir = "../data/cleaned"
+file_name = "አዲስ ነገር መረጃ"
+preprocess = MyPreprocessing()
+df = pd.read_csv(f"{parsed_dir}/{file_name}.csv", index_col='id')
+df.head()
+df.shape
+df = df.dropna()
+df.head()
+df.shape
+df = df.replace('\n', ' ', regex=True)
+df.head()
+df['hashtags'] = df['text'].apply(lambda x: preprocess.extract_hashtags(x))
+df.head()
+df['text'] = df['text'].str.replace(r'\
+df.head()
+df['emojis'] = df['text'].apply(preprocess.extract_emojis)
+df.tail()
+df['text'] = df['text'].apply(preprocess.remove_emojis)
+ 
+letters = [
+  [['ሐ', 'ሑ', 'ሒ', 'ሓ', 'ሔ', 'ሖ'], ['ሀ', 'ሁ', 'ሂ', 'ሃ', 'ሄ', 'ህ', 'ሆ']],
+  [['ኀ', 'ኁ', 'ኂ', 'ኃ', 'ኄ', 'ኅ', 'ኆ'], ['ሀ', 'ሁ', 'ሂ', 'ሃ', 'ሄ', 'ህ', 'ሆ']],
+  [['ሠ', 'ሡ', 'ሢ', 'ሣ', 'ሤ', 'ሦ', 'ሦ', 'ሧ'], ['ሰ', 'ሱ', 'ሲ', 'ሳ', 'ሴ', 'ስ', 'ሶ', 'ሷ']],
+  [['ዐ', 'ዑ', 'ዒ', 'ዓ', 'ዔ', 'ዕ', 'ዖ'], ['አ', 'ኡ', 'ኢ', 'ኣ', 'ኤ', 'እ', 'ኦ']],
+  [['ጸ', 'ጹ', 'ጺ', 'ጻ', 'ጼ', 'ጽ', 'ጾ'], ['ፀ', 'ፁ', 'ፂ', 'ፃ', 'ፄ', 'ፅ', 'ፆ']]
+]
+for letter in letters:
+  for i in range(len(letter[0])):
+  df['text'] = df['text'].str.replace(letter[0][i], letter[1][i])
+ 
+df['symbols'] = df['text'].apply(preprocess.extract_symbols)
+df.tail()
+df['text'] = df['text'].apply(preprocess.remove_symbols)
+df.tail()
+df['links'] = df['text'].apply(preprocess.extract_urls)
+df.tail()
+df['text'] = df['text'].str.replace(preprocess.url_pattern, '', regex=True).str.strip()
+df.tail()
+df['mentions'] = df['text'].apply(preprocess.extract_mentions)
+df.tail()
+df['text'] = df['text'].str.replace(preprocess.mention_pattern, '', regex=True).str.strip()
+df.tail()
+df['text'] = df['text'].str.replace('\s+', ' ', regex=True).str.strip()
+df['text'] = df['text'].replace(r'!+', '!', regex=True)
+df['text'] = df['text'].replace(r'\.+', '', regex=True)
+df.tail()
+df.to_csv(f"{cleaned_dir}/{file_name}.csv")
+df['text'].to_csv(f"{cleaned_dir}/{file_name}.txt", index=False, header=False)
+import sys, os
+import pandas as pd
+sys.path.append(os.path.abspath(os.path.join('..')))
+from utils.preprocessing import MyPreprocessing
+raw_dir = "../data/raw"
+parsed_dir = "../data/parsed"
+file_name = "አዲስ ነገር መረጃ"
+preprocess = MyPreprocessing()
+data = preprocess.read_file(f'{raw_dir}/{file_name}.json')
+parsed_message = preprocess.parse_messages(data['messages'])
+ 
+df = pd.DataFrame(parsed_message)
+df.set_index('id', inplace=True)
+df.head()
+df.shape
+df.to_csv(f'{parsed_dir}/{file_name}.csv')
+import sys, os
+import pandas as pd
+from gensim.models import Word2Vec
+sys.path.append(os.path.abspath(os.path.join('..')))
+from utils.preprocessing import MyPreprocessing
+cleaned_dir = "../data/cleaned"
+final_dir = "../data/final"
+file_name = "TIKVAH"
+preprocess = MyPreprocessing()
+df = pd.read_csv(f"{cleaned_dir}/{file_name}.csv", index_col='id')
+df.head()
+df.shape
+tokenized_corpus = [str(sentence).lower().split() for sentence in df['text']]
+embedding_size = 100 
+window_size = 5 
+min_count = 5 
+model = Word2Vec(sentences=tokenized_corpus, vector_size=embedding_size, window=window_size, min_count=min_count, workers=4)
+vector = model.wv['ኢትዮጵያ'] 
+vector
+similar_words = model.wv.most_similar('ኢትዮጵያ', topn=5)
+similar_words
+model.save(f'{final_dir}/{file_name}_word2vec_model.bin')
+import os  
+from huggingface_hub import hf_hub_download
+HUGGING_FACE_API_KEY = os.environ.get("HUGGING_FACE_API_KEY")
+model_id = "iocuydi/llama-2-amharic-3784m"
+filenames = [
+  ".gitattributes", "adapter_config.json", "adapter_model.bin", "config.json", "generation_config.json",   "inference_demo.py", "special_tokens_map.json", "tokenizer.json", "tokenizer.model", "tokenizer_config.json"
+]
+for filename in filenames:
+  downloaded_model_path = hf_hub_download(
+  repo_id = model_id,
+  filename = filename,
+  token = HUGGING_FACE_API_KEY
+  )
+  print(downloaded_model_path)
+from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline, AutoModelForSeq2SeqLM
+ 
+tokenizer = AutoTokenizer.from_pretrained(model_id, legacy=False)
+model = AutoModelForSeq2SeqLM.from_pretrained(model_id)
+pipeline = pipeline ("Text-Generation", model=model, device=-1, tokenizer=tokenizer, max_length=1000 )
+from langchain.text_splitter import CharacterTextSplitter
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_openai import OpenAIEmbeddings
+from langchain_community.vectorstores import Chroma
+from PyPDF2 import PdfReader
+from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_community.embeddings.sentence_transformer import (
+  SentenceTransformerEmbeddings,
+)
+ 
+persist_directory = "db"
+ 
+class MySpecialFunctions:
+  def __init__(self):
+  pass
+  def get_file_text(self, files):
+  text = ""
+  for file in files:
+  try:
+  with open(file, 'r', encoding='utf-8') as f:
+  content = f.read()
+  text += content
+  except Exception as e:
+  print(f"Error reading file {file}: {e}")
+  return text
+  def get_pdf_text(self, pdf):
+  text = ""
+  for doc in pdf:
+  reader = PdfReader(doc)
+  for page in reader.pages:
+  text += page.extract_text()
+  return text
+  def get_text_chunks(self, text):
+  text_siplitter = RecursiveCharacterTextSplitter(
+  chunk_size = 1000,   chunk_overlap = 200,
+  separators=['\n', '\n\n'],
+  length_function = len)
+  chunk = text_siplitter.split_text(text)
+  return chunk
+  def get_vectorstore(self, chunks):
+  hf_embedding = HuggingFaceEmbeddings()
+  embedding_function = SentenceTransformerEmbeddings(model_name="all-MiniLM-L6-v2")
+  vector_db = Chroma.from_documents(
+  documents = chunks,
+  embedding = hf_embedding,
+  )
+  return vector_db
+import streamlit as st 
+from MyFunctions import MySpecialFunctions
+from dotenv import load_dotenv
+ 
+special_functions_instance = MySpecialFunctions()
+def get_text(external_data ):
+  return special_functions_instance.get_file_text(external_data )
+def get_pdf_text(external_data ):
+  return special_functions_instance.get_pdf_text(external_data )
+def get_chunks(text):
+  return special_functions_instance.get_text_chunks(text)
+def get_vectorstore(text_chunks):
+  return special_functions_instance.get_vectorstore(text_chunks)  
+def main():
+  load_dotenv()
+  st.set_page_config(page_title="Generation of Telegram Ads in Amharic", page_icon= ":smile")
+  with st.sidebar:
+  pass
+  st.markdown("   external_data = st.file_uploader(" Upload the generative text from fune-tuning", accept_multiple_files= True)
+  if st.button("Retrieval"):
+  with st.spinner("Processing"):
+  text = get_pdf_text(external_data )
+  text_chunks = get_chunks(text)
+  st.write(text_chunks)
+  vectorstore_db = get_vectorstore(text_chunks)
+ 
+if __name__ == "__main__":
+  main()
+import sentencepiece as spm
+ 
+spm.SentencePieceTrainer.train('--input=TIKVAH.txt --model_prefix=m --vocab_size=2000')
+ 
+sp = spm.SentencePieceProcessor()
+sp.load('m.model')
+ 
+print(sp.encode_as_pieces('በአዲስ አበባ የአሜሪካ ኤምባሲ'))
+print(sp.encode_as_ids('በአዲስ አበባ የአሜሪካ ኤምባሲ'))
+ 
+print(sp.decode_pieces(['_በአዲስ', '_አበባ', '_የአሜሪካ', '_ኤ', 'ምባሲ']))
+print(sp.decode_ids([460, 133, 774, 1276]))
+ 
+print(sp.get_piece_size())
+ 
+print(sp.id_to_piece(460))
+print(sp.piece_to_id('▁በአዲስ'))
+ 
+print(sp.piece_to_id('__MUST_BE_UNKNOWN__'))
+ 
+for id in range(3):
+  print(sp.id_to_piece(id), sp.is_control(id))
+ 
+import tensorflow as tf
+ 
+serialized_model_proto = tf.io.gfile.GFile('m.model', 'rb').read()
+ 
+sp = spm.SentencePieceProcessor()
+sp.load_from_serialized_proto(serialized_model_proto)
+ 
+print(sp.encode_as_pieces('በአዲስ አበባ የአሜሪካ ኤምባሲ'))
+ 
+spm.SentencePieceTrainer.train('--input=TIKVAH.txt --model_prefix=m_user --user_defined_symbols=<sep>,<cls> --vocab_size=2000')
+ 
+sp_user = spm.SentencePieceProcessor()
+sp_user.load('m_user.model')
+ 
+print(sp_user.encode_as_pieces('በአዲስ አበባ የአሜሪካ<sep> ኤምባሲ<cls>'))
+print(sp_user.piece_to_id('<sep>'))  
+print(sp_user.piece_to_id('<cls>'))  
+print('3=', sp_user.decode_ids([3]))  
+print('4=', sp_user.decode_ids([4]))  
+spm.SentencePieceTrainer.train('--input=TIKVAH.txt --model_prefix=m_ctrl --control_symbols=<sep>,<cls> --vocab_size=2000')
+ 
+sp_ctrl = spm.SentencePieceProcessor()
+sp_ctrl.load('m_ctrl.model')
+ 
+print(sp_ctrl.encode_as_pieces('በአዲስ አበባ የአሜሪካ<sep>ኤምባሲ<cls>'))
+print(sp_ctrl.piece_to_id('<sep>'))  
+print(sp_ctrl.piece_to_id('<cls>'))  
+print('3=', sp_ctrl.decode_ids([3]))  
+print('4=', sp_ctrl.decode_ids([4]))  spm.SentencePieceTrainer.train('--input=TIKVAH.txt --model_prefix=m_bos_as_user --user_defined_symbols=<s>,</s> --vocab_size=2000')
+ 
+sp = spm.SentencePieceProcessor()
+sp.load('m.model')
+print(sp.encode_as_pieces('<s> በአዲስ</s>'))  
+sp = spm.SentencePieceProcessor()
+sp.load('m_bos_as_user.model')
+print(sp.encode_as_pieces('<s> በአዲስ</s>'))  
+spm.SentencePieceTrainer.train('--input=TIKVAH.txt --model_prefix=m --vocab_size=2000')
+ 
+sp = spm.SentencePieceProcessor()
+sp.load('m.model')
+ 
+print('bos=', sp.bos_id())
+print('eos=', sp.eos_id())
+print('unk=', sp.unk_id())
+print('pad=', sp.pad_id())  
+print(sp.encode_as_ids('በአዲስ አበባ'))
+ 
+print([sp.bos_id()] + sp.encode_as_ids('በአዲስ አበባ') + [sp.eos_id()])
+ 
+spm.SentencePieceTrainer.train('--input=TIKVAH.txt --model_prefix=m --vocab_size=2000')
+ 
+for n in range(10):
+  print(sp.sample_encode_as_pieces('በአዲስ አበባ', -1, 0.1))
+ 
+for n in range(10):
+  print(sp.sample_encode_as_ids('በአዲስ አበባ', -1, 0.1))
+print(sp.nbest_encode_as_pieces('በአዲስ አበባ', 10))
+print(sp.nbest_encode_as_ids('በአዲስ አበባ', 10))
+ 
+spm.SentencePieceTrainer.train('--input=TIKVAH.txt --model_prefix=m_bpe --vocab_size=2000 --model_type=bpe')
+sp_bpe = spm.SentencePieceProcessor()
+sp_bpe.load('m_bpe.model')
+ 
+print('*** BPE ***')
+print(sp_bpe.encode_as_pieces('በአዲስአበባየአሜሪካኤምባሲ'))
+print(sp_bpe.nbest_encode_as_pieces('በአዲስ አበባ', 5))  spm.SentencePieceTrainer.train('--input=TIKVAH.txt --model_prefix=m_unigram --vocab_size=2000 --model_type=unigram')
+sp_unigram = spm.SentencePieceProcessor()
+sp_unigram.load('m_unigram.model')
+ 
+print('*** Unigram ***')
+print(sp_unigram.encode_as_pieces('በአዲስአበባየአሜሪካኤምባሲ'))
+print(sp_unigram.nbest_encode_as_pieces('በአዲስአበባየአሜሪካኤምባሲ', 5))

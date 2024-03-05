@@ -1,0 +1,685 @@
+import sys
+
+import pandas as pd
+
+import numpy as np
+
+import seaborn as sns
+
+import matplotlib.pyplot as plt
+sys.path.append('script')
+
+from script import dbconn
+
+pgconn = dbconn.db_connection_psycopg()
+
+raw_df = dbconn.db_read_table_psycopg(pgconn,'xdr_data')
+raw_df.info
+raw_df.describe
+raw_df.columns
+
+top_10_handsets = raw_df['Handset Type'].value_counts().head(10)
+
+print(top_10_handsets)
+
+top_3_manufacturers = raw_df['Handset Manufacturer'].value_counts().head(3)
+
+print(top_3_manufacturers)
+
+top_3_manufacturers = raw_df['Handset Manufacturer'].value_counts().head(3).index
+ 
+for manufacturer in top_3_manufacturers:
+  top_5_handsets = raw_df.loc[raw_df['Handset Manufacturer'] == manufacturer, 'Handset Type'].value_counts().head(5)
+  print(f"Top 5 handsets for {manufacturer}:")
+  print(top_5_handsets)
+  print()
+
+user_sessions = raw_df.groupby('MSISDN/Number')['Bearer Id'].count().reset_index()
+
+user_sessions.columns = ['MSISDN/Number', 'Number of xDR Sessions']
+
+print(user_sessions)
+
+user_session_duration = raw_df.groupby('MSISDN/Number')['Dur. (ms)'].sum().reset_index()
+
+user_session_duration.columns = ['MSISDN/Number', 'Session Duration']
+
+print(user_session_duration)
+
+user_data = raw_df.groupby('MSISDN/Number').agg({
+  'Total DL (Bytes)': 'sum',
+  'Total UL (Bytes)': 'sum'
+
+}).reset_index()
+
+user_data.columns = ['MSISDN/Number', 'Total DL Data', 'Total UL Data']
+
+print(user_data)
+
+user_session_data = raw_df.groupby('MSISDN/Number').agg({
+  'Total UL (Bytes)': 'sum',
+  'Total DL (Bytes)': 'sum'
+
+}).reset_index()
+
+user_session_data['Total Data Volume'] = user_session_data['Total UL (Bytes)'] + user_session_data['Total DL (Bytes)']
+
+user_session_data = user_session_data[['MSISDN/Number', 'Total Data Volume']]
+
+print(user_session_data)
+raw_df.info()
+raw_df.isna().sum()
+raw_df.describe
+ 
+def percent_missing(df):
+  totalCells = np.product(df.shape)
+  missingCount = df.isnull().sum()
+  totalMissing = missingCount.sum()
+  percentageMissing = (totalMissing / totalCells) * 100
+  print("The dataset contains", round(percentageMissing, 2), "%", "missing values.")
+ 
+percent_missing(raw_df)
+ 
+raw_df.fillna(raw_df.mean(), inplace=True)
+ 
+num_columns = raw_df.select_dtypes(include=[np.number]).columns
+ 
+for col in num_columns:
+  z_scores = (raw_df[col] - raw_df[col].mean()) / raw_df[col].std()
+  outliers = (z_scores > 3) | (z_scores < -3)
+  raw_df[col][outliers] = raw_df[col].mean()
+ 
+missing_values_after_treatment = raw_df.isnull().sum()
+
+print("Missing Values After Treatment:\n", missing_values_after_treatment)
+
+missing_percent = (raw_df.isnull().sum() / len(raw_df)) * 100
+ 
+columns_to_drop = missing_percent[missing_percent > 30].index
+
+df_clean = raw_df.drop(columns_to_drop, axis=1)
+ 
+print("Shape of cleaned DataFrame:", df_clean.shape)
+missing_values = raw_df.isna().sum()
+
+print(missing_values)
+
+def fix_missing_ffill(df, col):
+  df[col] = df[col].fillna(method='ffill')
+  return df[col]
+ 
+raw_df['Start'] = fix_missing_ffill(raw_df, 'Start')
+
+raw_df['End'] = fix_missing_ffill(raw_df, 'End')
+
+raw_df['Last Location Name'] = fix_missing_ffill(raw_df, 'Last Location Name')
+ 
+missing_values = raw_df.isna().sum()
+
+print(missing_values)
+ 
+metrics = raw_df.describe()
+
+mean = metrics.loc['mean']
+
+median = metrics.loc['50%']
+
+mode = raw_df.mode().iloc[0]
+
+minimum = metrics.loc['min']
+
+maximum = metrics.loc['max']
+
+std_deviation = metrics.loc['std']
+ 
+print("Mean:\n", mean)
+
+print("\nMedian:\n", median)
+
+print("\nMode:\n", mode)
+
+print("\nMinimum:\n", minimum)
+
+print("\nMaximum:\n", maximum)
+
+print("\nStandard Deviation:\n", std_deviation)
+ 
+quantitative_vars = raw_df.select_dtypes(include=[np.number])
+ 
+dispersion_parameters = quantitative_vars.agg(['mean', 'median', 'std', 'min', 'max', 'var'])
+ 
+print("Dispersion Parameters:\n", dispersion_parameters)
+ 
+variables = raw_df.columns
+ 
+for variable in variables:
+  if raw_df[variable].dtype == 'int64' or raw_df[variable].dtype == 'float64':
+  plt.figure(figsize=(8, 6))
+  sns.histplot(data=raw_df, x=variable, kde=True)
+  plt.title(f'Distribution of {variable}')
+  plt.xlabel(variable)
+  plt.ylabel('Frequency')
+  plt.show()
+  else:
+  plt.figure(figsize=(8, 6))
+  sns.countplot(data=raw_df, x=variable)
+  plt.title(f'Count of {variable}')
+  plt.xlabel(variable)
+  plt.ylabel('Count')
+  plt.xticks(rotation=90)
+  plt.show()
+
+variables = ['Social Media DL (Bytes)', 'Google DL (Bytes)', 'Email DL (Bytes)',
+  'Youtube DL (Bytes)', 'Netflix DL (Bytes)', 'Gaming DL (Bytes)',
+  'Other DL (Bytes)']
+ 
+subset_df = raw_df[variables]
+ 
+correlation_matrix = subset_df.corr()
+ 
+print("Correlation Matrix:")
+
+print(correlation_matrix)
+ 
+variables = ['Social Media DL (Bytes)', 'Google DL (Bytes)', 'Email DL (Bytes)',
+  'Youtube DL (Bytes)', 'Netflix DL (Bytes)', 'Gaming DL (Bytes)',
+  'Other DL (Bytes)']
+ 
+subset_df = raw_df[variables]
+ 
+scaler = StandardScaler()
+
+scaled_data = scaler.fit_transform(subset_df)
+ 
+pca = PCA(n_components=2)
+
+principal_components = pca.fit_transform(scaled_data)
+ 
+pc_df = pd.DataFrame(data=principal_components, columns=['PC1', 'PC2'])
+ 
+explained_variance_ratio = pca.explained_variance_ratio_
+ 
+print("Interpretation of PCA results:")
+
+print("- The first principal component (PC1) explains", round(explained_variance_ratio[0] * 100, 2), "% of the variance in the data.")
+
+print("- The second principal component (PC2) explains", round(explained_variance_ratio[1] * 100, 2), "% of the variance in the data.")
+
+print("- PC1 captures the most significant patterns and trends in the data, such as overall data usage level.")
+
+print("- PC2 captures additional variation that is orthogonal to PC1 and represents specific usage patterns or differences between the applications.")
+ 
+engagement_metrics = ['Social Media DL (Bytes)', 'Google DL (Bytes)', 'Email DL (Bytes)',
+  'Youtube DL (Bytes)', 'Netflix DL (Bytes)', 'Gaming DL (Bytes)',
+  'Other DL (Bytes)']
+ 
+grouped_df = raw_df.groupby('MSISDN/Number')[engagement_metrics].sum()
+ 
+grouped_df['Total Engagement'] = grouped_df.sum(axis=1)
+ 
+for metric in engagement_metrics:
+  top_10_customers = grouped_df.nlargest(10, metric)
+  print(f"Top 10 customers for {metric}:")
+  print(top_10_customers)
+  print()
+ 
+engagement_metrics = ['Social Media DL (Bytes)', 'Google DL (Bytes)', 'Email DL (Bytes)',
+  'Youtube DL (Bytes)', 'Netflix DL (Bytes)', 'Gaming DL (Bytes)',
+  'Other DL (Bytes)']
+ 
+engagement_data = raw_df[engagement_metrics]
+ 
+scaler = MinMaxScaler()
+
+normalized_data = scaler.fit_transform(engagement_data)
+ 
+kmeans = KMeans(n_clusters=3)
+
+kmeans.fit(normalized_data)
+ 
+raw_df['Engagement Cluster'] = kmeans.labels_
+ 
+print(raw_df['Engagement Cluster'].value_counts())
+ 
+cluster_stats = raw_df.groupby('Engagement Cluster')[engagement_metrics].mean()
+
+print(cluster_stats)
+
+from sklearn.preprocessing import MinMaxScaler
+
+from sklearn.cluster import KMeans
+ 
+engagement_metrics = ['Social Media DL (Bytes)', 'Google DL (Bytes)', 'Email DL (Bytes)',
+  'Youtube DL (Bytes)', 'Netflix DL (Bytes)', 'Gaming DL (Bytes)',
+  'Other DL (Bytes)']
+ 
+engagement_data = raw_df[engagement_metrics]
+ 
+scaler = MinMaxScaler()
+
+normalized_data = scaler.fit_transform(engagement_data)
+ 
+kmeans = KMeans(n_clusters=3, random_state=42)
+
+kmeans.fit(normalized_data)
+ 
+raw_df['Engagement Cluster'] = kmeans.labels_
+ 
+cluster_stats = raw_df.groupby('Engagement Cluster')[engagement_metrics].agg(['min', 'max', 'mean', 'sum'])
+ 
+cluster_stats.plot(kind='bar', figsize=(12, 6))
+
+plt.xlabel('Engagement Cluster')
+
+plt.ylabel('Metrics')
+
+plt.title('Metrics for Each Engagement Cluster')
+
+plt.legend(['Min', 'Max', 'Mean', 'Sum'])
+
+plt.show()
+ 
+print(cluster_stats)
+
+from sklearn.preprocessing import MinMaxScaler
+
+from sklearn.cluster import KMeans
+ 
+engagement_metrics = ['Social Media DL (Bytes)', 'Google DL (Bytes)', 'Email DL (Bytes)',
+  'Youtube DL (Bytes)', 'Netflix DL (Bytes)', 'Gaming DL (Bytes)',
+  'Other DL (Bytes)']
+ 
+engagement_data = raw_df[engagement_metrics]
+ 
+scaler = MinMaxScaler()
+
+normalized_data = scaler.fit_transform(engagement_data)
+ 
+kmeans = KMeans(n_clusters=3, random_state=42)
+
+kmeans.fit(normalized_data)
+ 
+raw_df['Engagement Cluster'] = kmeans.labels_
+ 
+cluster_stats = raw_df.groupby('Engagement Cluster')[engagement_metrics].agg(['min', 'max', 'mean', 'sum'])
+ 
+cluster_stats.plot(kind='bar', figsize=(12, 6))
+
+plt.xlabel('Engagement Cluster')
+
+plt.ylabel('Metrics')
+
+plt.title('Metrics for Each Engagement Cluster')
+
+plt.legend(['Min', 'Max', 'Mean', 'Sum'])
+
+plt.show()
+ 
+print(cluster_stats)
+ 
+engagement_metrics = ['Social Media DL (Bytes)', 'Google DL (Bytes)', 'Email DL (Bytes)',
+  'Youtube DL (Bytes)', 'Netflix DL (Bytes)', 'Gaming DL (Bytes)',
+  'Other DL (Bytes)']
+ 
+engagement_data = raw_df[engagement_metrics]
+ 
+scaler = MinMaxScaler()
+
+normalized_data = scaler.fit_transform(engagement_data)
+ 
+kmeans = KMeans(n_clusters=3, random_state=42)
+
+kmeans.fit(normalized_data)
+ 
+raw_df['Engagement Cluster'] = kmeans.labels_
+ 
+cluster_stats = raw_df.groupby('Engagement Cluster')[engagement_metrics].agg(['min', 'max', 'mean', 'sum'])
+ 
+cluster_stats.plot(kind='bar', figsize=(12, 6))
+
+plt.xlabel('Engagement Cluster')
+
+plt.ylabel('Metrics')
+
+plt.title('Metrics for Each Engagement Cluster')
+
+plt.legend(['Min', 'Max', 'Mean', 'Sum'])
+
+plt.show()
+ 
+print(cluster_stats)
+ 
+application_columns = ['Social Media DL (Bytes)', 'Google DL (Bytes)', 'Email DL (Bytes)',
+  'Youtube DL (Bytes)', 'Netflix DL (Bytes)', 'Gaming DL (Bytes)',
+  'Other DL (Bytes)']
+ 
+user_traffic = raw_df.groupby('MSISDN/Number')[application_columns].sum()
+ 
+top_10_users_per_app = pd.DataFrame()
+
+for column in application_columns:
+  top_10_users = user_traffic.nlargest(10, column)
+  top_10_users_per_app[column] = top_10_users.index
+ 
+print("Top 10 most engaged users per application:")
+
+print(top_10_users_per_app)
+ 
+application_columns = ['Social Media DL (Bytes)', 'Google DL (Bytes)', 'Email DL (Bytes)',
+  'Youtube DL (Bytes)', 'Netflix DL (Bytes)', 'Gaming DL (Bytes)',
+  'Other DL (Bytes)']
+ 
+total_traffic = raw_df[application_columns].sum()
+ 
+top_3_applications = total_traffic.nlargest(3)
+ 
+plt.bar(top_3_applications.index, top_3_applications.values)
+
+plt.xlabel('Application')
+
+plt.ylabel('Total Traffic')
+
+plt.title('Top 3 Most Used Applications')
+
+plt.show()
+ 
+engagement_metrics = ['Social Media DL (Bytes)', 'Google DL (Bytes)', 'Email DL (Bytes)',
+  'Youtube DL (Bytes)', 'Netflix DL (Bytes)', 'Gaming DL (Bytes)',
+  'Other DL (Bytes)']
+ 
+engagement_data = raw_df[engagement_metrics]
+ 
+scaler = MinMaxScaler()
+
+normalized_data = scaler.fit_transform(engagement_data)
+ 
+k_values = range(1, 11)  
+inertia_values = []  
+for k in k_values:
+  kmeans = KMeans(n_clusters=k, random_state=42)
+  kmeans.fit(normalized_data)
+  inertia_values.append(kmeans.inertia_)
+ 
+plt.plot(k_values, inertia_values, marker='o')
+
+plt.xlabel('Number of Clusters (k)')
+
+plt.ylabel('Inertia')
+
+plt.title('Elbow Curve')
+
+plt.show()
+
+raw_df.isna().sum()
+
+customer_avg_retransmission = raw_df.groupby('MSISDN/Number')['TCP DL Retrans. Vol (Bytes)'].mean()
+ 
+print(customer_avg_retransmission)
+
+customer_avg_rtt = raw_df.groupby('MSISDN/Number')['Avg RTT DL (ms)'].mean()
+ 
+print(customer_avg_rtt)
+
+customer_handset_type = raw_df.groupby('MSISDN/Number')['Handset Type'].first()
+ 
+print(customer_handset_type)
+
+customer_avg_throughput = raw_df.groupby('MSISDN/Number')['Avg Bearer TP DL (kbps)'].mean()
+ 
+print(customer_avg_throughput)
+ 
+top_tcp_values = raw_df['TCP DL Retrans. Vol (Bytes)'].nlargest(10)
+
+print("Top 10 TCP Values:")
+
+print(top_tcp_values)
+ 
+bottom_tcp_values = raw_df['TCP DL Retrans. Vol (Bytes)'].nsmallest(10)
+
+print("\nBottom 10 TCP Values:")
+
+print(bottom_tcp_values)
+ 
+most_frequent_tcp_values = raw_df['TCP DL Retrans. Vol (Bytes)'].value_counts().head(10)
+
+print("\nMost Frequent TCP Values:")
+
+print(most_frequent_tcp_values)
+ 
+top_rtt_values = raw_df['Avg RTT DL (ms)'].nlargest(10)
+
+print("Top 10 RTT Values:")
+
+print(top_rtt_values)
+ 
+bottom_rtt_values = raw_df['Avg RTT DL (ms)'].nsmallest(10)
+
+print("\nBottom 10 RTT Values:")
+
+print(bottom_rtt_values)
+ 
+most_frequent_rtt_values = raw_df['Avg RTT DL (ms)'].value_counts().head(10)
+
+print("\nMost Frequent RTT Values:")
+
+print(most_frequent_rtt_values)
+ 
+top_throughput_values = raw_df['Avg Bearer TP DL (kbps)'].nlargest(10)
+
+print("Top 10 Throughput Values:")
+
+print(top_throughput_values)
+ 
+bottom_throughput_values = raw_df['Avg Bearer TP DL (kbps)'].nsmallest(10)
+
+print("\nBottom 10 Throughput Values:")
+
+print(bottom_throughput_values)
+ 
+most_frequent_throughput_values = raw_df['Avg Bearer TP DL (kbps)'].value_counts().head(10)
+
+print("\nMost Frequent Throughput Values:")
+
+print(most_frequent_throughput_values)
+ 
+grouped_df = raw_df.groupby('Handset Type')['Avg Bearer TP DL (kbps)'].mean()
+ 
+print("Distribution of Average Throughput per Handset Type:")
+
+print(grouped_df)
+ 
+grouped_df = raw_df.groupby('Handset Type')['TCP DL Retrans. Vol (Bytes)'].mean()
+ 
+print("Average TCP Retransmission View per Handset Type:")
+
+print(grouped_df)
+ 
+selected_columns = ['Avg RTT DL (ms)', 'Avg RTT UL (ms)', 'Avg Bearer TP DL (kbps)', 'Avg Bearer TP UL (kbps)',
+  'TCP DL Retrans. Vol (Bytes)', 'TCP UL Retrans. Vol (Bytes)']
+ 
+metrics_df = raw_df[selected_columns]
+ 
+scaler = StandardScaler()
+
+scaled_metrics = scaler.fit_transform(metrics_df)
+ 
+k = 3
+ 
+kmeans = KMeans(n_clusters=k, random_state=42)
+
+kmeans.fit(scaled_metrics)
+ 
+cluster_labels = kmeans.labels_
+ 
+raw_df['Cluster'] = cluster_labels
+ 
+cluster_descriptions = {
+  0: "Cluster with high RTT, high average bearer throughput, and high TCP retransmission",
+  1: "Cluster with moderate RTT, average bearer throughput, and TCP retransmission",
+  2: "Cluster with low RTT, low average bearer throughput, and low TCP retransmission"
+
+}
+ 
+print("Cluster Counts:")
+
+print(raw_df['Cluster'].value_counts())
+ 
+print("\nCluster Descriptions:")
+
+for cluster, description in cluster_descriptions.items():
+  print(f"Cluster {cluster}: {description}")
+ 
+engagement_metrics = ['Social Media DL (Bytes)', 'Google DL (Bytes)', 'Email DL (Bytes)',
+  'Youtube DL (Bytes)', 'Netflix DL (Bytes)', 'Gaming DL (Bytes)',
+  'Other DL (Bytes)']
+ 
+engagement_scores = []
+
+for _, row in raw_df.iterrows():
+  user_data = row[engagement_metrics].values
+  euclidean_distance = np.linalg.norm(user_data)
+  engagement_scores.append(euclidean_distance)
+ 
+raw_df['Engagement Score'] = engagement_scores
+ 
+print(raw_df[['MSISDN/Number', 'Engagement Score']])
+ 
+experience_metrics = ['Avg RTT DL (ms)', 'Avg RTT UL (ms)', 'Avg Bearer TP DL (kbps)', 'Avg Bearer TP UL (kbps)',
+  'TCP DL Retrans. Vol (Bytes)', 'TCP UL Retrans. Vol (Bytes)']
+ 
+experience_scores = []
+
+for _, row in raw_df.iterrows():
+  user_data = row[experience_metrics].values
+  euclidean_distance = np.linalg.norm(user_data)
+  experience_scores.append(euclidean_distance)
+ 
+raw_df['Experience Score'] = experience_scores
+ 
+print(raw_df[['MSISDN/Number', 'Experience Score']])
+ 
+engagement_scores = raw_df['Engagement Score']
+
+experience_scores = raw_df['Experience Score']
+ 
+satisfaction_scores = (engagement_scores + experience_scores) / 2
+ 
+raw_df['Satisfaction Score'] = satisfaction_scores
+ 
+sorted_df = raw_df.sort_values(by='Satisfaction Score', ascending=False)
+ 
+top_10_satisfied_customers = sorted_df.head(10)
+ 
+print(top_10_satisfied_customers[['MSISDN/Number', 'Satisfaction Score']])
+ 
+from sklearn.metrics import  r2_score
+ 
+features = ['Engagement Score', 'Experience Score']  
+target = 'Satisfaction Score'
+ 
+X_train, X_test, y_train, y_test = train_test_split(raw_df[features], raw_df[target], test_size=0.2, random_state=42)
+ 
+rf_model = RandomForestRegressor()
+ 
+rf_model.fit(X_train, y_train)
+ 
+y_pred = rf_model.predict(X_test)
+ 
+mse = mean_squared_error(y_test, y_pred)
+
+r2 = r2_score(y_test, y_pred)
+ 
+print('Mean Squared Error:', mse)
+
+print('R^2 Score:', r2)
+ 
+engagement_scores = raw_df['Engagement Score']
+
+experience_scores = raw_df['Experience Score']
+ 
+data = pd.DataFrame({'Engagement Score': engagement_scores, 'Experience Score': experience_scores})
+ 
+scaler = StandardScaler()
+
+scaled_data = scaler.fit_transform(data)
+ 
+k = 2
+ 
+kmeans = KMeans(n_clusters=k, random_state=42)
+
+kmeans.fit(scaled_data)
+ 
+cluster_labels = kmeans.labels_
+ 
+data['Cluster'] = cluster_labels
+ 
+print(data)
+ 
+engagement_scores = raw_df['Engagement Score']
+
+experience_scores = raw_df['Experience Score']
+ 
+data = pd.DataFrame({'Engagement Score': engagement_scores, 'Experience Score': experience_scores})
+ 
+scaler = StandardScaler()
+
+scaled_data = scaler.fit_transform(data)
+ 
+k = 2
+ 
+kmeans = KMeans(n_clusters=k, random_state=42)
+
+kmeans.fit(scaled_data)
+ 
+cluster_labels = kmeans.labels_
+ 
+raw_df['Cluster'] = cluster_labels
+ 
+cluster_stats = raw_df.groupby('Cluster').agg({'Satisfaction Score': 'mean', 'Experience Score': 'mean'})
+ 
+print(cluster_stats)
+ 
+def db_connection_psycopg():
+  pgconn = psycopg2.connect(dbname="telecom",
+  user="postgres",
+  password="Newsnow@1991",
+  host="localhost",
+  port="5432")
+  return pgconn
+ 
+conn = db_connection_psycopg()
+ 
+cursor = conn.cursor()
+ 
+drop_table_query = sql.SQL("DROP TABLE IF EXISTS {}").format(sql.Identifier('Satisfaction_score'))
+
+cursor.execute(drop_table_query)
+ 
+create_table_query = sql.SQL("""
+  CREATE TABLE Satisfaction_score (
+  user_id BIGINT,
+  engagement_score FLOAT,
+  experience_score FLOAT,
+  satisfaction_score FLOAT
+  )
+
+""")
+
+cursor.execute(create_table_query)
+ 
+for _, row in raw_df.iterrows():
+  user_id = row['MSISDN/Number']
+  engagement_score = row['Engagement Score']
+  experience_score = row['Experience Score']
+  satisfaction_score = row['Satisfaction Score']
+  insert_query = sql.SQL("""
+  INSERT INTO Satisfaction_score (user_id, engagement_score, experience_score, satisfaction_score)
+  VALUES (%s, %s, %s, %s)
+  """)
+  cursor.execute(insert_query, (user_id, engagement_score, experience_score, satisfaction_score))
+ 
+conn.commit()
+
+cursor.close()
+
+conn.close()

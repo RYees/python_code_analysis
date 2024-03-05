@@ -1,0 +1,329 @@
+from DataCleaner import ProcessData
+
+username = 'postgres'
+
+password = '123'
+
+host = 'localhost'
+
+database = 'tel'
+
+table_name = 'xdr_data'
+ 
+data_processor = ProcessData(username, password, host, database, table_name)
+
+processed_data = data_processor.process_data()
+"""The first 10 rows of the dataframe """
+
+processed_data.head(5)
+
+for col in processed_data:
+  missing_value_count = processed_data[col].isnull().sum()
+  print(f"column '{col}': {missing_value_count} missing value")
+import seaborn as sns
+
+import matplotlib.pyplot as plt
+ 
+def plot_top10_customer(dataframe):
+  grouped = dataframe.groupby('MSISDN/Number')['Dur. (ms)'].sum().reset_index()
+  top_ten_categories = grouped.nlargest(10, 'Dur. (ms)')
+  plt.figure(figsize=(12, 6))
+  sns.barplot(x='MSISDN/Number', y='Dur. (ms)', data=top_ten_categories, palette='Set2')
+  plt.title('Top Ten Categories based on Dur. (ms) Values')
+  plt.xlabel('MSISDN/Number')
+  plt.ylabel('Sum of Dur. (ms)')
+  plt.xticks(rotation=45)   plt.tight_layout()
+  plt.show()
+ 
+from univariate import univariate_analysis
+
+univariate_analysis(processed_data, 'Bearer Id')
+import seaborn as sns
+
+import matplotlib.pyplot as plt
+ 
+def plot_top_categories_by_bearer_id(dataframe):
+  grouped = dataframe.groupby('MSISDN/Number')['Bearer Id'].count().reset_index()
+  top_ten_categories = grouped.nlargest(10, 'Bearer Id')
+  plt.figure(figsize=(12, 6))
+  sns.barplot(x='MSISDN/Number', y='Bearer Id', data=top_ten_categories, palette='Set2')
+  plt.title('Top Ten Categories based on Bearer Id Count')
+  plt.xlabel('MSISDN/Number')
+  plt.ylabel('No. of_total XDR session')
+  plt.xticks(rotation=45)   plt.tight_layout()
+  plt.show()
+ 
+plot_top_categories_by_bearer_id(processed_data)
+import seaborn as sns
+
+import matplotlib.pyplot as plt
+ 
+def plot_top_categories_by_sum_of_columns(dataframe):
+  dataframe['Total_Bytes_Sum'] = dataframe['Total UL (Bytes)'] + dataframe['Total DL (Bytes)']
+  grouped = dataframe.groupby('MSISDN/Number')['Total_Bytes_Sum'].sum().reset_index()
+  top_ten_categories = grouped.nlargest(10, 'Total_Bytes_Sum')
+  plt.figure(figsize=(12, 6))
+  sns.barplot(x='MSISDN/Number', y='Total_Bytes_Sum', data=top_ten_categories, palette='Set2')
+  plt.title('Top Ten Categories based on Sum of Total Bytes')
+  plt.xlabel('MSISDN/Number')
+  plt.ylabel('Sum of Total Bytes')
+  plt.xticks(rotation=45)   plt.tight_layout()
+  plt.show()
+
+plot_top_categories_by_sum_of_columns(processed_data)
+import seaborn as sns
+
+import matplotlib.pyplot as plt
+ 
+def plot_top_categories_by_handset_count(dataframe):
+  handset_counts = dataframe['Handset Type'].value_counts()
+  top_ten_categories = handset_counts.head(10)
+  plt.figure(figsize=(12, 6))
+  top_ten_categories.plot(kind='bar', color='skyblue')
+  plt.title('Top Ten Handset Types based on Count')
+  plt.xlabel('Handset Type')
+  plt.ylabel('Count')
+  plt.xticks(rotation=45)   plt.tight_layout()
+  plt.show()
+ 
+plot_top_categories_by_handset_count(processed_data)
+def plot_top_huawei_handsets(dataframe):
+  huawei_data = dataframe[dataframe['Handset Type'].str.contains('huawei', case=False)]
+  huawei_counts = huawei_data['Handset Type'].value_counts().head(5)
+  plt.figure(figsize=(10, 6))
+  sns.barplot(x=huawei_counts.index, y=huawei_counts.values, palette='viridis')
+  plt.title('Top 5 Huawei Handsets')
+  plt.xlabel('Handset Model')
+  plt.ylabel('Count')
+  plt.xticks(rotation=45)
+  plt.tight_layout()
+  plt.show()
+plot_top_huawei_handsets(processed_data)
+def plot_top_apple_handsets(dataframe):
+  apple_data = dataframe[dataframe['Handset Type'].str.contains('Apple', case=False)]
+  apple_counts = apple_data['Handset Type'].value_counts().head(5)
+  plt.figure(figsize=(10, 6))
+  sns.barplot(x=apple_counts.index, y=apple_counts.values, palette='muted')
+  plt.title('Top 5 Apple Handsets')
+  plt.xlabel('Handset Model')
+  plt.ylabel('Count')
+  plt.xticks(rotation=45)
+  plt.tight_layout()
+  plt.show()
+plot_top_apple_handsets(processed_data)
+import seaborn as sns
+
+import matplotlib.pyplot as plt
+ 
+def plot_average_sum(processed_data, categorical_column, non_categorical_columns):
+  grouped_data = processed_data.groupby(categorical_column)[non_categorical_columns].sum().mean(axis=1).reset_index()
+  grouped_data.columns = [categorical_column, 'Avg Sum']
+  plt.figure(figsize=(10, 6))
+  sns.barplot(x=categorical_column, y='Avg Sum', data=grouped_data)
+  plt.xlabel(categorical_column)
+  plt.ylabel('Average of Sum of Non-Categorical Columns')
+  plt.title(f'Average Sum of {", ".join(non_categorical_columns)} by {categorical_column}')
+  plt.xticks(rotation=45)
+  plt.tight_layout()
+  plt.show()
+ 
+categorical_column = 'MSISDN/Number'
+
+non_categorical_columns = ['Avg RTT DL (ms)', 'Avg RTT UL (ms)']
+ 
+plot_average_sum(processed_data, categorical_column, non_categorical_columns)
+
+processed_data[['Avg RTT DL (ms)','Start']].head(15)
+import pandas as pd
+
+from sklearn.model_selection import train_test_split
+
+from sklearn.linear_model import LinearRegression
+
+from sklearn.preprocessing import LabelEncoder
+ 
+class MissingValueFiller:
+  def __init__(self, processed_data):
+  self.processed_data = processed_data
+  def fill_missing_column(self, column_name):
+  if self.processed_data[column_name].isnull().sum() == 0:
+  print(f"No missing values found in column '{column_name}'.")
+  return self.processed_data
+  self.processed_data = self.processed_data.dropna(subset=[column_name])
+  exclude_cols = ['Avg RTT UL (ms)', 'MSISDN/Number', 'IMEI', 'TCP DL Retrans. Vol (Bytes)',
+  'TCP UL Retrans. Vol (Bytes)', 'Handset Manufacturer', 'Handset Type',
+  'Bearer Id', 'Start', 'End', 'Last Location Name', column_name]
+  train_cols = [col for col in self.processed_data.columns if col not in exclude_cols]
+  X = self.processed_data[train_cols]
+  y = self.processed_data[column_name]
+  if len(X) < 2:
+  print(f"Insufficient data to predict missing values for column '{column_name}'.")
+  return self.processed_data
+  model = LinearRegression()
+  model.fit(X, y)
+  missing_data_indices = self.processed_data[self.processed_data[column_name].isnull()].index
+  X_missing = self.processed_data.loc[missing_data_indices, train_cols]
+  predicted_values = model.predict(X_missing)
+  self.processed_data.loc[missing_data_indices, column_name] = predicted_values
+  return self.processed_data
+  def __call__(self):
+  return self.processed_data
+ 
+filler = MissingValueFiller(processed_data)
+
+column_to_predict = 'Avg RTT DL (ms)'  
+filled_data = filler.fill_missing_column(column_to_predict)
+
+processed_data_filled = filler()
+from scipy.interpolate import interp1d
+from utility import DataProcessor
+import pandas as pd
+from datetime import datetime
+
+class ProcessData:
+  def __init__(self, username, password, host, database, table_name):
+  self.username = username
+  self.password = password
+  self.host = host
+  self.database = database
+  self.table_name = table_name
+""" columns to be interpolated based on appropriate mechanisms to ensure data integerity and conviniece analysis"""
+  self.columns_to_interpolate =['Avg RTT DL (ms)', 'Avg RTT UL (ms)'
+  ,'TCP DL Retrans. Vol (Bytes)',
+  'TCP UL Retrans. Vol (Bytes)']
+  def process_data(self):
+  processor = DataProcessor(self.username, self.password, self.host, self.database, self.table_name)
+  processed_df = processor.fetch_data()
+"""   Dropping null values from the columns which are listed below, because the missing values from those columns
+  indicates that the user xdr session is not recored accurately it might be the user on 'VPN' network for instance
+  so the data measured for each attribute are not the actual data, or the other reason might be technical problem
+
+"""
+  col_val = ['Bearer Id', 'IMSI', 'Last Location Name', 'Last Location Name', 'IMEI',
+  'MSISDN/Number', 'Handset Manufacturer', 'Handset Type']
+  for col in col_val:
+  processed_df = processor.drop_null_rows(col)
+"""
+  we don't need ['HTTP DL (Bytes)', 'HTTP UL (Bytes)'] col to for our Expolraotry Data Analysis due to they are missing in
+  large proportion compared to the data set we have
+ 
+"""
+  columns_to_drop = ['HTTP DL (Bytes)', 'HTTP UL (Bytes)']
+  for col in columns_to_drop:
+  processed_df = processor.drop_columns([col])
+"""   those cols in cases variable are columns which are interelated with each other each columns   for a given interrelated columns they can not have non-zero value simultaneosly if one of   the attribute has non zero values we will assign 0 for the rest of the interrelated columns
+"""
+  cases = [
+  {
+  'related_cols': ['Nb of sec with 125000B < Vol DL', 'Nb of sec with 31250B < Vol DL < 125000B',
+  'Nb of sec with 6250B < Vol DL < 31250B', 'Nb of sec with Vol DL < 6250B'],
+  'target_cols': ['Nb of sec with 125000B < Vol DL', 'Nb of sec with 31250B < Vol DL < 125000B',
+  'Nb of sec with 6250B < Vol DL < 31250B', 'Nb of sec with Vol DL < 6250B']
+  },
+  {
+  'related_cols': ['Nb of sec with 1250B < Vol UL < 6250B', 'Nb of sec with 37500B < Vol UL',
+  'Nb of sec with 6250B < Vol UL < 37500B', 'Nb of sec with Vol UL < 1250B'],
+  'target_cols': ['Nb of sec with 1250B < Vol UL < 6250B', 'Nb of sec with 37500B < Vol UL',
+  'Nb of sec with 6250B < Vol UL < 37500B', 'Nb of sec with Vol UL < 1250B']
+  },
+  {
+  'related_cols': ['DL TP < 50 Kbps (%)', '50 Kbps < DL TP < 250 Kbps (%)', '250 Kbps < DL TP < 1 Mbps (%)',
+  'DL TP > 1 Mbps (%)'],
+  'target_cols': ['DL TP < 50 Kbps (%)', '50 Kbps < DL TP < 250 Kbps (%)', '250 Kbps < DL TP < 1 Mbps (%)',
+  'DL TP > 1 Mbps (%)']
+  },
+  {
+  'related_cols': ['UL TP < 10 Kbps (%)', '10 Kbps < UL TP < 50 Kbps (%)', '50 Kbps < UL TP < 300 Kbps (%)',
+  'UL TP > 300 Kbps (%)'],
+  'target_cols': ['UL TP < 10 Kbps (%)', '10 Kbps < UL TP < 50 Kbps (%)', '50 Kbps < UL TP < 300 Kbps (%)',
+  'UL TP > 300 Kbps (%)']
+  },
+  ]
+  col_interpolated = ['Avg RTT DL (ms)','Avg RTT UL (ms)']
+  processed_df=  processor.interpolate_columns(col_interpolated,window_size=5)
+  processed_df = processed_df
+  for case in cases:
+  related_cols = case['related_cols']
+  target_cols = case['target_cols']
+  processed_df = processor.assign_zero_based_on_condition(related_cols, target_cols)
+  return processed_df
+from scipy.interpolate import interp1d
+import numpy as np
+from utility import DataProcessor
+
+class ProcessData:
+  def interpolate_nonlinear(self, processed_df, column_name):
+  non_null_indices = processed_df[column_name].notnull()
+  x = np.where(non_null_indices)[0]   y = processed_df.loc[non_null_indices, column_name].values   interpolator = interp1d(x, y, kind='cubic')
+  full_indices = np.arange(len(processed_df))
+  interpolated_values = interpolator(full_indices)
+  processed_df[column_name] = np.where(
+  processed_df[column_name].isnull(),
+  interpolated_values[processed_df.index],
+  processed_df[column_name]
+  )
+  return processed_df
+  def process_data(self):
+  processor = DataProcessor(self.username, self.password, self.host, self.database, self.table_name)
+  processed_df = processor.fetch_data()
+  col_val = ['Bearer Id', 'IMSI', 'Last Location Name', 'Last Location Name', 'IMEI',
+  'MSISDN/Number', 'Handset Manufacturer', 'Handset Type']
+  for col in col_val:
+  processed_df = processor.drop_null_rows(col)
+  columns_to_drop = ['HTTP DL (Bytes)', 'HTTP UL (Bytes)']
+  for col in columns_to_drop:
+  processed_df = processor.drop_columns([col])
+  cases = [
+  ]
+  for case in cases:
+  related_cols = case['related_cols']
+  target_cols = case['target_cols']
+  processed_df = processor.assign_zero_based_on_condition(related_cols, target_cols)
+  column_to_interpolate = 'Your_Column_Name'
+  processed_df = self.interpolate_nonlinear(processed_df, column_to_interpolate)
+  return processed_df
+import pandas as pd
+from sqlalchemy import create_engine
+
+class DataProcessor:
+  def __init__(self, username, password, host, database, table_name):
+  self.username = username
+  self.password = password
+  self.host = host
+  self.database = database
+  self.table_name = table_name
+  self.df = None   def fetch_data(self):
+  connection_str = f"postgresql+psycopg2://{self.username}:{self.password}@{self.host}/{self.database}"
+  engine = create_engine(connection_str)
+  query = f"SELECT * FROM {self.table_name}"
+  self.df = pd.read_sql_query(query, engine)
+  engine.dispose()
+  return self.df   def drop_null_rows(self, column):
+  if self.df is not None and column in self.df.columns:
+  self.df.dropna(subset=[column], inplace=True)
+  return self.df   def drop_columns(self, columns_to_drop):
+  if self.df is not None:
+  self.df.drop(columns=columns_to_drop, inplace=True, errors='ignore')
+  return self.df   def assign_zero_based_on_condition(self, related_cols, target_cols):
+  if self.df is not None:
+  mask = self.df[target_cols].isnull().any(axis=1)
+  for idx, row in self.df.iterrows():
+  if any(pd.isnull(row[col]) for col in target_cols) and any(row[col] != 0 for col in related_cols):
+  for col in target_cols:
+  self.df.at[idx, col] = 0
+  return self.df   def interpolate_columns(self, columns_to_interpolate, window_size=3):
+  """
+  Interpolate specified columns using a moving average and fill NaN values.
+  Parameters:
+  - columns_to_interpolate (list): List of column names to interpolate.
+  - window_size (int): Size of the moving average window. we use small value to for resource management and processing time
+  """
+  df_interpolated = self.df.copy()
+  for column in columns_to_interpolate:
+  if column not in df_interpolated.columns:
+  print(f"Column '{column}' not found in the DataFrame.")
+  continue
+  df_interpolated[column] = df_interpolated[column].rolling(window=window_size, min_periods=1).mean()
+  df_interpolated = df_interpolated.ffill()
+  self.df[columns_to_interpolate] = df_interpolated[columns_to_interpolate]
+  return self.df

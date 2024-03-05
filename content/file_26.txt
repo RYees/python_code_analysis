@@ -1,0 +1,31 @@
+Repository Structure: '
+' ├── setup.py
+├── user_overview_plots.py
+├── data_loader.py
+├── database_operations
+│   ├── mysql_integration.py
+│   └── data_export.py
+├── satisfaction_metrics
+│   ├── regression_model.py
+│   ├── k_means_satisfaction.py
+│   └── satisfaction_scores.py
+├── data_exploration
+│   ├── exploration_data_analysis.py
+│   └── visualizations.py
+├── engagement_metrics
+│   ├── k_means_clustering.py
+│   └── engagement_analysis.py
+├── experience_visualizations.py
+├── README.md
+├── user_overview_analysis.py
+├── bivariate_analysis.py
+├── engagement_visualizations.py
+├── model_deployment
+│   ├── mlops_tools
+│   └── docker_setup
+├── experience_metrics
+│   ├── experience_analysis.py
+│   └── experience_clustering.py
+└── requirements.txt
+ '
+'  

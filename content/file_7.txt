@@ -1,0 +1,823 @@
+import pandas as pd
+
+from sqlalchemy import create_engine
+
+import numpy as np
+
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+
+from scipy.stats.mstats import winsorize  
+from sklearn.decomposition import PCA
+
+from sklearn.preprocessing import StandardScaler
+
+import plotly.express as px
+
+from sklearn.cluster import KMeans
+
+from sklearn.metrics import euclidean_distances
+
+from sklearn.model_selection import train_test_split
+
+from sklearn.linear_model import LinearRegression
+
+from sklearn.metrics import mean_squared_error, r2_score
+
+from sklearn.compose import ColumnTransformer
+
+from sklearn.pipeline import Pipeline
+
+from sklearn.impute import SimpleImputer
+
+from sklearn.preprocessing import OneHotEncoder
+database_name = 'telecom'
+
+table_name = 'xdr_data'
+ 
+connection_params = {"host": "localhost", "user": "postgres", "password": "Musy19", "port": "5432", "database": database_name}
+ 
+engine = create_engine(f"postgresql+psycopg2://{connection_params['user']}:{connection_params['password']}@{connection_params['host']}:{connection_params['port']}/{connection_params['database']}")
+ 
+sql_query = 'SELECT * FROM xdr_data'
+ 
+df = pd.read_sql(sql_query, con= engine)
+csv_file_path = "C:\\Users\\ADMIN\\10Academy\\Week-1\\telecom"
+
+df.to_csv(csv_file_path, index=False)
+df.head()
+df.info() 
+df.describe()
+df.shape
+df.isnull()
+df.columns = df.columns.str.replace(' ', '_')
+
+df.info()
+transposed_df = df.T
+
+transposed_df
+num_col = df.select_dtypes (include = ['number']).columns
+
+cat_col = df.select_dtypes(include=['object']).columns
+ 
+df_num = df[num_col]
+
+df_cat = df[cat_col]
+ 
+print("Numerical Columns:", num_col)
+
+print("Categorical Columns:", cat_col)
+df_cat.info()
+top_handsets = df_cat['Handset_Type'].value_counts().head(10)
+
+top_handsets
+top_handsets_manufacturer = df_cat['Handset_Manufacturer'].value_counts().head(3).index
+
+top_handsets_manufacturer
+for manufacturer in top_handsets_manufacturer:
+  manufacturer_data = df_cat[df_cat['Handset_Manufacturer'] == manufacturer]
+  top_handsets_per_manufacturer = manufacturer_data['Handset_Type'].value_counts().head(5)
+ 
+top_handsets_per_manufacturer  
+sessions_per_user = df_num.groupby('MSISDN/Number')['Bearer_Id'].count().reset_index()
+
+sessions_per_user.columns = ['MSISDN/Number', 'Number_of_xDR_Sessions']
+ 
+print(sessions_per_user)
+
+user_session_duration = df_num.groupby('MSISDN/Number')['Dur._(ms)'].sum().reset_index()
+
+user_session_duration.columns = ['MSISDN/Number', 'Total_session_Duration_ms']
+ 
+print(user_session_duration)
+user_data_usage = df_num.groupby('MSISDN/Number')[['Total_DL_(Bytes)', 'Total_UL_(Bytes)']].sum().reset_index()
+ 
+print(user_data_usage)
+
+application_columns = [
+  'Social_Media_DL_(Bytes)','Social_Media_UL_(Bytes)','Youtube_DL_(Bytes)', 'Youtube_UL_(Bytes)','Netflix_DL_(Bytes)', 'Netflix_UL_(Bytes)','Google_DL_(Bytes)', 'Google_UL_(Bytes)','Email_DL_(Bytes)', 'Email_UL_(Bytes)','Gaming_DL_(Bytes)', 'Gaming_UL_(Bytes)','Other_DL_(Bytes)', 'Other_UL_(Bytes)'
+  ]
+ 
+user_app_data = df.groupby('MSISDN/Number')[application_columns].sum().reset_index()
+ 
+print(user_app_data)
+ 
+missing_values = df.isnull()
+ 
+missing_count = missing_values.sum()
+ 
+columns_with_missing = missing_count[missing_count > 0]
+ 
+print("Columns with Missing Values:")
+
+print(columns_with_missing)
+
+totalCells = np.product(df.shape)
+ 
+totalMissing = missing_count.sum()
+ 
+print("The dataset contains", round(((totalMissing/totalCells) * 100), 2), "%", "missing values.")
+ 
+if df_num.isnull().any().any():
+  df_num = df_num.fillna(df_num.mean())
+ 
+winsorized_data = winsorize(df_num.to_numpy(), limits=[0.01, 0.01], axis=0)
+ 
+df_num = pd.DataFrame(winsorized_data,columns=df_num.columns)
+df_num.describe()
+
+plt.figure(figsize=(10,6))
+
+plt.hist(df_num)
+
+plt.title('xDR_DATA distribution')
+
+plt.xlabel('Columns')
+
+plt.ylabel('Frequency')
+
+plt.show()
+ 
+for column in df_num.columns:
+  plt.figure(figsize=(10,6))
+  plt.hist(df_num[column])
+  plt.title(f'xDR_DATA distribution of {column}')
+  plt.xlabel('Columns')
+  plt.ylabel('Frequency')
+  plt.show()
+ 
+plt.figure(figsize=(10,6))
+
+plt.boxplot(df_num)
+
+plt.title('xDR_DATA distribution')
+
+plt.xlabel('Columns')
+
+plt.ylabel('Frequency')
+
+plt.show()
+
+for column in df_num.columns:
+  plt.figure(figsize=(8,6))
+  sns.boxplot(df_num[column])   plt.title(f'Boxplot for xDR of {column}')
+  plt.xlabel('columns')
+  plt.show()
+df_num['Total_DL_UL_Sum'] = df_num['Total_DL_(Bytes)'] + df_num['Total_UL_(Bytes)']
+
+df_num['Total_DL_UL_Sum']
+correlations = df_num[application_columns + ['Total_DL_UL_Sum']].corr()
+
+correlations
+for app_column in application_columns:
+  plt.figure(figsize=(8, 6))
+  sns.scatterplot(x='Total_DL_UL_Sum', y=app_column, data=df_num)
+  plt.title(f'Scatter Plot: {app_column} vs Total_DL_UL_Sum')
+  plt.xlabel('Total_DL_UL_Sum')
+  plt.ylabel(app_column)
+  plt.show()
+import random
+ 
+for app_column in application_columns:
+  plt.figure(figsize=(8, 6))
+  sampled_data = df_num.sample(n=50, random_state=42)   sns.scatterplot(x='Total_DL_UL_Sum', y=app_column, data=sampled_data)
+  plt.title(f'Scatter Plot: {app_column} vs Total_DL_UL_Sum (Sampled 20 points)')
+  plt.xlabel('Total_DL_UL_Sum')
+  plt.ylabel(app_column)
+  plt.show()
+
+correlation_matrix = df_num[application_columns + ['Total_DL_UL_Sum']].corr()
+
+sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', fmt='.2f')
+
+plt.show()
+
+df_num['Total_Session_Duration'] = df_num.groupby('MSISDN/Number')['Dur._(ms)'].transform('sum')
+ 
+df_num['Decile'] = pd.qcut(df_num['Total_Session_Duration'], q=10, labels=False)
+ 
+total_data_per_decile = df_num.groupby('Decile')['Total_DL_UL_Sum'].sum().reset_index()
+ 
+print(total_data_per_decile)
+ 
+subset_df_num = df_num[application_columns]
+ 
+correlation_matrix = subset_df_num.corr()
+ 
+print(correlation_matrix)
+ 
+scaler = StandardScaler()
+
+df_num_scaled = scaler.fit_transform(df_num)
+ 
+pca = PCA()
+
+df_num_pca_array= pca.fit_transform(df_num_scaled)
+ 
+explained_variance_ratio = pca.explained_variance_ratio_
+
+cumulative_explained_variance = explained_variance_ratio.cumsum()
+ 
+num_components = np.argmax(cumulative_explained_variance >= 0.95) + 1
+ 
+pca = PCA(n_components = num_components)
+
+df_num_pca_array = pca.fit_transform(df_num_scaled)
+ 
+df_num_pca = pd.DataFrame(df_num_pca_array, columns=[f'PC_{i+1}' for i in range(df_num_pca_array.shape[1])])
+ 
+plt.figure(figsize=(10, 6))
+
+plt.plot(range(1, len(explained_variance_ratio) +1), cumulative_explained_variance, marker = 'o', linestyle= '--')
+
+plt.title('Scree Plot for PCA')
+
+plt.xlabel('Numbered Principal Components')
+
+plt.ylabel('Cumulative Explained Variance')
+
+plt.show()
+sessions_frequency = df_num.groupby('MSISDN/Number')['Bearer_Id'].count()
+ 
+sessions_frequency
+ 
+session_duration = df_num.groupby('MSISDN/Number')['Dur._(ms)'].sum()
+
+session_duration
+
+total_traffic = df_num.groupby('MSISDN/Number')[['Total_UL_(Bytes)', 'Total_DL_(Bytes)']].sum().sum(axis=1)
+
+total_traffic
+ 
+engagement_metrics = pd.DataFrame({
+  'Sessions_Frequency': sessions_frequency,
+  'Session_Duration': session_duration,
+  'Total_Traffic': total_traffic
+
+})
+ 
+top_10_sessions_frequency = engagement_metrics['Sessions_Frequency'].nlargest(10)
+
+top_10_session_duration = engagement_metrics['Session_Duration'].nlargest(10)
+
+top_10_total_traffic = engagement_metrics['Total_Traffic'].nlargest(10)
+ 
+print("Top 10 Customers by Sessions Frequency:")
+
+print(top_10_sessions_frequency)
+ 
+print("\nTop 10 Customers by Session Duration:")
+
+print(top_10_session_duration)
+ 
+print("\nTop 10 Customers by Total Traffic:")
+
+print(top_10_total_traffic)
+ 
+df_num.reset_index(drop=True, inplace=True)
+ 
+sessions_frequency = df_num.groupby('MSISDN/Number')['Bearer_Id'].count()
+
+session_duration = df_num.groupby('MSISDN/Number')['Dur._(ms)'].sum()
+
+total_traffic = df_num.groupby('MSISDN/Number')[['Total_UL_(Bytes)', 'Total_DL_(Bytes)']].sum().sum(axis=1)
+ 
+sessions_frequency_series = pd.Series(sessions_frequency, name='Session_Frequency')
+
+session_duration_series = pd.Series(session_duration, name='Session_Duration')
+
+total_traffic_series = pd.Series(total_traffic, name='Total_Traffic')
+ 
+engagement_metrics = pd.concat([sessions_frequency_series, session_duration_series, total_traffic_series], axis=1)
+ 
+scaler = StandardScaler()
+
+engagement_metrics_normalized = scaler.fit_transform(engagement_metrics)
+ 
+kmeans = KMeans(n_clusters=3, random_state=42)
+ 
+cluster_labels = kmeans.fit_predict(engagement_metrics_normalized)
+ 
+df_clusters = pd.DataFrame({'MSISDN/Number': engagement_metrics.index, 'Cluster': cluster_labels})
+ 
+df_num = pd.merge(df_num, df_clusters, on='MSISDN/Number')
+ 
+print(df_num['Cluster'].value_counts())
+ 
+df_num.reset_index(drop=True, inplace=True)
+ 
+sessions_frequency = df_num.groupby('MSISDN/Number')['Bearer_Id'].count()
+
+session_duration = df_num.groupby('MSISDN/Number')['Dur._(ms)'].sum()
+
+total_traffic = df_num.groupby('MSISDN/Number')[['Total_UL_(Bytes)', 'Total_DL_(Bytes)']].sum().sum(axis=1)
+ 
+sessions_frequency_series = pd.Series(sessions_frequency, name='Session_Frequency')
+
+session_duration_series = pd.Series(session_duration, name='Session_Duration')
+
+total_traffic_series = pd.Series(total_traffic, name='Total_Traffic')
+ 
+engagement_metrics = pd.concat([sessions_frequency_series, session_duration_series, total_traffic_series], axis=1)
+ 
+scaler = StandardScaler()
+
+engagement_metrics_normalized = scaler.fit_transform(engagement_metrics)
+ 
+kmeans = KMeans(n_clusters=3, random_state=42)
+ 
+cluster_labels = kmeans.fit_predict(engagement_metrics_normalized)
+ 
+df_clusters = pd.DataFrame({'MSISDN/Number': engagement_metrics.index, 'Cluster': cluster_labels})
+ 
+df_clusters['Cluster'] = df_clusters['Cluster'].astype('category')
+
+df_clusters['Cluster'] = df_clusters['Cluster'].cat.rename_categories({'0': 'Cluster 0', '1': 'Cluster 1', '2': 'Cluster 2'})
+ 
+df_num = pd.merge(df_num, df_clusters, on='MSISDN/Number')
+ 
+print(df_num['Cluster'].value_counts())
+ 
+application_columns = [
+  'Social_Media_DL_(Bytes)', 'Social_Media_UL_(Bytes)',
+  'Youtube_DL_(Bytes)', 'Youtube_UL_(Bytes)',
+  'Netflix_DL_(Bytes)', 'Netflix_UL_(Bytes)',
+  'Google_DL_(Bytes)', 'Google_UL_(Bytes)',
+  'Email_DL_(Bytes)', 'Email_UL_(Bytes)',
+  'Gaming_DL_(Bytes)', 'Gaming_UL_(Bytes)',
+  'Other_DL_(Bytes)', 'Other_UL_(Bytes)'
+
+]
+ 
+total_traffic_per_app_user = df_num.groupby('MSISDN/Number')[application_columns].sum().sum(axis=1).reset_index(name='Total_DL_UL_(Bytes)')
+ 
+top_10_per_app = total_traffic_per_app_user.groupby('MSISDN/Number').apply(lambda x: x.nlargest(10, 'Total_DL_UL_(Bytes)')).reset_index(drop=True)
+ 
+print(top_10_per_app)
+ 
+engagement_metrics = df_num[['Session_Frequency', 'Session_Duration', 'Total_Traffic']]
+ 
+scaler = StandardScaler()
+
+engagement_metrics_normalized = scaler.fit_transform(engagement_metrics)
+ 
+kmeans = KMeans(n_clusters=3, random_state=42)
+
+df_num['Cluster'] = kmeans.fit_predict(engagement_metrics_normalized)
+ 
+print(df_num['Cluster'].value_counts())
+
+import matplotlib.pyplot as plt
+ 
+df_num[application_columns] = df_num[application_columns].apply(pd.to_numeric, errors='coerce')
+ 
+df_num['MSISDN/Number'] = pd.to_numeric(df_num['MSISDN/Number'], errors='coerce')
+ 
+total_traffic_per_user_app = df_num.groupby(['MSISDN/Number'] + application_columns).sum()
+ 
+top_3_apps_per_user = total_traffic_per_user_app.apply(lambda x: x.nlargest(3), axis=1)
+ 
+plt.figure(figsize=(12, 6))
+
+top_3_apps_per_user.columns = [f'Top {i+1}' for i in range(3)]
+
+top_3_apps_per_user.sum().sort_values().plot(kind='barh', color='skyblue')
+
+plt.title('Top 3 Most Used Applications')
+
+plt.xlabel('Total Traffic (Bytes)')
+
+plt.ylabel('Application')
+
+plt.show()
+ 
+df_num['TCP_Retrans_Total'] = df_num['TCP_DL_Retrans._Vol_(Bytes)'] + df_num['TCP_UL_Retrans._Vol_(Bytes)']
+ 
+avg_tcp_retransmission_per_customer = df_num.groupby('MSISDN/Number')['TCP_Retrans_Total'].mean()
+ 
+avg_tcp_retransmission_per_customer = avg_tcp_retransmission_per_customer.reset_index()
+ 
+print(avg_tcp_retransmission_per_customer)
+ 
+df_num['Avg_RTT_DL_(ms)'] = pd.to_numeric(df_num['Avg_RTT_DL_(ms)'], errors='coerce')
+
+df_num['Avg_RTT_UL_(ms)'] = pd.to_numeric(df_num['Avg_RTT_UL_(ms)'], errors='coerce')
+ 
+df_num['Avg_RTT'] = df_num[['Avg_RTT_DL_(ms)', 'Avg_RTT_UL_(ms)']].mean(axis=1)
+ 
+avg_rtt_per_customer = df_num.groupby('MSISDN/Number')['Avg_RTT'].mean()
+ 
+avg_rtt_per_customer = avg_rtt_per_customer.reset_index()
+ 
+print(avg_rtt_per_customer)
+ 
+df_num['Avg_Bearer_TP_DL_(kbps)'] = pd.to_numeric(df_num['Avg_Bearer_TP_DL_(kbps)'], errors='coerce')
+
+df_num['Avg_Bearer_TP_UL_(kbps)'] = pd.to_numeric(df_num['Avg_Bearer_TP_UL_(kbps)'], errors='coerce')
+ 
+df_num['Avg_Throughput'] = df_num[['Avg_Bearer_TP_DL_(kbps)', 'Avg_Bearer_TP_UL_(kbps)']].mean(axis=1)
+ 
+avg_throughput_per_customer = df_num.groupby('MSISDN/Number')['Avg_Throughput'].mean()
+ 
+avg_throughput_per_customer = avg_throughput_per_customer.reset_index()
+ 
+print(avg_throughput_per_customer)
+ 
+df_num['TCP_DL_Retrans._Vol_(Bytes)'] = pd.to_numeric(df_num['TCP_DL_Retrans._Vol_(Bytes)'], errors='coerce')
+
+df_num['TCP_UL_Retrans._Vol_(Bytes)'] = pd.to_numeric(df_num['TCP_UL_Retrans._Vol_(Bytes)'], errors='coerce')
+ 
+top_tcp_values = df_num[['TCP_DL_Retrans._Vol_(Bytes)', 'TCP_UL_Retrans._Vol_(Bytes)']].stack().value_counts().head(10)
+
+print("Top 10 TCP Values:")
+
+print(top_tcp_values)
+ 
+bottom_tcp_values = df_num[['TCP_DL_Retrans._Vol_(Bytes)', 'TCP_UL_Retrans._Vol_(Bytes)']].stack().value_counts().tail(10)
+
+print("\nBottom 10 TCP Values:")
+
+print(bottom_tcp_values)
+ 
+most_frequent_tcp_values = df_num[['TCP_DL_Retrans._Vol_(Bytes)', 'TCP_UL_Retrans._Vol_(Bytes)']].stack().value_counts().idxmax()
+
+print("\nMost Frequent TCP Value:")
+
+print(most_frequent_tcp_values)
+ 
+df_num['Avg_RTT_DL_(ms)'] = pd.to_numeric(df_num['Avg_RTT_DL_(ms)'], errors='coerce')
+
+df_num['Avg_RTT_UL_(ms)'] = pd.to_numeric(df_num['Avg_RTT_UL_(ms)'], errors='coerce')
+ 
+top_rtt_values = df_num[['Avg_RTT_DL_(ms)', 'Avg_RTT_UL_(ms)']].stack().value_counts().head(10)
+
+print("Top 10 RTT Values:")
+
+print(top_rtt_values)
+ 
+bottom_rtt_values = df_num[['Avg_RTT_DL_(ms)', 'Avg_RTT_UL_(ms)']].stack().value_counts().tail(10)
+
+print("\nBottom 10 RTT Values:")
+
+print(bottom_rtt_values)
+ 
+most_frequent_rtt_values = df_num[['Avg_RTT_DL_(ms)', 'Avg_RTT_UL_(ms)']].stack().value_counts().idxmax()
+
+print("\nMost Frequent RTT Value:")
+
+print(most_frequent_rtt_values)
+ 
+df_num['Avg_Bearer_TP_DL_(kbps)'] = pd.to_numeric(df_num['Avg_Bearer_TP_DL_(kbps)'], errors='coerce')
+
+df_num['Avg_Bearer_TP_UL_(kbps)'] = pd.to_numeric(df_num['Avg_Bearer_TP_UL_(kbps)'], errors='coerce')
+ 
+top_throughput_values = df_num[['Avg_Bearer_TP_DL_(kbps)', 'Avg_Bearer_TP_UL_(kbps)']].stack().value_counts().head(10)
+
+print("Top 10 Throughput Values:")
+
+print(top_throughput_values)
+ 
+bottom_throughput_values = df_num[['Avg_Bearer_TP_DL_(kbps)', 'Avg_Bearer_TP_UL_(kbps)']].stack().value_counts().tail(10)
+
+print("\nBottom 10 Throughput Values:")
+
+print(bottom_throughput_values)
+ 
+most_frequent_throughput_values = df_num[['Avg_Bearer_TP_DL_(kbps)', 'Avg_Bearer_TP_UL_(kbps)']].stack().value_counts().idxmax()
+
+print("\nMost Frequent Throughput Value:")
+
+print(most_frequent_throughput_values)
+ 
+df_num['Avg_Bearer_TP_DL_(kbps)'] = pd.to_numeric(df_num['Avg_Bearer_TP_DL_(kbps)'], errors='coerce')
+
+df_num['Avg_Bearer_TP_UL_(kbps)'] = pd.to_numeric(df_num['Avg_Bearer_TP_UL_(kbps)'], errors='coerce')
+ 
+average_throughput_per_handset = df.groupby('Handset_Type')[['Avg_Bearer_TP_DL_(kbps)', 'Avg_Bearer_TP_UL_(kbps)']].mean()
+ 
+print("Distribution of Average Throughput per Handset Type:")
+
+print(average_throughput_per_handset)
+ 
+average_throughput_per_handset.plot(kind='bar', figsize=(12, 6))
+
+plt.title('Distribution of Average Throughput per Handset Type')
+
+plt.xlabel('Handset Type')
+
+plt.ylabel('Average Throughput (kbps)')
+
+plt.legend(["Downlink", "Uplink"])
+
+plt.show()
+ 
+df['TCP_DL_Retrans._Vol_(Bytes)'] = pd.to_numeric(df['TCP_DL_Retrans._Vol_(Bytes)'], errors='coerce')
+
+df['TCP_UL_Retrans._Vol_(Bytes)'] = pd.to_numeric(df['TCP_UL_Retrans._Vol_(Bytes)'], errors='coerce')
+ 
+average_tcp_retransmission_per_handset = df.groupby('Handset_Type')[['TCP_DL_Retrans._Vol_(Bytes)', 'TCP_UL_Retrans._Vol_(Bytes)']].mean()
+ 
+average_tcp_retransmission_per_handset.plot(kind='bar', figsize=(12, 6))
+
+plt.title('Average TCP Retransmission per Handset Type')
+
+plt.xlabel('Handset Type')
+
+plt.ylabel('Average TCP Retransmission Volume (Bytes)')
+
+plt.legend(["Downlink", "Uplink"])
+
+plt.show()
+ 
+features = ['Avg_RTT_DL_(ms)', 'Avg_RTT_UL_(ms)', 'Avg_Bearer_TP_DL_(kbps)', 'Avg_Bearer_TP_UL_(kbps)']
+ 
+data_for_clustering = df[features].copy()
+ 
+data_for_clustering.fillna(data_for_clustering.mean(), inplace=True)
+ 
+scaler = StandardScaler()
+
+scaled_data = scaler.fit_transform(data_for_clustering)
+ 
+kmeans = KMeans(n_clusters=3, random_state=42)
+
+df['Cluster'] = kmeans.fit_predict(scaled_data)
+ 
+plt.figure(figsize=(10, 6))
+
+for cluster in df['Cluster'].unique():
+  cluster_data = df[df['Cluster'] == cluster]
+  plt.scatter(cluster_data['Avg_RTT_DL_(ms)'], cluster_data['Avg_Bearer_TP_DL_(kbps)'], label=f'Cluster {cluster}')
+ 
+plt.title('K-Means Clustering of Users Based on Experience Metrics')
+
+plt.xlabel('Avg_RTT_DL_(ms)')
+
+plt.ylabel('Avg_Bearer_TP_DL_(kbps)')
+
+plt.legend()
+
+plt.show()
+ 
+less_engaged_cluster = df_num['Cluster'].value_counts().idxmin()  
+less_engaged_centroid = kmeans.cluster_centers_[less_engaged_cluster]  
+engagement_features = ['Avg_RTT_DL_(ms)', 'Avg_RTT_UL_(ms)', 'Avg_Bearer_TP_DL_(kbps)', 'Avg_Bearer_TP_UL_(kbps)']
+ 
+data_for_engagement = df_num[engagement_features].copy()
+ 
+data_for_engagement.fillna(data_for_engagement.mean(), inplace=True)
+ 
+engagement_scores = euclidean_distances(data_for_engagement, [less_engaged_centroid])
+ 
+df_num['Engagement_Score'] = engagement_scores.flatten()
+ 
+print(df_num[['MSISDN/Number', 'Cluster', 'Engagement_Score']])
+ 
+worst_experience_cluster = df_num['Cluster'].value_counts().idxmax()  
+worst_experience_centroid = kmeans.cluster_centers_[worst_experience_cluster]  
+experience_features = ['Avg_RTT_DL_(ms)', 'Avg_RTT_UL_(ms)', 'Avg_Bearer_TP_DL_(kbps)', 'Avg_Bearer_TP_UL_(kbps)']
+ 
+data_for_experience = df_num[experience_features].copy()
+ 
+data_for_experience.fillna(data_for_experience.mean(), inplace=True)
+ 
+experience_scores = euclidean_distances(data_for_experience, [worst_experience_centroid])
+ 
+df_num['Experience_Score'] = experience_scores.flatten()
+ 
+print(df_num[['MSISDN/Number', 'Cluster', 'Experience_Score']])
+ 
+df_num['Satisfaction_Score'] = (df_num['Engagement_Score'] + df_num['Experience_Score']) / 2
+ 
+top_satisfied_customers = df_num.sort_values(by='Satisfaction_Score', ascending=False).head(10)
+
+print(top_satisfied_customers[['MSISDN/Number', 'Satisfaction_Score']])
+ 
+features = ['Dur. (ms)', 'Avg RTT DL (ms)', 'Avg RTT UL (ms)', 'Avg Bearer TP DL (kbps)', 'Avg Bearer TP UL (kbps)', 'Handset Manufacturer', 'Handset Type']
+
+target = 'Satisfaction_Score'  
+X_train, X_test, y_train, y_test = train_test_split(df[features], df[target], test_size=0.2, random_state=42)
+ 
+numeric_features = ['Dur. (ms)', 'Dur. (s)', 'Avg RTT DL (ms)', 'Avg RTT UL (ms)', 'Avg Bearer TP DL (kbps)', 'Avg Bearer TP UL (kbps)']
+
+numeric_transformer = Pipeline(steps=[
+  ('imputer', SimpleImputer(strategy='mean')),
+  ('scaler', StandardScaler())
+
+])
+ 
+categorical_features = ['Handset Manufacturer', 'Handset Type']
+
+categorical_transformer = Pipeline(steps=[
+  ('imputer', SimpleImputer(strategy='most_frequent')),
+  ('onehot', OneHotEncoder(handle_unknown='ignore'))
+
+])
+ 
+preprocessor = ColumnTransformer(
+  transformers=[
+  ('num', numeric_transformer, numeric_features),
+  ('cat', categorical_transformer, categorical_features)
+  ])
+ 
+model = Pipeline(steps=[
+  ('preprocessor', preprocessor),
+  ('regressor', LinearRegression())
+
+])
+ 
+model.fit(X_train, y_train)
+ 
+y_pred = model.predict(X_test)
+ 
+mse = mean_squared_error(y_test, y_pred)
+
+r2 = r2_score(y_test, y_pred)
+ 
+print(f'Mean Squared Error: {mse}')
+
+print(f'R-squared: {r2}')
+ 
+F_cluster = ['Engagement_Score', 'Experience_Score']
+ 
+data_for_clustering = df[F_cluster].copy()
+ 
+data_for_clustering.dropna(inplace=True)
+ 
+scaler = StandardScaler()
+
+scaled_data = scaler.fit_transform(data_for_clustering)
+ 
+kmeans = KMeans(n_clusters=2, random_state=42)
+
+df['Cluster_Engagement_Experience'] = kmeans.fit_predict(scaled_data)
+ 
+plt.figure(figsize=(8, 5))
+
+for cluster in df['Cluster_Engagement_Experience'].unique():
+  cluster_data = df[df['Cluster_Engagement_Experience'] == cluster]
+  plt.scatter(cluster_data['Engagement_Score'], cluster_data['Experience_Score'], label=f'Cluster {cluster}')
+ 
+plt.title('K-Means Clustering of Engagement and Experience Scores')
+
+plt.xlabel('Engagement Score')
+
+plt.ylabel('Experience Score')
+
+plt.legend()
+
+plt.show()
+
+from sklearn.cluster import KMeans
+
+from sklearn.preprocessing import StandardScaler
+ 
+features = ['Your_Engagement_Column', 'Your_Experience_Column']
+ 
+data_for_clustering = df[features].copy()
+ 
+data_for_clustering.dropna(inplace=True)
+ 
+scaler = StandardScaler()
+
+scaled_data = scaler.fit_transform(data_for_clustering)
+ 
+kmeans = KMeans(n_clusters=2, random_state=42)
+
+df['Cluster_Engagement_Experience'] = kmeans.fit_predict(scaled_data)
+import pandas as pd
+
+from sqlalchemy import create_engine
+
+import numpy as np
+
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+
+from scipy.stats.mstats import winsorize  
+from sklearn.decomposition import PCA
+
+from sklearn.preprocessing import StandardScaler
+
+import plotly.express as px
+
+from sklearn.cluster import KMeans
+
+from sklearn.impute import SimpleImputer
+database_name = 'telecom'
+
+table_name = 'xdr_data'
+ 
+connection_params = {"host": "localhost", "user": "postgres", "password": "Musy19", "port": "5432", "database": database_name}
+ 
+engine = create_engine(f"postgresql+psycopg2://{connection_params['user']}:{connection_params['password']}@{connection_params['host']}:{connection_params['port']}/{connection_params['database']}")
+ 
+sql_query = 'SELECT * FROM xdr_data'
+ 
+df = pd.read_sql(sql_query, con= engine)
+csv_file_path = "C:\\Users\\ADMIN\\10Academy\\Week-1\\telecom"
+
+df.to_csv(csv_file_path, index=False)
+df.columns = df.columns.str.replace(' ', '_')
+
+df.info()
+
+num_col = df.select_dtypes (include = ['number']).columns
+
+cat_col = df.select_dtypes(include=['object']).columns
+ 
+df_num = df[num_col]
+
+df_cat = df[cat_col]
+application_columns = [
+  'Social_Media_DL_(Bytes)','Social_Media_UL_(Bytes)','Youtube_DL_(Bytes)', 'Youtube_UL_(Bytes)','Netflix_DL_(Bytes)', 'Netflix_UL_(Bytes)','Google_DL_(Bytes)', 'Google_UL_(Bytes)','Email_DL_(Bytes)', 'Email_UL_(Bytes)','Gaming_DL_(Bytes)', 'Gaming_UL_(Bytes)','Other_DL_(Bytes)', 'Other_UL_(Bytes)'
+  ]
+ 
+if df_num.isnull().any().any():
+  df_num = df_num.fillna(df_num.mean())
+ 
+winsorized_data = winsorize(df_num.to_numpy(), limits=[0.01, 0.01], axis=0)
+ 
+df_num = pd.DataFrame(winsorized_data,columns=df_num.columns)
+df_num.info()
+
+scaler = StandardScaler()
+
+df_scaled = scaler.fit_transform(df_num)
+ 
+pca = PCA()
+
+df_pca= pca.fit_transform(df_scaled)
+ 
+explained_variance_ratio = pca.explained_variance_ratio_
+
+cumulative_explained_variance = explained_variance_ratio.cumsum()
+ 
+num_components = np.argmax(cumulative_explained_variance >= 0.95) + 1
+ 
+pca = PCA(n_components = num_components)
+
+df_pca = pca.fit_transform(df_scaled)
+
+transposed_df = df_num.T
+
+transposed_df
+
+sessions_per_user = df_num.groupby('MSISDN/Number')['Bearer_Id'].count().reset_index()
+
+sessions_per_user.columns = ['MSISDN/Number', 'Number_of_xDR_Sessions']
+ 
+print(sessions_per_user)
+ 
+sessions_per_user = df_num.groupby('MSISDN/Number')['Bearer_Id'].count().reset_index()
+
+user_session_duration = df_num.groupby('MSISDN/Number')['Dur._(ms)'].sum().reset_index()
+ 
+session_frequency = sessions_per_user / user_session_duration
+ 
+print(session_frequency)
+ 
+session_duration = df_num[['MSISDN/Number', 'Dur._(ms)']]
+ 
+session_duration['Total_Duration_Sec'] = session_duration['Dur._(ms)'] / 1000
+ 
+session_duration['Avg_Duration_Sec'] = session_duration.groupby('MSISDN/Number')['Total_Duration_Sec'].transform('mean')
+ 
+session_duration.head(10)
+ 
+user_traffic = df_num[['MSISDN/Number', 'Total_DL_(Bytes)', 'Total_UL_(Bytes)']]
+ 
+user_traffic['Total_Traffic_Bytes'] = user_traffic['Total_DL_(Bytes)'] + user_traffic['Total_UL_(Bytes)']
+ 
+user_traffic['Avg_Traffic_Bytes'] = user_traffic.groupby('MSISDN/Number')['Total_Traffic_Bytes'].transform('mean')
+ 
+user_traffic.head(10)
+
+user_traffic.locn['Total_Traffic_Bytes'] = user_traffic['Total_DL_(Bytes)'] + user_traffic['Total_UL_(Bytes)']
+
+user_traffic['Total_Traffic_Bytes']  
+imputer = SimpleImputer(strategy='mean')
+
+user_traffic_imputed = imputer.fit_transform(user_traffic[['Total_Traffic_Bytes', 'Avg_Traffic_Bytes']])
+ 
+scaler = StandardScaler()
+
+normalized_data = scaler.fit_transform(user_traffic_imputed)
+ 
+kmeans = KMeans(n_clusters=3, random_state=42)
+
+df_num['Cluster'] = kmeans.fit_predict(normalized_data)
+ 
+plt.figure(figsize=(10, 6))
+
+plt.scatter(df_num['Total_Traffic_Bytes'], df_num['Avg_Traffic_Bytes'], c=df_num['Cluster'], cmap='viridis')
+
+plt.title('K-Means Clustering of User Engagement')
+
+plt.xlabel('Total Traffic (Bytes)')
+
+plt.ylabel('Average Traffic (Bytes)')
+
+plt.show()

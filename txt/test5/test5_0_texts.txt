@@ -1,0 +1,775 @@
+from prompt_generation.prompt_generator import PromptGenerator
+from test_case_generation.test_case_generator import TestCaseGenerator
+from evaluation.monte_carlo_matchmaking import MonteCarloMatchmaking
+from evaluation.elo_rating_system import ELORatingSystem
+
+class PromptEngineeringApp:
+  def __init__(self):
+  self.prompt_generator = PromptGenerator()
+  self.test_case_generator = TestCaseGenerator()
+  self.monte_carlo_matchmaker = MonteCarloMatchmaking()
+  self.elo_rating_system = ELORatingSystem()
+  def run(self):
+  pass
+import random
+
+class PromptTestingAndRanking:
+  def __init__(self, evaluation_data_generator):
+  self.evaluation_data_generator = evaluation_data_generator
+  self.prompt_candidates = []
+  self.matchups_history = {}
+  self.elo_ratings = {}
+  def add_prompt_candidates(self, prompt_candidates):
+  """
+  Add prompt candidates to the testing and ranking system.
+  Args:
+  - prompt_candidates (list): List of prompt candidates.
+  """
+  self.prompt_candidates = prompt_candidates
+  self.initialize_elo_ratings()
+  def initialize_elo_ratings(self):
+  """
+  Initialize ELO ratings for each prompt candidate.
+  """
+  for prompt_candidate in self.prompt_candidates:
+  self.elo_ratings[prompt_candidate] = 1000   def perform_monte_carlo_matchmaking(self, num_matchups=10):
+  """
+  Perform Monte Carlo Matchmaking to simulate prompt matchups.
+  Args:
+  - num_matchups (int): Number of matchups to simulate.
+  Returns:
+  - dict: Dictionary containing matchups and their outcomes.
+  """
+  matchups_outcomes = {}
+  for _ in range(num_matchups):
+  matchup = random.sample(self.prompt_candidates, 2)
+  winner = random.choice(matchup)
+  loser = matchup[0] if matchup[0] != winner else matchup[1]
+  if matchup not in self.matchups_history:
+  self.matchups_history[matchup] = {"wins": 0, "losses": 0}
+  self.matchups_history[matchup]["wins"] += 1
+  self.update_elo_ratings(winner, loser)
+  matchups_outcomes[matchup] = winner
+  return matchups_outcomes
+  def update_elo_ratings(self, winner, loser, k=32):
+  """
+  Update ELO ratings based on the outcome of a matchup.
+  Args:
+  - winner (str): Winner prompt candidate.
+  - loser (str): Loser prompt candidate.
+  - k (int): ELO rating update constant.
+  """
+  rating_difference = self.elo_ratings[winner] - self.elo_ratings[loser]
+  expected_outcome = 1 / (1 + 10 ** (-rating_difference / 400))
+  self.elo_ratings[winner] += k * (1 - expected_outcome)
+  self.elo_ratings[loser] -= k * expected_outcome
+  def rank_prompts(self):
+  """
+  Rank prompt candidates based on their ELO ratings.
+  Returns:
+  - list: Ranked prompt candidates.
+  """
+  ranked_prompts = sorted(self.elo_ratings, key=lambda x: self.elo_ratings[x], reverse=True)
+  return ranked_prompts
+ 
+evaluation_data_generator = EvaluationDataGenerator()
+prompt_testing_and_ranking = PromptTestingAndRanking(evaluation_data_generator)
+
+prompt_candidates = ["Prompt 1", "Prompt 2", "Prompt 3"]
+evaluation_data_generator.generate_evaluation_data("User's description", num_test_cases=5)
+
+prompt_testing_and_ranking.add_prompt_candidates(prompt_candidates)
+
+matchups_outcomes = prompt_testing_and_ranking.perform_monte_carlo_matchmaking(num_matchups=10)
+print("Matchups Outcomes:")
+for matchup, winner in matchups_outcomes.items():
+  print(f"{matchup[0]} vs {matchup[1]} - Winner: {winner}")
+
+ranked_prompts = prompt_testing_and_ranking.rank_prompts()
+print("\nRanked Prompts:")
+for i, prompt in enumerate(ranked_prompts, 1):
+  print(f"{i}. {prompt} - ELO Rating: {prompt_testing_and_ranking.elo_ratings[prompt]}")
+import random
+import math
+
+class PromptTestingAndRanking:
+  def __init__(self, evaluation_data_generator, exploration_rate=0.2):
+  self.evaluation_data_generator = evaluation_data_generator
+  self.prompt_candidates = []
+  self.matchups_history = {}
+  self.bandit_rewards = {}
+  self.exploration_rate = exploration_rate
+  def add_prompt_candidates(self, prompt_candidates):
+  """
+  Add prompt candidates to the testing and ranking system.
+  Args:
+  - prompt_candidates (list): List of prompt candidates.
+  """
+  self.prompt_candidates = prompt_candidates
+  self.initialize_bandit_rewards()
+  def initialize_bandit_rewards(self):
+  """
+  Initialize rewards for each prompt candidate in the Multi-Armed Bandit.
+  """
+  for prompt_candidate in self.prompt_candidates:
+  self.bandit_rewards[prompt_candidate] = {"wins": 0, "losses": 0}
+  def perform_monte_carlo_matchmaking(self, num_matchups=10):
+  """
+  Perform Monte Carlo Matchmaking to simulate prompt matchups.
+  Args:
+  - num_matchups (int): Number of matchups to simulate.
+  Returns:
+  - dict: Dictionary containing matchups and their outcomes.
+  """
+  matchups_outcomes = {}
+  for _ in range(num_matchups):
+  matchup = random.sample(self.prompt_candidates, 2)
+  winner = random.choice(matchup)
+  loser = matchup[0] if matchup[0] != winner else matchup[1]
+  if matchup not in self.matchups_history:
+  self.matchups_history[matchup] = {"wins": 0, "losses": 0}
+  self.matchups_history[matchup]["wins"] += 1
+  self.bandit_rewards[winner]["wins"] += 1
+  self.bandit_rewards[loser]["losses"] += 1
+  matchups_outcomes[matchup] = winner
+  return matchups_outcomes
+  def select_prompt_to_evaluate(self):
+  """
+  Select a prompt candidate to evaluate using the Multi-Armed Bandit Algorithm.
+  Returns:
+  - str: Selected prompt candidate.
+  """
+  total_evaluations = sum(self.bandit_rewards[prompt]["wins"] + self.bandit_rewards[prompt]["losses"] for prompt in self.prompt_candidates)
+  if random.uniform(0, 1) < self.exploration_rate:
+  return random.choice(self.prompt_candidates)
+  else:
+  rewards_estimates = {prompt: (self.bandit_rewards[prompt]["wins"] + 1) / (total_evaluations + 1) for prompt in self.prompt_candidates}
+  selected_prompt = max(rewards_estimates, key=rewards_estimates.get)
+  return selected_prompt
+
+evaluation_data_generator = EvaluationDataGenerator()
+prompt_testing_and_ranking = PromptTestingAndRanking(evaluation_data_generator)
+
+prompt_candidates = ["Prompt 1", "Prompt 2", "Prompt 3"]
+evaluation_data_generator.generate_evaluation_data("User's description", num_test_cases=5)
+
+prompt_testing_and_ranking.add_prompt_candidates(prompt_candidates)
+
+matchups_outcomes = prompt_testing_and_ranking.perform_monte_carlo_matchmaking(num_matchups=10)
+print("Matchups Outcomes:")
+for matchup, winner in matchups_outcomes.items():
+  print(f"{matchup[0]} vs {matchup[1]} - Winner: {winner}")
+
+selected_prompt = prompt_testing_and_ranking.select_prompt_to_evaluate()
+print(f"\nSelected Prompt to Evaluate: {selected_prompt}")
+import random
+
+class PromptGenerationSystem:
+  def __init__(self):
+  self.generated_prompts = []
+  def generate_prompts(self, input_description, scenarios, expected_outputs, num_options=3):
+  """
+  Generate multiple prompt options based on user input and scenarios.
+  Args:
+  - input_description (str): User's objective or task description.
+  - scenarios (list): List of specified scenarios.
+  - expected_outputs (list): List of expected outputs corresponding to scenarios.
+  - num_options (int): Number of prompt options to generate.
+  Returns:
+  - list: Generated prompt options.
+  """
+  self.generated_prompts = []
+  for _ in range(num_options):
+  generated_prompt = f"{input_description} | Scenarios: {', '.join(scenarios)} | Expected Outputs: {', '.join(expected_outputs)}"
+  self.generated_prompts.append(generated_prompt)
+  return self.generated_prompts
+  def evaluate_prompt_alignment(self, prompt_candidate):
+  """
+  Evaluate whether the generated prompt candidate aligns with the input description.
+  Args:
+  - prompt_candidate (str): Generated prompt to be evaluated.
+  Returns:
+  - float: Evaluation score (can be based on similarity, relevance, etc.).
+  """
+  return random.uniform(0.5, 1.0)
+ 
+prompt_system = PromptGenerationSystem()
+ 
+user_description = "Solve a complex mathematical problem"
+user_scenarios = ["Given initial conditions", "Under time constraints"]
+user_expected_outputs = ["Accurate solution", "Optimal result"]
+
+generated_prompts = prompt_system.generate_prompts(user_description, user_scenarios, user_expected_outputs)
+print("Generated Prompts:")
+for prompt in generated_prompts:
+  print(prompt)
+
+for prompt_candidate in generated_prompts:
+  evaluation_score = prompt_system.evaluate_prompt_alignment(prompt_candidate)
+  print(f"Evaluation Score for the Prompt: {evaluation_score}")
+class TestCaseGenerator:
+  def generate_test_cases(self, user_input):
+  pass
+class Configuration:
+  def __init__(self):
+  self.api_key = "my_api_key"
+  self.max_attempts = 3
+  self.log_level = "info"
+  def update_config(self, api_key=None, max_attempts=None, log_level=None):
+  if api_key:
+  self.api_key = api_key
+  if max_attempts:
+  self.max_attempts = max_attempts
+  if log_level:
+  self.log_level = log_level
+class MainWindow:
+  def __init__(self):
+  pass
+  def display_prompt(self, prompt):
+  pass
+
+import unittest
+from backend.evaluation.monte_carlo_matchmaking import MonteCarloMatchmaking
+from backend.evaluation.elo_rating_system import ELORatingSystem
+
+class TestEvaluationMethods(unittest.TestCase):
+  def test_monte_carlo_matchmaking(self):
+  monte_carlo_matchmaker = MonteCarloMatchmaking()
+  result = monte_carlo_matchmaker.match_prompts(["Prompt 1", "Prompt 2"])
+  self.assertEqual(result, "Match Result")
+  def test_elo_rating_system(self):
+  elo_rating_system = ELORatingSystem()
+  result = elo_rating_system.rate_prompts(["Prompt 1", "Prompt 2"])
+  self.assertEqual(result, {"Prompt 1": 1200, "Prompt 2": 1100})
+
+if __name__ == "__main__":
+  unittest.main()
+import unittest
+from backend.prompt_generation.prompt_generator import PromptGenerator
+
+class TestPromptGeneration(unittest.TestCase):
+  def test_generate_prompt(self):
+  prompt_generator = PromptGenerator()
+  result = prompt_generator.generate_prompt("User Input")
+  self.assertEqual(result, "Expected Prompt")
+
+if __name__ == "__main__":
+  unittest.main()
+import unittest
+from backend.test_case_generation.test_case_generator import TestCaseGenerator
+
+class TestTestCaseGeneration(unittest.TestCase):
+  def test_generate_test_cases(self):
+  test_case_generator = TestCaseGenerator()
+  result = test_case_generator.generate_test_cases("User Input")
+  self.assertEqual(result, ["Test Case 1", "Test Case 2"])
+
+if __name__ == "__main__":
+  unittest.main()
+from ui_design.main_window import MainWindow
+
+def run_ui():
+  main_window = MainWindow()
+  main_window.display_prompt("Placeholder Prompt")
+
+if __name__ == "__main__":
+  run_ui()
+import os
+from langchain.chat_models import ChatOpenAI
+from langchain_community.chat_models import ChatOpenAI
+from config.config import Configuration
+
+class SomeModule:
+  def __init__(self, config):
+  self.config = config
+  def perform_action(self):
+  api_key = self.config.api_key
+  max_attempts = self.config.max_attempts
+  log_level = self.config.log_level
+import unittest
+from config.config import Configuration
+
+class TestConfigurations(unittest.TestCase):
+  def test_configuration_update(self):
+  config_instance = Configuration()
+  config_instance.update_config(api_key="test_api_key", max_attempts=2, log_level="error")
+  self.assertEqual(config_instance.api_key, "test_api_key")
+  self.assertEqual(config_instance.max_attempts, 2)
+  self.assertEqual(config_instance.log_level, "error")
+%pip install -qU \
+  langchain==0.0.292 \
+  openai==0.28.0 \
+  datasets==2.10.1 \
+  pinecone-c
+lient==2.2.4 \
+  tiktoken==0.5.1
+
+import os
+
+from langchain.chat_models import ChatOpenAI
+ 
+os.environ["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY") or ""
+ 
+chat = ChatOpenAI(
+  openai_api_key="",
+  model='gpt-3.5-turbo'
+
+)
+from langchain.schema import (
+  SystemMessage,
+  HumanMessage,
+  AIMessage
+
+)
+ 
+messages = [
+  SystemMessage(content="You are a helpful assistant."),
+  HumanMessage(content="Hi AI, how are you today?"),
+  AIMessage(content="I'm great thank you. How can I help you?"),
+  HumanMessage(content="I'd like to understand string theory.")
+
+]
+res = chat(messages)
+
+res
+print(res.content)
+
+messages.append(res)
+ 
+prompt = HumanMessage(
+  content="Why do physicists believe it can produce a 'unified theory'?"
+
+)
+ 
+messages.append(prompt)
+ 
+res = chat(messages)
+ 
+print(res.content)
+
+messages.append(res)
+ 
+prompt = HumanMessage(
+  content="What is so special about Llama 2?"
+
+)
+ 
+messages.append(prompt)
+ 
+res = chat(messages)
+print(res.content)
+
+messages.append(res)
+ 
+prompt = HumanMessage(
+  content="Can you tell me about the LLMChain in LangChain?"
+
+)
+ 
+messages.append(prompt)
+ 
+res = chat(messages)
+llmchain_information = [
+  "A LLMChain is the most common type of chain. It consists of a PromptTemplate, a model (either an LLM or a ChatModel), and an optional output parser. This chain takes multiple input variables, uses the PromptTemplate to format them into a prompt. It then passes that to the model. Finally, it uses the OutputParser (if provided) to parse the output of the LLM into a final format.",
+  "Chains is an incredibly generic concept which returns to a sequence of modular components (or other chains) combined in a particular way to accomplish a common use case.",
+  "LangChain is a framework for developing applications powered by language models. We believe that the most powerful and differentiated applications will not only call out to a language model via an api, but will also: (1) Be data-aware: connect a language model to other sources of data, (2) Be agentic: Allow a language model to interact with its environment. As such, the LangChain framework is designed with the objective in mind to enable those types of applications."
+
+]
+ 
+source_knowledge = "\n".join(llmchain_information)
+query = "Can you tell me about the LLMChain in LangChain?"
+ 
+augmented_prompt = f"""Using the contexts below, answer the query.
+ 
+Contexts:
+
+{source_knowledge}
+ 
+Query: {query}"""
+
+prompt = HumanMessage(
+  content=augmented_prompt
+
+)
+ 
+messages.append(prompt)
+ 
+res = chat(messages)
+from datasets import load_dataset
+ 
+dataset = load_dataset('fka/awesome-chatgpt-prompts',split="train")
+
+dataset
+train_data = dataset['train']
+
+first_few_rows = dataset['train'][:5]
+ 
+first_few_rows
+ 
+act_column = dataset['train']['act']
+ 
+act_column
+
+import os
+
+import pinecone
+ 
+pinecone.init(
+  api_key=os.environ.get('PINECONE_API_KEY') or '20ea8434-7c1a-4f44-a907-0ab624e39ec0',
+  environment=os.environ.get('PINECONE_ENVIRONMENT') or 'gcp-starter'
+
+)
+
+import time
+ 
+index_name = 'llama-2-rag'
+ 
+if index_name not in pinecone.list_indexes():
+  pinecone.create_index(
+  index_name,
+  dimension=1536,
+  metric='cosine'
+  )
+  while not pinecone.describe_index(index_name).status['ready']:
+  time.sleep(1)
+ 
+index = pinecone.Index(index_name)
+index.describe_index_stats()
+from langchain.embeddings.openai import OpenAIEmbeddings
+ 
+embed_model = OpenAIEmbeddings(model="text-embedding-ada-002")
+texts = [
+  'this is the first chunk of text',
+  'then another second chunk of text is here'
+
+]
+ 
+res = embed_model.embed_documents(texts)
+
+len(res), len(res[0])
+from tqdm.auto import tqdm  
+data = dataset['train'].to_pandas()  
+batch_size = 100
+ 
+for i in tqdm(range(0, len(data), batch_size)):
+  i_end = min(len(data), i + batch_size)
+  batch = data.iloc[i:i_end]
+  ids = [f"row_{index}" for index in batch.index]
+  texts = batch['prompt'].tolist()
+  embeds = embed_model.embed_documents(texts)
+  metadata = [
+  {'prompt': x['prompt'],
+  'act': x['act']} for _, x in batch.iterrows()
+  ]
+  index.upsert(vectors=zip(ids, embeds, metadata))
+
+index.describe_index_stats()
+from langchain.vectorstores import Pinecone
+ 
+text_field = "text"  
+vectorstore = Pinecone(
+  index, embed_model.embed_query, text_field
+
+)
+
+query_prompt = "What is your favorite color?"
+
+vectorstore.similarity_search(query, k=3)
+ 
+top_k = 5
+ 
+results = index.query(vector=query_vector, top_k=top_k)
+
+for match in results["matches"]:
+  id, score, values = match.get("id"), match.get("score"), match.get("values")
+  print(f"ID: {id}, Score: {score}, Values: {values}")
+ 
+from datasets import load_dataset
+ 
+dataset_link = 'jamescalam/llama-2-arxiv-papers'
+ 
+dataset = load_dataset(dataset_link)
+
+dataset 
+from datasets import load_dataset
+ 
+dataset = load_dataset("jamescalam/llama-2-arxiv-papers-chunked")
+from datasets import load_dataset
+ 
+dataset = load_dataset("jamescalam/llama-2-arxiv-papers-chunked",
+  split="train"
+
+)
+ 
+dataset
+dataset[0]
+import os
+
+import pinecone
+ 
+pinecone.init(
+  api_key=os.environ.get('PINECONE_API_KEY') or '20ea8434-7c1a-4f44-a907-0ab624e39ec0',
+  environment=os.environ.get('PINECONE_ENVIRONMENT') or 'gcp-starter'
+
+)
+
+import time
+ 
+index_name = 'llama-2-rag'
+ 
+if index_name not in pinecone.list_indexes():
+  pinecone.create_index(
+  index_name,
+  dimension=1536,
+  metric='cosine'
+  )
+  while not pinecone.describe_index(index_name).status['ready']:
+  time.sleep(1)
+ 
+index = pinecone.Index(index_name)
+index.describe_index_stats()
+from langchain.embeddings.openai import OpenAIEmbeddings
+ 
+embed_model = OpenAIEmbeddings(model="text-embedding-ada-002")
+texts = [
+  'this is the first chunk of text',
+  'then another second chunk of text is here'
+
+]
+ 
+res = embed_model.embed_documents(texts)
+
+len(res), len(res[0])
+from tqdm.auto import tqdm
+
+import pandas as pd
+ 
+data = dataset.to_pandas()
+
+batch_size = 100
+for i in tqdm(range(0, len(data), batch_size)):
+  i_end = min(len(data), i + batch_size)
+  batch = data.iloc[i:i_end]
+import random
+def monte_carlo_eval(prompt):
+  response_types = ['highly relevant', 'somewhat relevant', 'irrelevant']
+  scores = {'highly relevant': 3, 'somewhat relevant': 2, 'irrelevant': 1}
+  trials = 100
+  total_score = 0
+  for _ in range(trials):
+  response = random.choice(response_types)
+  total_score += scores[response]
+  return total_score / trials
+ 
+def elo_eval(prompt, base_rating=1500):
+  outcomes = ['win', 'loss', 'draw']
+  outcome = random.choice(outcomes)
+  K = 30   R_base = 10 ** (base_rating / 400)
+  R_opponent = 10 ** (1600 / 400)   expected_score = R_base / (R_base + R_opponent)
+  actual_score = {'win': 1, 'loss': 0, 'draw': 0.5}[outcome]
+  new_rating = base_rating + K * (actual_score - expected_score)
+  return new_rating
+def elo_ratings_func(prompts, elo_ratings, K=30, opponent_rating=1600):
+  """
+  Update Elo ratings for a list of prompts based on simulated outcomes.
+  Parameters:
+  prompts (list): List of prompts to be evaluated.
+  elo_ratings (dict): Current Elo ratings for each prompt.
+  K (int): Maximum change in rating.
+  opponent_rating (int): Fixed rating of the opponent for simulation.
+  Returns:
+  dict: Updated Elo ratings.
+  """
+  for prompt in prompts:
+  outcome = random.choice(['win', 'loss', 'draw'])
+  actual_score = {'win': 1, 'loss': 0, 'draw': 0.5}[outcome]
+  R_base = 10 ** (elo_ratings[prompt] / 400)
+  R_opponent = 10 ** (opponent_rating / 400)
+  expected_score = R_base / (R_base + R_opponent)
+  elo_ratings[prompt] += K * (actual_score - expected_score)
+  return elo_ratings
+ 
+prompts = ["Who founded OpenAI?",   "What was the initial goal of OpenAI?",
+  "What did OpenAI release in 2016?",   "What project did OpenAI showcase in 2018?",
+  "How did the AI agents in OpenAI Five work together?"
+  ]
+
+elo_ratings = {prompt: 1500 for prompt in prompts}  
+for _ in range(10):   elo_ratings = elo_ratings_func(prompts, elo_ratings)
+ 
+sorted_prompts = sorted(prompts, key=lambda x: elo_ratings[x], reverse=True)
+ 
+for prompt in sorted_prompts:
+  print(f"{prompt}: {elo_ratings[prompt]}")
+ 
+def evaluate_prompt(main_prompt, test_cases):
+  evaluations = {}
+  evaluations['main_prompt'] = {
+  'Monte Carlo Evaluation': monte_carlo_eval(main_prompt),
+  'Elo Rating Evaluation': elo_eval(main_prompt)
+  }
+  for idx, test_case in enumerate(test_cases):
+  evaluations[f'test_case_{idx+1}'] = {
+  'Monte Carlo Evaluation': monte_carlo_eval(test_case),
+  'Elo Rating Evaluation': elo_eval(test_case)
+  }
+  return evaluations
+main_prompt = "why we use OepenAI?"
+
+test_cases = ["Who founded OpenAI?",   "What was the initial goal of OpenAI?",
+  "What did OpenAI release in 2016?",   "What project did OpenAI showcase in 2018?",
+  "How did the AI agents in OpenAI Five work together?"
+  ]
+
+result = evaluate_prompt(main_prompt, test_cases)
+
+print(result)
+ 
+import requests
+
+from langchain.document_loaders import TextLoader
+
+from langchain.text_splitter import CharacterTextSplitter  
+from langchain.embeddings import OpenAIEmbeddings
+
+from langchain.vectorstores import Weaviate
+
+import weaviate
+
+from weaviate.embedded import EmbeddedOptions
+
+from dotenv import load_dotenv,find_dotenv
+
+from langchain.embeddings import OpenAIEmbeddings
+
+from langchain.vectorstores import Weaviate
+
+import weaviate
+
+from weaviate.embedded import EmbeddedOptions
+
+from dotenv import load_dotenv,find_dotenv
+ 
+from langchain.chat_models import ChatOpenAI
+
+from langchain.prompts import ChatPromptTemplate
+
+from langchain.schema.runnable import RunnablePassthrough
+
+from langchain.schema.output_parser import StrOutputParser
+
+def data_loader(file_path= 'prompts/context.txt'):
+  loader = TextLoader(file_path)
+  documents = loader.load()
+  text_splitter = CharacterTextSplitter(chunk_size=500, chunk_overlap=50)
+  chunks = text_splitter.split_documents(documents)
+  return chunks
+def create_retriever(chunks):
+  load_dotenv(find_dotenv())
+  client = weaviate.Client(
+  embedded_options = EmbeddedOptions()
+  )
+  vectorstore = Weaviate.from_documents(
+  client = client,   documents = chunks,
+  embedding = OpenAIEmbeddings(),
+  by_text = False
+  )
+  retriever = vectorstore.as_retriever()
+  return retriever
+chunks
+chunks =  data_loader()
+
+retriever = create_retriever(chunks)
+ 
+llm = ChatOpenAI(model_name="gpt-3.5-turbo", temperature=0)
+ 
+template = """You are an assistant for question-answering tasks.  
+Use the following pieces of retrieved context to answer the question.  
+If you don't know the answer, just say that you don't know.  
+Use two sentences maximum and keep the answer concise.
+
+Question: {question}  
+Context: {context}  
+Answer:
+
+"""
+ 
+prompt = ChatPromptTemplate.from_template(template)
+ 
+rag_chain = (
+  {"context": retriever,  "question": RunnablePassthrough()}   | prompt   | llm
+  | StrOutputParser()  
+)
+from datasets import Dataset
+ 
+questions = ["Who founded OpenAI?",   "What was the initial goal of OpenAI?",
+  "What did OpenAI release in 2016?",
+  ]
+
+ground_truths = [["Sam Altman, Elon Musk, Ilya Sutskever and Greg Brockman"],
+  ["To advance digital intelligence in a way that benefits humanity"],
+  ["OpenAI Gym, a toolkit for developing and comparing reinforcement learning algorithms"]]
+
+answers = []
+
+contexts = []
+ 
+for query in questions:
+  answers.append(rag_chain.invoke(query))
+  contexts.append([docs.page_content for docs in retriever.get_relevant_documents(query)])
+ 
+data = {
+  "question": questions,   "answer": answers,   "contexts": contexts,   "ground_truths": ground_truths 
+}
+ 
+dataset = Dataset.from_dict(data)
+from ragas import evaluate
+
+from ragas.metrics import (
+  faithfulness,
+  answer_relevancy,
+  context_recall,
+  context_precision,
+
+)
+ 
+result = evaluate(
+  dataset = dataset,   metrics=[
+  context_precision,
+  context_recall,
+  faithfulness,
+  answer_relevancy,
+  ],
+
+)
+ 
+df = result.to_pandas()
+df
+import os
+import sys
+from dotenv import load_dotenv
+load_dotenv(".env")
+
+class OPENAI_KEYS:
+  def __init__(self):
+  self.OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '') or None
+ 
+class VECTORDB_KEYS:
+  def __init__(self):
+  self.VECTORDB_API_KEY = os.environ.get('VECTORDB_API_KEY', '') or None
+  self.VECTORDB_URL = os.environ.get('VECTORDB_URL', '') or None
+  self.VECTORDB_MODEL = os.environ.get('VECTORDB_MODEL', '') or None
+ 
+def _get_openai_keys() -> OPENAI_KEYS:
+  return OPENAI_KEYS()
+ 
+def _get_vectordb_keys() -> VECTORDB_KEYS:
+  return VECTORDB_KEYS()
+ 
+def get_env_manager() -> dict:
+  openai_keys = _get_openai_keys().__dict__
+  vectordb_keys = _get_vectordb_keys().__dict__
+  return {
+  'openai_keys': openai_keys,
+  'vectordb_keys': vectordb_keys,
+  }

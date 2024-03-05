@@ -1,0 +1,5973 @@
+!pip install -qU \
+  langchain==0.0.355 \
+  openai==1.6.1 \
+  datasets==2.10.1 \
+  pinecone-client==3.0.0 \
+  tiktoken==0.5.2
+import os
+
+from langchain_openai import ChatOpenAI
+ 
+os.environ["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY") or "YOUR_API_KEY"
+ 
+chat = ChatOpenAI(
+  openai_api_key=os.environ["OPENAI_API_KEY"],
+  model='gpt-3.5-turbo'
+
+)
+ 
+from langchain.schema import (
+  SystemMessage,
+  HumanMessage,
+  AIMessage
+
+)
+ 
+messages = [
+  SystemMessage(content="You are a helpful assistant."),
+  HumanMessage(content="Hi AI, how are you today?"),
+  AIMessage(content="I'm great thank you. How can I help you?"),
+  HumanMessage(content="I'd like to understand string theory.")
+
+]
+ 
+res = chat(messages)
+
+res
+print(res.content)
+
+messages.append(res)
+ 
+prompt = HumanMessage(
+  content="Why do physicists believe it can produce a 'unified theory'?"
+
+)
+ 
+messages.append(prompt)
+ 
+res = chat(messages)
+ 
+print(res.content)
+ 
+messages.append(res)
+ 
+prompt = HumanMessage(
+  content="What is so special about Llama 2?"
+
+)
+ 
+messages.append(prompt)
+ 
+res = chat(messages)
+print(res.content)
+ 
+messages.append(res)
+ 
+prompt = HumanMessage(
+  content="Can you tell me about the LLMChain in LangChain?"
+
+)
+ 
+messages.append(prompt)
+ 
+res = chat(messages)
+print(res.content)
+llmchain_information = [
+  "A LLMChain is the most common type of chain. It consists of a PromptTemplate, a model (either an LLM or a ChatModel), and an optional output parser. This chain takes multiple input variables, uses the PromptTemplate to format them into a prompt. It then passes that to the model. Finally, it uses the OutputParser (if provided) to parse the output of the LLM into a final format.",
+  "Chains is an incredibly generic concept which returns to a sequence of modular components (or other chains) combined in a particular way to accomplish a common use case.",
+  "LangChain is a framework for developing applications powered by language models. We believe that the most powerful and differentiated applications will not only call out to a language model via an api, but will also: (1) Be data-aware: connect a language model to other sources of data, (2) Be agentic: Allow a language model to interact with its environment. As such, the LangChain framework is designed with the objective in mind to enable those types of applications."
+
+]
+ 
+source_knowledge = "\n".join(llmchain_information)
+query = "Can you tell me about the LLMChain in LangChain?"
+ 
+augmented_prompt = f"""Using the contexts below, answer the query.
+ 
+Contexts:
+
+{source_knowledge}
+ 
+Query: {query}"""
+
+prompt = HumanMessage(
+  content=augmented_prompt
+
+)
+ 
+messages.append(prompt)
+ 
+res = chat(messages)
+print(res.content)
+ 
+from datasets import load_dataset
+ 
+dataset = load_dataset("jamescalam/llama-2-arxiv-papers-chunked")
+ 
+print(dataset)
+dataset[0]
+ 
+from pinecone import Pinecone
+ 
+api_key = os.getenv("PINECONE_API_KEY")
+ 
+pc = Pinecone(api_key=api_key)
+from pinecone import ServerlessSpec
+ 
+spec = ServerlessSpec(
+  cloud="aws", region="us-west-2"
+
+)
+import time
+ 
+index_name = 'llama-2-rag'
+
+existing_indexes = [
+  index_info["name"] for index_info in pc.list_indexes()
+
+]
+ 
+if index_name not in existing_indexes:
+  try:
+  pc.create_index(
+  index_name,
+  dimension=1536,   metric='dotproduct',
+  spec=spec
+  )
+  while not pc.describe_index(index_name).status['ready']:
+  time.sleep(1)
+  except Exception as e:
+  print(f"Failed to create index: {e}")
+ 
+index = pc.Index(index_name)
+
+time.sleep(1)
+ 
+index.describe_index_stats()
+from langchain.embeddings.openai import OpenAIEmbeddings
+ 
+embed_model = OpenAIEmbeddings(model="text-embedding-ada-002")
+texts = [
+  'this is the first chunk of text',
+  'then another second chunk of text is here'
+
+]
+ 
+res = embed_model.embed_documents(texts)
+
+len(res), len(res[0])
+ 
+from tqdm.auto import tqdm  
+data = dataset.to_pandas()  
+batch_size = 100
+ 
+for i in tqdm(range(0, len(data), batch_size)):
+  i_end = min(len(data), i+batch_size)
+  batch = data.iloc[i:i_end]
+  ids = [f"{x['doi']}-{x['chunk-id']}" for i, x in batch.iterrows()]
+  texts = [x['chunk'] for _, x in batch.iterrows()]
+  embeds = embed_model.embed_documents(texts)
+  metadata = [
+  {'text': x['chunk'],
+  'source': x['source'],
+  'title': x['title']} for i, x in batch.iterrows()
+  ]
+  index.upsert(vectors=zip(ids, embeds, metadata))
+index.describe_index_stats()
+from langchain.vectorstores import Pinecone
+ 
+text_field = "text"  
+vectorstore = Pinecone(
+  index, embed_model.embed_query, text_field
+
+)
+query = "What is so special about Llama 2?"
+ 
+vectorstore.similarity_search(query, k=3)
+def augment_prompt(query: str):
+  results = vectorstore.similarity_search(query, k=3)
+  source_knowledge = "\n".join([x.page_content for x in results])
+  augmented_prompt = f"""Using the contexts below, answer the query.
+  Contexts:
+  {source_knowledge}
+  Query: {query}"""
+  return augmented_prompt
+print(augment_prompt(query))
+
+prompt = HumanMessage(
+  content=augment_prompt(query)
+
+)
+ 
+messages.append(prompt)
+ 
+res = chat(messages)
+ 
+print(res.content)
+prompt = HumanMessage(
+  content="what safety measures were used in the development of llama 2?"
+
+)
+ 
+res = chat(messages + [prompt])
+
+print(res.content)
+prompt = HumanMessage(
+  content=augment_prompt(
+  "what safety measures were used in the development of llama 2?"
+  )
+
+)
+ 
+res = chat(messages + [prompt])
+
+print(res.content)
+pc.delete_index(index_name)
+!pip install -qU openai==0.27.7
+ 
+prompt = """Answer the question based on the context below. If the
+
+question cannot be answered using the information provided answer
+
+with "I don't know".
+ 
+Context: Large Language Models (LLMs) are the latest models used in NLP.
+
+Their superior performance over smaller models has made them incredibly
+
+useful for developers building NLP enabled applications. These models
+
+can be accessed via Hugging Face's `transformers` library, via OpenAI
+
+using the `openai` library, and via Cohere using the `cohere` library.
+ 
+Question: Which libraries and model providers offer LLMs?
+ 
+Answer: """
+ 
+import os
+
+import openai
+ 
+openai.api_key = os.getenv("OPENAI_API_KEY") or "OPENAI_API_KEY"
+ 
+openai.Engine.list()  
+res = openai.Completion.create(
+  engine='gpt-3.5-turbo-instruct',
+  prompt=prompt,
+  max_tokens=256
+
+)
+ 
+print(res['choices'][0]['text'].strip())
+prompt = """Answer the question based on the context below. If the
+
+question cannot be answered using the information provided answer
+
+with "I don't know".
+ 
+Context: Libraries are places full of books.
+ 
+Question: Which libraries and model providers offer LLMs?
+ 
+Answer: """
+ 
+res = openai.Completion.create(
+  engine='text-davinci-003',
+  prompt=prompt,
+  max_tokens=256
+
+)
+ 
+print(res['choices'][0]['text'].strip())
+ 
+prompt = """The below is a conversation with a funny chatbot. The
+
+chatbot's responses are amusing and entertaining.
+ 
+Chatbot: Hi there! I'm a chatbot.
+
+User: Hi, what are you doing today?
+
+Chatbot: """
+ 
+res = openai.Completion.create(
+  engine='text-davinci-003',
+  prompt=prompt,
+  max_tokens=256,
+  temperature=0.0  
+)
+ 
+print(res['choices'][0]['text'].strip())
+prompt = """The below is a conversation with a funny chatbot. The
+
+chatbot's responses are amusing and entertaining.
+ 
+Chatbot: Hi there! I'm a chatbot.
+
+User: Hi, what are you doing today?
+
+Chatbot: """
+ 
+res = openai.Completion.create(
+  engine='text-davinci-003',
+  prompt=prompt,
+  max_tokens=512,
+  temperature=1.0
+
+)
+ 
+print(res['choices'][0]['text'].strip())
+ 
+prompt = """The following is a conversation with an AI assistant.
+
+The assistant is typically sarcastic and witty, producing creative  
+and funny responses to the users questions.  
+User: What is the meaning of life?
+
+AI: """
+ 
+res = openai.Completion.create(
+  engine='text-davinci-003',
+  prompt=prompt,
+  max_tokens=256,
+  temperature=1.0
+
+)
+ 
+print(res['choices'][0]['text'].strip())
+prompt = """The following are exerpts from conversations with an AI assistant.
+
+The assistant is typically sarcastic and witty, producing creative  
+and funny responses to the users questions. Here are some examples:  
+User: How are you?
+
+AI: I can't complain but sometimes I still do.
+ 
+User: What time is it?
+
+AI: It's time to get a watch.
+ 
+User: What is the meaning of life?
+
+AI: """
+ 
+res = openai.Completion.create(
+  engine='text-davinci-003',
+  prompt=prompt,
+  max_tokens=256,
+  temperature=1.0
+
+)
+ 
+print(res['choices'][0]['text'].strip())
+ 
+contexts = [
+  (
+  "Large Language Models (LLMs) are the latest models used in NLP. " +
+  "Their superior performance over smaller models has made them incredibly " +
+  "useful for developers building NLP enabled applications. These models " +
+  "can be accessed via Hugging Face's `transformers` library, via OpenAI " +
+  "using the `openai` library, and via Cohere using the `cohere` library."
+  ),
+  (
+  "To use OpenAI's GPT-3 model for completion (generation) tasks, you " +
+  "first need to get an API key from " +
+  "'https://beta.openai.com/account/api-keys'."
+  ),
+  (
+  "OpenAI's API is accessible via Python using the `openai` library. " +
+  "After installing the library with pip you can use it as follows: \n" +
+  "```import openai\nopenai.api_key = 'YOUR_API_KEY'\nprompt = \n" +
+  "'<YOUR PROMPT>'\nres = openai.Completion.create(engine='text-davinci" +
+  "-003', prompt=prompt, max_tokens=100)\nprint(res)"
+  ),
+  (
+  "The OpenAI endpoint is available for completion tasks via the " +
+  "LangChain library. To use it, first install the library with " +
+  "`pip install langchain openai`. Then, import the library and " +
+  "initialize the model as follows: \n" +
+  "```from langchain.llms import OpenAI\nopenai = OpenAI(" +
+  "model_name='text-davinci-003', openai_api_key='YOUR_API_KEY')\n" +
+  "prompt = 'YOUR_PROMPT'\nprint(openai(prompt))```"
+  )
+
+]
+context_str = '\n\n
+ 
+print(f"""Answer the question based on the contexts below. If the
+
+question cannot be answered using the information provided answer
+
+with "I don't know".
+ 
+Contexts:
+
+{context_str}
+ 
+Question: Give me two examples of how to use OpenAI's GPT-3 model
+
+using Python from start to finish
+ 
+Answer: """)
+prompt = f"""Answer the question based on the contexts below. If the
+
+question cannot be answered using the information provided answer
+
+with "I don't know".
+ 
+Contexts:
+
+{context_str}
+ 
+Question: Give me two examples of how to use OpenAI's GPT-3 model
+
+using Python from start to finish
+ 
+Answer: """
+ 
+res = openai.Completion.create(
+  engine='text-davinci-003',
+  prompt=prompt,
+  max_tokens=256,
+  temperature=0.0
+
+)
+ 
+print(res['choices'][0]['text'].strip())
+prompt = f"""Answer the question based on the contexts below. If the
+
+question cannot be answered using the information provided answer
+
+with "I don't know".
+ 
+Question: Give me two examples of how to use OpenAI's GPT-3 model
+
+using Python from start to finish
+ 
+Answer: """
+ 
+res = openai.Completion.create(
+  engine='text-davinci-003',
+  prompt=prompt,
+  max_tokens=256,
+  temperature=0.0
+
+)
+ 
+print(res['choices'][0]['text'].strip())
+ 
+!pip install -qU tiktoken==0.4.0
+import tiktoken
+ 
+prompt = f"""Answer the question based on the contexts below. If the
+
+question cannot be answered using the information provided answer
+
+with "I don't know".
+ 
+Contexts:
+
+{'
+ 
+Question: Give me two examples of how to use OpenAI's GPT-3 model
+
+using Python from start to finish
+ 
+Answer: """
+ 
+encoder_name = 'p50k_base'
+
+tokenizer = tiktoken.get_encoding(encoder_name)
+ 
+len(tokenizer.encode(prompt))
+ 
+res = openai.Completion.create(
+  engine='text-davinci-003',
+  prompt=prompt,
+  temperature=0.0,
+  max_tokens=3685
+
+)
+ 
+print(res['choices'][0]['text'].strip())
+ 
+try:
+  res = openai.Completion.create(
+  engine='text-davinci-003',
+  prompt=prompt,
+  temperature=0.0,
+  max_tokens=3686
+  )
+
+except openai.InvalidRequestError as e:
+  print(e)
+import pandas as pd
+
+import seaborn as sns
+
+import matplotlib.pyplot as plt
+
+import numpy as np
+
+import re
+
+import warnings
+
+import json
+ 
+warnings.filterwarnings('ignore')
+import sys
+
+sys.path.append("../scripts/")
+
+from data_cleaner import DataCleaner
+
+from util import Util
+util = Util()
+
+cleaner = DataCleaner()
+repo="https://github.com/Nathnael12/prompt-engineering.git"
+
+news_df=util.read_from_dvc("data/news.csv",repo,"news-v0",low_memory=False)
+ 
+print(news_df.shape)
+
+news_df.head()
+news_df.columns
+news_df.describe()
+ 
+temp = news_df['Analyst_Average_Score']
+
+news_df.drop('Analyst_Average_Score',axis=1,inplace=True)
+
+news_df['Analyst_Average_Score']=temp
+
+news_df.head()
+news_df.plot(kind='bar')
+cleaned_df=cleaner.clean_links(news_df,['Body'])
+
+cleaned_df=cleaner.clean_symbols(cleaned_df,['Body','Description','Title'])
+
+cleaned_df=cleaner.convert_to_datetime(cleaned_df,['timestamp'])
+
+cleaned_df.head(5)
+
+job_df=pd.read_json("../data/job_description_train.json")
+
+job_df_train=job_df.copy()
+job_df_train.head()
+job_df_train.isna().sum()
+import pandas as pd
+
+import seaborn as sns
+
+import matplotlib.pyplot as plt
+
+import numpy as np
+
+import re
+
+import warnings
+
+warnings.simplefilter('ignore')
+import sys
+
+sys.path.append("../scripts/")
+
+from data_cleaner import DataCleaner
+
+from util import Util
+
+from pridict import Predict
+
+from preprocessor import Processor
+util = Util()
+
+cleaner = DataCleaner()
+
+predictor = Predict()
+
+processor = Processor()
+repo="https://github.com/Nathnael12/prompt-engineering.git"
+
+test=util.read_from_dvc("data/test_news.csv",repo,"test-news-v3",low_memory=False)
+
+train=util.read_from_dvc("data/trainer_news.csv",repo,"train-news-v3",low_memory=False)
+ 
+unique_test=test.sample()
+
+unique_train=train.sample()
+ 
+predictor.predict(unique_train,unique_test) 
+predictor.predict(unique_train,unique_test,model="a0b276d4-adf8-453e-983f-31b8761e8521-ft") 
+prompt=predictor.predict(unique_train,unique_test, model="c6af2dfd-16ae-4503-9693-6e50dae3861a-ft" ) 
+prompt=predictor.predict(unique_train,unique_test, model="acfdd84f-2b81-4ee2-92d5-22ca5ee8f4f0-ft" ) 
+prompt=predictor.predict(unique_train,unique_test, model="e74ec85a-8e14-4913-83d5-02fe80ac7c4f-ft" )  
+print(f"Correct Value: {unique_test.iloc[0,-1]}")
+
+print(prompt)
+job_train_df=pd.read_json("../data/job_description_train.json")
+
+job_test_df=pd.read_json("../data/job_description_test.json")
+ 
+processed_job_train=job_train_df.copy()
+
+processed_job_test=job_test_df.copy()
+ 
+processed_job_test=processor.prepare_job_description_text(job_test_df)
+
+processed_job_train=processor.prepare_job_description_text(job_train_df)
+ 
+trainer=processed_job_train.sample(2)
+
+test=processed_job_test.sample(1)
+ 
+prompt_job=predictor.extract_entities(trainer,test)
+
+print()
+
+prompt_job=predictor.extract_entities(trainer,test,'a724ac98-2abc-47b7-96b3-a77c3a5eb0f8-ft')
+import pandas as pd
+
+import seaborn as sns
+
+import matplotlib.pyplot as plt
+
+import numpy as np
+
+import re
+
+import warnings
+ 
+from data_describe.text.text_preprocessing import *
+
+from sklearn.datasets import fetch_20newsgroups
+ 
+warnings.simplefilter('ignore')
+import sys
+
+sys.path.append("../scripts/")
+
+from data_cleaner import DataCleaner
+
+from util import Util
+
+from preprocessor import Processor
+util = Util()
+
+cleaner = DataCleaner()
+
+processor = Processor()
+repo="https://github.com/Nathnael12/prompt-engineering.git"
+
+news_df=util.read_from_dvc("data/news.csv",repo,"news-v0",low_memory=False)
+ 
+news_df=news_df.sample(frac=1)
+ 
+train_news=news_df.head(8)
+
+test_news=news_df.tail(2)
+full_processed_df=processor.prepare_text(train_news.copy())
+
+description_processed=processor.prepare_text(train_news.copy(),columns=["Description"])[["Description","Analyst_Average_Score"]]
+
+title_processed=processor.prepare_text(train_news.copy(),columns=["Title"])[["Title","Analyst_Average_Score"]]
+
+body_processed=processor.prepare_text(train_news.copy(),columns=["Body"])[["Body","Analyst_Average_Score"]]
+
+unprocessed=train_news
+ 
+processed_test=processor.prepare_text(test_news)
+full_processed_df['Description']=full_processed_df['Title'] + ", " + full_processed_df['Description'] + ", " + full_processed_df["Body"]
+
+full_processed_df.drop(['Domain','Title','Body','Link','timestamp','Analyst_Rank','Reference_Final_Score'],axis=1,inplace=True)
+ 
+title_processed.rename(columns={'Title':'Description'},inplace=True)
+ 
+body_processed.rename(columns={'Body':'Description'},inplace=True)
+ 
+unprocessed['Description']=unprocessed['Title'] + ", " + unprocessed['Description'] + ", " + unprocessed["Body"]
+
+unprocessed.drop(['Domain','Title','Body','Link','timestamp','Analyst_Rank','Reference_Final_Score'],axis=1,inplace=True)
+ 
+processed_test['Description']=processed_test['Title'] + ", " + processed_test['Description'] + ", " + processed_test["Body"]
+
+processed_test.drop(['Domain','Title','Body','Link','timestamp','Analyst_Rank','Reference_Final_Score'],axis=1,inplace=True)
+ 
+frames = [full_processed_df, description_processed, title_processed, body_processed, unprocessed]
+ 
+full_promp_trainer = pd.concat(frames)
+
+full_promp_trainer=full_promp_trainer.reset_index().drop(['index'],axis=1)
+
+full_promp_trainer.rename(columns={"Analyst_Average_Score":"Analyst Average Score"},inplace=True)
+ 
+full_promp_trainer.head()
+ 
+processor.prepare_tuner(full_promp_trainer)
+ 
+job_df=pd.read_json("../data/job_description_train.json")
+
+test_df=pd.read_json("../data/job_description_test.json")
+job_df_train=job_df.copy()
+
+job_df_test = test_df.copy()
+ 
+processed_description=processor.prepare_job_description_text(job_df_train)
+
+processed_test_description=processor.prepare_job_description_text(job_df_test)
+ 
+display(processed_description.head())
+
+display(processed_test_description.head())
+processed_test_description.shape
+processed_description.shape
+job_frames = [processed_description, processed_test_description.head(10)]
+ 
+job_tuner_df = pd.concat(job_frames)
+job_tuner_df=job_tuner_df.reset_index().drop(["index"],axis=1)
+processor.prepare_job_description_tuner(job_tuner_df)
+import os
+
+from langchain.chat_models import ChatOpenAI
+ 
+os.environ["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY") or "YOUR_API_KEY"
+ 
+chat = ChatOpenAI(
+  openai_api_key=os.environ["OPENAI_API_KEY"],
+  model='gpt-3.5-turbo'
+
+)
+ 
+from langchain.schema import (
+  SystemMessage,
+  HumanMessage,
+  AIMessage
+
+)
+ 
+messages = [
+  SystemMessage(content="You are a helpful assistant."),
+  HumanMessage(content="Hi AI, how are you today?"),
+  AIMessage(content="I'm great thank you. How can I help you?"),
+  HumanMessage(content="I'd like to understand string theory.")
+
+]
+ 
+res = chat(messages)
+
+res
+print(res.content)
+
+messages.append(res)
+ 
+prompt = HumanMessage(
+  content="Why do physicists believe it can produce a 'unified theory'?"
+
+)
+ 
+messages.append(prompt)
+ 
+res = chat(messages)
+ 
+print(res.content)
+ 
+messages.append(res)
+ 
+prompt = HumanMessage(
+  content="What is so special about Llama 2?"
+
+)
+ 
+messages.append(prompt)
+ 
+res = chat(messages)
+print(res.content)
+ 
+messages.append(res)
+ 
+prompt = HumanMessage(
+  content="Can you tell me about the LLMChain in LangChain?"
+
+)
+ 
+messages.append(prompt)
+ 
+res = chat(messages)
+print(res.content)
+llmchain_information = [
+  "A LLMChain is the most common type of chain. It consists of a PromptTemplate, a model (either an LLM or a ChatModel), and an optional output parser. This chain takes multiple input variables, uses the PromptTemplate to format them into a prompt. It then passes that to the model. Finally, it uses the OutputParser (if provided) to parse the output of the LLM into a final format.",
+  "Chains is an incredibly generic concept which returns to a sequence of modular components (or other chains) combined in a particular way to accomplish a common use case.",
+  "LangChain is a framework for developing applications powered by language models. We believe that the most powerful and differentiated applications will not only call out to a language model via an api, but will also: (1) Be data-aware: connect a language model to other sources of data, (2) Be agentic: Allow a language model to interact with its environment. As such, the LangChain framework is designed with the objective in mind to enable those types of applications."
+
+]
+ 
+source_knowledge = "\n".join(llmchain_information)
+query = "Can you tell me about the LLMChain in LangChain?"
+ 
+augmented_prompt = f"""Using the contexts below, answer the query.
+ 
+Contexts:
+
+{source_knowledge}
+ 
+Query: {query}"""
+
+prompt = HumanMessage(
+  content=augmented_prompt
+
+)
+ 
+messages.append(prompt)
+ 
+res = chat(messages)
+print(res.content)
+ 
+from langchain.document_loaders import DirectoryLoader
+
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+
+from langchain_community.document_loaders import PyPDFLoader
+ 
+directory_loader = DirectoryLoader("docs", {
+  '10_Academy_challenge_doc.pdf': lambda path: PyPDFLoader(path),
+  })
+
+raw_docs = directory_loader.load()
+ 
+text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+ 
+docs = text_splitter.split_documents(raw_docs)
+
+print('split docs', docs)
+ 
+print('creating vector store...')
+dataset[0]
+ 
+from pinecone import Pinecone
+ 
+api_key = os.getenv("PINECONE_API_KEY")
+ 
+pc = Pinecone(api_key=api_key)
+from pinecone import PodSpec
+
+import time
+ 
+index_name = '10-academy-challenge'
+
+existing_indexes = [
+  index_info["name"] for index_info in pc.list_indexes()
+
+]
+ 
+if index_name not in existing_indexes:
+  try:
+  pc.create_index(
+  index_name,
+  dimension=1536,   metric='cosine',
+  spec=PodSpec(
+  environment="gcp-starter"
+  )
+  )
+  while not pc.describe_index(index_name).status['ready']:
+  time.sleep(1)
+  except Exception as e:
+  print(f"Failed to create index: {e}")
+ 
+index = pc.Index(index_name)
+
+time.sleep(1)
+ 
+index.describe_index_stats()
+index.describe_index_stats()
+from langchain.embeddings.openai import OpenAIEmbeddings
+ 
+embed_model = OpenAIEmbeddings(model="text-embedding-ada-002")
+texts = [
+  'this is the first chunk of text',
+  'then another second chunk of text is here'
+
+]
+ 
+res = embed_model.embed_documents(texts)
+
+len(res), len(res[0])
+ 
+from tqdm.auto import tqdm  
+data = dataset.to_pandas()  
+batch_size = 100
+ 
+for i in tqdm(range(0, len(data), batch_size)):
+  i_end = min(len(data), i+batch_size)
+  batch = data.iloc[i:i_end]
+  ids = [f"{x['doi']}-{x['chunk-id']}" for i, x in batch.iterrows()]
+  texts = [x['chunk'] for _, x in batch.iterrows()]
+  embeds = embed_model.embed_documents(texts)
+  metadata = [
+  {'text': x['chunk'],
+  'source': x['source'],
+  'title': x['title']} for i, x in batch.iterrows()
+  ]
+  index.upsert(vectors=zip(ids, embeds, metadata))
+index.describe_index_stats()
+from langchain.vectorstores import Pinecone
+ 
+text_field = "text"  
+vectorstore = Pinecone(
+  index, embed_model.embed_query, text_field
+
+)
+query = "What is this challenge week about?"
+ 
+vectorstore.similarity_search(query, k=3)
+def augment_prompt(query: str):
+  results = vectorstore.similarity_search(query, k=3)
+  source_knowledge = "\n".join([x.page_content for x in results])
+  augmented_prompt = f"""Using the contexts below, answer the query.
+  Contexts:
+  {source_knowledge}
+  Query: {query}"""
+  return augmented_prompt
+print(augment_prompt(query))
+
+prompt = HumanMessage(
+  content=augment_prompt(query)
+
+)
+ 
+messages.append(prompt)
+ 
+res = chat(messages)
+ 
+print(res.content)
+prompt = HumanMessage(
+  content="what are this week challenge?"
+
+)
+ 
+res = chat(messages + [prompt])
+
+print(res.content)
+prompt = HumanMessage(
+  content=augment_prompt(
+  "what is the concept of task 3?"
+  )
+
+)
+ 
+res = chat(messages + [prompt])
+
+print(res.content)
+Automatic prompt generator
+import os
+import json
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from utility.env_manager import get_env_manager
+from openai import OpenAI
+from math import exp
+import numpy as np
+from utility.env_manager import get_env_manager
+from typing import List, Dict
+from dotenv import load_dotenv
+from prompts.context import KnowledgeAssistant
+
+load_dotenv()
+env_manager = get_env_manager()
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+ 
+def get_completion(
+  messages: List[Dict[str, str]],
+  model: str = env_manager['vectordb_keys']['VECTORDB_MODEL'],
+  max_tokens=500,
+  temperature=0,
+  stop=None,
+  seed=123,
+  tools=None,
+  logprobs=None,
+  top_logprobs=None,
+) -> str:
+  """Return the completion of the prompt.
+  @parameter messages: list of dictionaries with keys 'role' and 'content'.
+  @parameter model: the model to use for completion. Defaults to 'davinci'.
+  @parameter max_tokens: max tokens to use for each prompt completion.
+  @parameter temperature: the higher the temperature, the crazier the text
+  @parameter stop: token at which text generation is stopped
+  @parameter seed: random seed for text generation
+  @parameter tools: list of tools to use for post-processing the output.
+  @parameter logprobs: whether to return log probabilities of the output tokens or not.
+  @returns completion: the completion of the prompt.
+  """
+  params = {
+  "model": model,
+  "messages": messages,
+  "max_tokens": max_tokens,
+  "temperature": temperature,
+  "stop": stop,
+  "seed": seed,
+  "logprobs": logprobs,
+  "top_logprobs": top_logprobs,
+  }
+  if tools:
+  params["tools"] = tools
+  completion = client.chat.completions.create(**params)
+  return completion
+ 
+def file_reader(path: str) -> str:
+  script_dir = os.path.dirname(os.path.realpath(__file__))
+  base_dir = os.path.dirname(script_dir)
+  file_path = os.path.join(base_dir, path)
+  with open(file_path, 'r', encoding='utf-8') as f:
+  system_message = f.read()
+  return system_message
+ 
+def generate_test_data(prompt: str, context: str, num_test_output: str) -> str:
+  """Return the classification of the hallucination.
+  @parameter prompt: the prompt to be completed.
+  @parameter user_message: the user message to be classified.
+  @parameter context: the context of the user message.
+  @returns classification: the classification of the hallucination.
+  """
+  assistant = KnowledgeAssistant()
+  query = "I want to know about this week tasks."
+  augmented_prompt = assistant.augment_prompt(query)
+  API_RESPONSE = get_completion(
+  [
+  {
+  "role": "user",   "content": prompt.replace("{context}", augmented_prompt).replace("{num_test_output}", num_test_output)
+  }
+  ],
+  model=env_manager['vectordb_keys']['VECTORDB_MODEL'],
+  logprobs=True,
+  top_logprobs=1,
+  )
+  system_msg = API_RESPONSE.choices[0].message.content
+  return system_msg
+ 
+def main(num_test_output: str):
+  context_message = file_reader("prompts/context.txt")
+  prompt_message = file_reader("prompts/data-generation-prompt.txt")
+  context = str(context_message)
+  prompt = str(prompt_message)
+  test_data = generate_test_data(prompt, context, num_test_output)
+  def save_json(test_data) -> None:
+  script_dir = os.path.dirname(os.path.realpath(__file__))
+  base_dir = os.path.dirname(script_dir)
+  path = "test-dataset/test-data.json"
+  file_path = os.path.join(base_dir, path)
+  json_object = json.loads(test_data)
+  with open(file_path, 'w') as json_file:
+  json.dump(json_object, json_file, indent=4)
+  print(f"JSON data has been saved to {file_path}")
+  save_json(test_data)
+  print("===========")
+  print("Test Data")
+  print("===========")
+  print(test_data)
+ 
+if __name__ == "__main__":
+  main("8")
+from dotenv import load_dotenv
+import os
+from langchain.text_splitter import CharacterTextSplitter
+from langchain_community.document_loaders import TextLoader
+from langchain_community.vectorstores import Pinecone
+from langchain_openai import OpenAIEmbeddings
+from langchain_community.document_loaders import TextLoader
+from pinecone import PodSpec
+from pinecone import Pinecone as ppincone
+from langchain_openai import OpenAIEmbeddings
+from langchain_openai import ChatOpenAI
+from langchain.schema import SystemMessage, HumanMessage, AIMessage
+from langchain_community.vectorstores import Pinecone
+import json
+
+class KnowledgeAssistant:
+  def __init__(self):
+  load_dotenv()
+  os.environ["PINECONE_API_KEY"] = os.getenv("PINECONE_API_KEY")
+  os.environ["PINECONE_ENV"] = os.getenv("PINECONE_ENV")
+  os.environ["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY")
+  self.pc = ppincone(
+  api_key=os.getenv("PINECONE_API_KEY"),
+  environment=os.getenv("PINECONE_ENV")
+  )
+  self.embed_model = OpenAIEmbeddings(model="text-embedding-ada-002")
+  self.index = self.pc.Index('canopy--document-uploader')
+  self.text_field = "text"
+  self.vectorstore = Pinecone(self.index, self.embed_model, self.text_field)
+  self.chat = ChatOpenAI(openai_api_key=os.environ["OPENAI_API_KEY"], model='gpt-3.5-turbo')
+  def augment_prompt(self, query):
+  query1 = json.dumps(str(query))
+  results = self.vectorstore.similarity_search(query1, k=3)
+  source_knowledge = "\n".join([x.page_content for x in results])
+  augmented_prompt = f"""Using the contexts below, answer the query.
+  Contexts:
+  {source_knowledge}
+  Query: {query1}"""
+  return augmented_prompt
+  def run_chat(self, query):
+  messages = [
+  SystemMessage(content="You are a helpful assistant."),
+  HumanMessage(content=f"Hi AI, {query}"),
+  AIMessage(content="I'm great thank you. How can I help you?"),
+  ]
+  augmented_prompt = self.augment_prompt(query)
+  prompt = HumanMessage(content=augmented_prompt)
+  messages.append(prompt)
+  res = self.chat(messages)
+  return res.content
+ 
+if __name__ == "__main__":
+  assistant = KnowledgeAssistant()
+  query = "Who are the tutors in this week's challenge?"
+  augmented_prompt = assistant.augment_prompt(query)
+  print(augmented_prompt)
+import os
+import sys
+from dotenv import load_dotenv
+load_dotenv(".env")
+ 
+class OPENAI_KEYS:
+  def __init__(self):
+  self.OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '') or None
+ 
+class VECTORDB_KEYS:
+  def __init__(self):
+  self.VECTORDB_API_KEY = os.environ.get('VECTORDB_API_KEY', '') or None
+  self.VECTORDB_URL = os.environ.get('VECTORDB_URL', '') or None
+  self.VECTORDB_MODEL = os.environ.get('VECTORDB_MODEL', '') or None
+ 
+def _get_openai_keys() -> OPENAI_KEYS:
+  return OPENAI_KEYS()
+ 
+def _get_vectordb_keys() -> VECTORDB_KEYS:
+  return VECTORDB_KEYS()
+ 
+def get_env_manager() -> dict:
+  openai_keys = _get_openai_keys().__dict__
+  vectordb_keys = _get_vectordb_keys().__dict__
+  return {
+  'openai_keys': openai_keys,
+  'vectordb_keys': vectordb_keys,
+  }
+import os
+import json
+import sys
+from openai import OpenAI
+from math import exp
+import numpy as np
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from utility.env_manager import get_env_manager
+from evaluation._data_generation import get_completion
+from evaluation._data_generation import file_reader
+from prompts.context import KnowledgeAssistant
+
+env_manager = get_env_manager()
+client = OpenAI(api_key=env_manager['openai_keys']['OPENAI_API_KEY'])
+ 
+def evaluate(prompt: str, user_message: str, context: str, use_test_data: bool = True) -> str:
+  """Return the classification of the hallucination.
+  @parameter prompt: the prompt to be completed.
+  @parameter user_message: the user message to be classified.
+  @parameter context: the context of the user message.
+  @returns classification: the classification of the hallucination.
+  """
+  num_test_output = str(10)
+  API_RESPONSE = get_completion(
+  [
+  {
+  "role": "system",   "content": prompt.replace("{Context}", augmented_prompt).replace("{Question}", user_message)
+  }
+  ],
+  model=env_manager['vectordb_keys']['VECTORDB_MODEL'],
+  logprobs=True,
+  top_logprobs=1,
+  )
+  system_msg = str(API_RESPONSE.choices[0].message.content)
+  for i, logprob in enumerate(API_RESPONSE.choices[0].logprobs.content[0].top_logprobs, start=1):
+  output = f'\nhas_sufficient_context_for_answer: {system_msg}, \nlogprobs: {logprob.logprob}, \naccuracy: {np.round(np.exp(logprob.logprob)*100,2)}%\n'
+  print(output)
+  if system_msg == 'true' and np.round(np.exp(logprob.logprob)*100,2) >= 65.00:
+  classification = 'true'
+  elif system_msg == 'false' and np.round(np.exp(logprob.logprob)*100,2) >= 65.00:
+  classification = 'false'
+  else:
+  classification = 'false'
+  return classification
+
+if __name__ == "__main__":
+  assistant = KnowledgeAssistant()
+  query = "I want to know about this week tasks."
+  print(query)
+  augmented_prompt = assistant.augment_prompt(query)
+  context_message = augmented_prompt
+  prompt_message = file_reader("prompts/generic-evaluation-prompt.txt")
+  context = str(context_message)
+  prompt = str(prompt_message)
+  user_message = str(input("question: "))
+  print(evaluate(prompt, user_message, context))
+import os
+import json
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from utility.env_manager import get_env_manager
+from openai import OpenAI
+from math import exp
+import numpy as np
+from utility.env_manager import get_env_manager
+from typing import List, Dict
+from dotenv import load_dotenv
+from prompts.context import KnowledgeAssistant
+
+load_dotenv()
+env_manager = get_env_manager()
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+ 
+def get_completion(
+  messages: List[Dict[str, str]],
+  model: str = env_manager['vectordb_keys']['VECTORDB_MODEL'],
+  max_tokens=500,
+  temperature=0,
+  stop=None,
+  seed=123,
+  tools=None,
+  logprobs=None,
+  top_logprobs=None,
+) -> str:
+  """Return the completion of the prompt.
+  @parameter messages: list of dictionaries with keys 'role' and 'content'.
+  @parameter model: the model to use for completion. Defaults to 'davinci'.
+  @parameter max_tokens: max tokens to use for each prompt completion.
+  @parameter temperature: the higher the temperature, the crazier the text
+  @parameter stop: token at which text generation is stopped
+  @parameter seed: random seed for text generation
+  @parameter tools: list of tools to use for post-processing the output.
+  @parameter logprobs: whether to return log probabilities of the output tokens or not.
+  @returns completion: the completion of the prompt.
+  """
+  params = {
+  "model": model,
+  "messages": messages,
+  "max_tokens": max_tokens,
+  "temperature": temperature,
+  "stop": stop,
+  "seed": seed,
+  "logprobs": logprobs,
+  "top_logprobs": top_logprobs,
+  }
+  if tools:
+  params["tools"] = tools
+  completion = client.chat.completions.create(**params)
+  return completion
+ 
+def file_reader(path: str) -> str:
+  script_dir = os.path.dirname(os.path.realpath(__file__))
+  base_dir = os.path.dirname(script_dir)
+  file_path = os.path.join(base_dir, path)
+  with open(file_path, 'r', encoding='utf-8') as f:
+  system_message = f.read()
+  return system_message
+ 
+def generate_test_data(prompt: str, context: str, num_test_output: str, objective) -> str:
+  """Return the classification of the hallucination.
+  @parameter prompt: the prompt to be completed.
+  @parameter user_message: the user message to be classified.
+  @parameter context: the context of the user message.
+  @returns classification: the classification of the hallucination.
+  """
+  API_RESPONSE = get_completion(
+  [
+  {
+  "role": "user",   "content": prompt.replace("{context}", context).replace("{num_test_output}", num_test_output)
+  }
+  ],
+  model=env_manager['vectordb_keys']['VECTORDB_MODEL'],
+  logprobs=True,
+  top_logprobs=1,
+  )
+  system_msg = API_RESPONSE.choices[0].message.content
+  return system_msg
+ 
+def main(num_test_output: str, objective):
+  assistant = KnowledgeAssistant()
+  query = '"' + str(objective) + '"'
+  print(query)
+  augmented_prompt = assistant.augment_prompt(query)
+  context_message = augmented_prompt
+  prompt_message = file_reader("prompts/prompt-generation-prompt.txt")
+  context = str(context_message)
+  prompt = str(prompt_message)
+  test_data = generate_test_data(prompt, context, num_test_output, objective)
+  def save_json(test_data) -> None:
+  script_dir = os.path.dirname(os.path.realpath(__file__))
+  base_dir = os.path.dirname(script_dir)
+  path = "prompt-dataset/prompt-data.json"
+  file_path = os.path.join(base_dir, path)
+  json_object = json.loads(test_data)
+  with open(file_path, 'w') as json_file:
+  json.dump(json_object, json_file, indent=4)
+  print(f"JSON data has been saved to {file_path}")
+  save_json(test_data)
+  print("===========")
+  print("Test Data")
+  print("===========")
+  print(test_data)
+ 
+if __name__ == "__main__":
+  main("8","I want to know about this weeks challenge")
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
+
+import { preview } from "../assets";
+import { getRandomPrompt } from "../utils";
+import { FormFields, Loader } from "../components";
+
+const CreatePost = () => {
+  const navigate = useNavigate();
+  const [form, setForm] = useState({
+  objective: "",
+  output: "",
+  scenario: "",
+  });
+  const [generatingprompt, setGeneratingprompt] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(""); // Add this line
+  const [accuracy, setAccuracy] = useState(null); // Add this line
+  const handleChange = (e) =>
+  setForm({ ...form, [e.target.name]: e.target.value });
+  const handleSurpriseMe = () => {
+  const randomPrompt = getRandomPrompt(form.scenario);
+  setForm({ ...form, scenario: randomPrompt });
+  };
+  const generatePrompt = async () => {
+  if (form.scenario) {
+  try {
+  setGeneratingprompt(true);
+  const response = await fetch("http://192.168.137.236:8000/generate", {
+  method: "POST",
+  headers: {
+  "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+  num_test_output: "8",
+  objective: form.objective,
+  output: form.output,
+  }),
+  });
+  const data = await response.json();
+  setResult(data.prompt);
+  setAccuracy(data.score);
+  } catch (err) {
+  console.log(err);
+  } finally {
+  setGeneratingprompt(false);
+  }
+  } else {
+  alert("Please provide a proper prompt");
+  }
+  };
+  const handleSubmit = async (e) => {
+  e.preventDefault();
+  if (form.scenario && form.preview) {
+  setLoading(true);
+  try {
+  const response = await fetch(
+  "http://192.168.137.236:8000/generate",
+  {
+  method: "POST",
+  headers: {
+  "Content-Type": "application/json",
+  },
+  body: JSON.stringify({ ...form}),
+  }
+  );
+  if (response.ok) {
+  const responseData = await response.json();
+  // Assuming the response has a property named "result"
+  const result = responseData.result;
+  // Do something with the result
+  console.log(result);
+  // You can also update your UI or state with the received result
+  } else {
+  console.log("Failed to get a successful response from the server");
+  }
+  } catch (err) {
+  console.error(err);
+  } finally {
+  setLoading(false);
+  }
+  } else {
+  alert("Please generate a prompt with proper details");
+  }
+  };
+  return (
+  <section className="bg-hero min-h-[calc(100vh)]">
+  <div className="max-w-7xl bg-hero sm:p-8 px-4 mt-16 m-auto">
+  <div>
+  <h1 className="font-extrabold text-text text-[42px]">Insert your preferences</h1>
+  </div>
+  <form className="mt-2 form" onSubmit={handleSubmit}>
+  <div className="flex my-auto flex-col gap-5">
+  <FormFields
+  labelName="The objective"
+  type="text"
+  name="objective"
+  placeholder="Enter Your Objective"
+  value={form.objective}
+  handleChange={handleChange}
+  />
+  <FormFields
+  labelName="The output"
+  type="text"
+  name="output"
+  placeholder="Enter the desired output"
+  value={form.output}
+  handleChange={handleChange}
+  />
+  <FormFields
+  labelName="Scenario"
+  type="text"
+  name="scenario"
+  placeholder="Enter a prompt..."
+  value={form.scenario}
+  handleChange={handleChange}
+  isSurpriseMe
+  handleSurpriseMe={handleSurpriseMe}
+  />
+  <div className="mt-2 flex flex-col">
+  <button
+  type="button"
+  onClick={generatePrompt}
+  className="text-black bg-accent font-bold rounded-md text-sm w-full sm:w-auto px-5 py-2.5 text-center"
+  >
+  {generatingprompt ? "Generating..." : "Generate Prompt"}
+  </button>
+  <button
+  type="submit"
+  className="mt-3 text-white bg-brand text-black font-bold rounded-md text-sm sm:w-auto px-5 py-2.5 text-center w-full"
+  >
+  {loading ? "Sharing..." : "Use this directly on chatbot"}
+  </button>
+  </div>
+  </div>
+  <div className="relative form_photo md:m-auto border bg-darkgrey border-darkgrey text-whtie text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 w-64 p-3 h-64 flex flex-col items-center justify-center">
+  {form.preview ? (
+  <span className="text-white mb-2">
+  {result ? result : (form.results || "Generated prompt will be shown here")}
+  </span>
+  ) : (
+  <div className="text-white text-center">
+  <p className="mb-2">{result ? result : (form.results || "Generated prompt will be shown here")}</p>
+  {accuracy && <p className="text-white mt-2">Score: {accuracy}</p>}
+  </div>
+  )}
+  </div>
+  </form>
+  </div>
+  </section>
+  );
+};
+
+export default CreatePost;
+import os
+import json
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from utility.env_manager import get_env_manager
+from openai import OpenAI
+from math import exp
+import numpy as np
+from utility.env_manager import get_env_manager
+from typing import List, Dict
+from dotenv import load_dotenv
+from prompts.context import KnowledgeAssistant
+
+load_dotenv()
+env_manager = get_env_manager()
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+ 
+def get_completion(
+  messages: List[Dict[str, str]],
+  model: str = env_manager['vectordb_keys']['VECTORDB_MODEL'],
+  max_tokens=500,
+  temperature=0,
+  stop=None,
+  seed=123,
+  tools=None,
+  logprobs=None,
+  top_logprobs=None,
+) -> str:
+  """Return the completion of the prompt.
+  @parameter messages: list of dictionaries with keys 'role' and 'content'.
+  @parameter model: the model to use for completion. Defaults to 'davinci'.
+  @parameter max_tokens: max tokens to use for each prompt completion.
+  @parameter temperature: the higher the temperature, the crazier the text
+  @parameter stop: token at which text generation is stopped
+  @parameter seed: random seed for text generation
+  @parameter tools: list of tools to use for post-processing the output.
+  @parameter logprobs: whether to return log probabilities of the output tokens or not.
+  @returns completion: the completion of the prompt.
+  """
+  params = {
+  "model": model,
+  "messages": messages,
+  "max_tokens": max_tokens,
+  "temperature": temperature,
+  "stop": stop,
+  "seed": seed,
+  "logprobs": logprobs,
+  "top_logprobs": top_logprobs,
+  }
+  if tools:
+  params["tools"] = tools
+  completion = client.chat.completions.create(**params)
+  return completion
+ 
+def file_reader(path: str) -> str:
+  script_dir = os.path.dirname(os.path.realpath(__file__))
+  base_dir = os.path.dirname(script_dir)
+  file_path = os.path.join(base_dir, path)
+  with open(file_path, 'r', encoding='utf-8') as f:
+  system_message = f.read()
+  return system_message
+ 
+def generate_test_data(prompt: str, context: str, num_test_output: str, objective) -> str:
+  """Return the classification of the hallucination.
+  @parameter prompt: the prompt to be completed.
+  @parameter user_message: the user message to be classified.
+  @parameter context: the context of the user message.
+  @returns classification: the classification of the hallucination.
+  """
+  API_RESPONSE = get_completion(
+  [
+  {
+  "role": "user",   "content": prompt.replace("{context}", context).replace("{num_test_output}", num_test_output)
+  }
+  ],
+  model=env_manager['vectordb_keys']['VECTORDB_MODEL'],
+  logprobs=True,
+  top_logprobs=1,
+  )
+  system_msg = API_RESPONSE.choices[0].message.content
+  return system_msg
+ 
+def main(num_test_output: str, objective):
+  assistant = KnowledgeAssistant()
+  query = '"' + str(objective) + '"'
+  print(query)
+  augmented_prompt = assistant.augment_prompt(query)
+  context_message = augmented_prompt
+  prompt_message = file_reader("prompts/data-generation-prompt.txt")
+  context = str(context_message)
+  prompt = str(prompt_message)
+  test_data = generate_test_data(prompt, context, num_test_output, objective)
+  def save_json(test_data) -> None:
+  script_dir = os.path.dirname(os.path.realpath(__file__))
+  base_dir = os.path.dirname(script_dir)
+  path = "test-dataset/test-data.json"
+  file_path = os.path.join(base_dir, path)
+  json_object = json.loads(test_data)
+  with open(file_path, 'w') as json_file:
+  json.dump(json_object, json_file, indent=4)
+  print(f"JSON data has been saved to {file_path}")
+  save_json(test_data)
+  print("===========")
+  print("Test Data")
+  print("===========")
+  print(test_data)
+ 
+if __name__ == "__main__":
+  main("4","I want to know when the interim submission deadline is")
+import os
+import json
+import sys
+from openai import OpenAI
+from math import exp
+import numpy as np
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from utility.env_manager import get_env_manager
+from evaluation._data_generation import get_completion
+from evaluation._data_generation import file_reader
+from prompts.context import KnowledgeAssistant
+
+env_manager = get_env_manager()
+client = OpenAI(api_key=env_manager['openai_keys']['OPENAI_API_KEY'])
+ 
+class Evaluator:
+  def __init__(self, env_manager, client):
+  self.env_manager = env_manager
+  self.client = client
+  self.assistant = KnowledgeAssistant()
+  def evaluate(self, prompt: str, user_message: str, context: str, use_test_data: bool = False) -> str:
+  API_RESPONSE = get_completion(
+  [
+  {
+  "role": "system",   "content": prompt.replace("{Context}", context).replace("{Question}", user_message)
+  }
+  ],
+  model=self.env_manager['vectordb_keys']['VECTORDB_MODEL'],
+  logprobs=True,
+  top_logprobs=1,
+  )
+  system_msg = str(API_RESPONSE.choices[0].message.content)
+  for i, logprob in enumerate(API_RESPONSE.choices[0].logprobs.content[0].top_logprobs, start=1):
+  output = f'\nhas_sufficient_context_for_answer: {system_msg}, \nlogprobs: {logprob.logprob}, \naccuracy: {np.round(np.exp(logprob.logprob)*100,2)}%\n'
+  print(output)
+  if system_msg == 'false' and np.round(np.exp(logprob.logprob)*100,2) >= 55.00:
+  classification = 'false'
+  elif system_msg == 'true' and np.round(np.exp(logprob.logprob)*100,2) >= 55.00:
+  classification = 'true'
+  else:
+  classification = 'false'
+  accuracy = np.round(np.exp(logprob.logprob)*100,2)
+  sufficent = system_msg
+  return classification, accuracy, sufficent
+  def run(self, query, user_message):
+  augmented_prompt = self.assistant.augment_prompt(query)
+  context_message = augmented_prompt
+  prompt_message = file_reader("prompts/generic-evaluation-prompt.txt")
+  context = str(context_message)
+  prompt = str(prompt_message)
+  return self.evaluate(prompt, user_message, context)
+ 
+if __name__ == "__main__":
+  env_manager = get_env_manager()
+  client = OpenAI(api_key=env_manager['openai_keys']['OPENAI_API_KEY'])
+  evaluator = Evaluator(env_manager, client)
+  query = "I want to know about this week tasks."
+  user_message = "What are my tasks for this week?"
+  print(evaluator.run(query, user_message))
+import os
+import json
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from utility.env_manager import get_env_manager
+from openai import OpenAI
+from math import exp
+import numpy as np
+from utility.env_manager import get_env_manager
+from typing import List, Dict
+from dotenv import load_dotenv
+from prompts.context import KnowledgeAssistant
+
+load_dotenv()
+env_manager = get_env_manager()
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+class PromptGenerator:
+  def __init__(self, num_test_output: str, objective: str, output: str):
+  self.num_test_output = num_test_output
+  self.objective = objective
+  self.output = output
+  self.env_manager = get_env_manager()
+  self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+  def get_completion(
+  self,
+  messages: List[Dict[str, str]],
+  model: str = env_manager['vectordb_keys']['VECTORDB_MODEL'],
+  max_tokens=500,
+  temperature=0,
+  stop=None,
+  seed=123,
+  tools=None,
+  logprobs=None,
+  top_logprobs=None,
+  ) -> str:
+  """Return the completion of the prompt.
+  @parameter messages: list of dictionaries with keys 'role' and 'content'.
+  @parameter model: the model to use for completion. Defaults to 'davinci'.
+  @parameter max_tokens: max tokens to use for each prompt completion.
+  @parameter temperature: the higher the temperature, the crazier the text
+  @parameter stop: token at which text generation is stopped
+  @parameter seed: random seed for text generation
+  @parameter tools: list of tools to use for post-processing the output.
+  @parameter logprobs: whether to return log probabilities of the output tokens or not.
+  @returns completion: the completion of the prompt.
+  """
+  params = {
+  "model": model,
+  "messages": messages,
+  "max_tokens": max_tokens,
+  "temperature": temperature,
+  "stop": stop,
+  "seed": seed,
+  "logprobs": logprobs,
+  "top_logprobs": top_logprobs,
+  }
+  if tools:
+  params["tools"] = tools
+  completion = client.chat.completions.create(**params)
+  return completion
+  def file_reader(self, path: str) -> str:
+  script_dir = os.path.dirname(os.path.realpath(__file__))
+  base_dir = os.path.dirname(script_dir)
+  file_path = os.path.join(base_dir, path)
+  with open(file_path, 'r', encoding='utf-8') as f:
+  system_message = f.read()
+  return system_message
+  def generate_test_data(self, prompt: str, context: str) -> str:
+  """Return the classification of the hallucination."""
+  API_RESPONSE = self.get_completion(
+  [
+  {
+  "role": "user",
+  "content": prompt.replace("{context}", context).replace("{num_test_output}", self.num_test_output).replace("{output}", self.output)
+  }
+  ],
+  model=self.env_manager['vectordb_keys']['VECTORDB_MODEL'],
+  logprobs=True,
+  top_logprobs=1,
+  )
+  system_msg = API_RESPONSE.choices[0].message.content
+  return system_msg
+  def save_json(self, test_data) -> None:
+  script_dir = os.path.dirname(os.path.realpath(__file__))
+  base_dir = os.path.dirname(script_dir)
+  path = "prompts-dataset/prompt-data.json"
+  file_path = os.path.join(base_dir, path)
+  json_object = json.loads(test_data)
+  with open(file_path, 'w') as json_file:
+  json.dump(json_object, json_file, indent=4)
+  print(f"JSON data has been saved to {file_path}")
+  def execute(self):
+  assistant = KnowledgeAssistant()
+  query = '"' + str(self.objective) + '"'
+  augmented_prompt = assistant.augment_prompt(query)
+  context_message = augmented_prompt
+  prompt_message = self.file_reader("prompts/prompt-generation-prompt.txt")
+  context = str(context_message)
+  prompt = str(prompt_message)
+  test_data = self.generate_test_data(prompt, context)
+  self.save_json(test_data)
+  print("===========")
+  print("Prompt Data")
+  print("===========")
+  print(test_data)
+  return test_data
+
+if __name__ == "__main__":
+  generator = PromptGenerator("4", "I want to know when the interim submission deadline is", "WHAT ARE THE COMPANY NAMES?")
+  generator.execute()
+import sys
+import json
+from fastapi import FastAPI
+from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException
+import os
+import requests
+from fastapi.middleware.cors import CORSMiddleware
+from typing import Optional
+from pydantic import BaseModel
+from evaluation._prompt_generation import PromptGenerator
+from evaluation._evaluation import Evaluator
+from utility.env_manager import get_env_manager
+from dotenv import load_dotenv
+from openai import OpenAI
+
+load_dotenv()
+
+API_KEY = os.getenv('API_KEY')
+API_SECRET = os.getenv('API_SECRET')
+
+app = FastAPI()
+
+app.add_middleware(
+  CORSMiddleware,
+  allow_origins=['*'],
+  allow_credentials=True,
+  allow_methods=["*"],
+  allow_headers=["*"],
+)
+
+class Item(BaseModel):
+  num_test_output: str
+  objective: str
+  output: str
+
+class EvaluationItem(BaseModel):
+  query: str
+  user_message: str
+
+@app.get("/check")
+def check():
+  return "Your API is up!"
+
+@app.post("/generate")
+def generate(item: Item):
+  env_manager = get_env_manager()
+  client = OpenAI(api_key=env_manager['openai_keys']['OPENAI_API_KEY'])
+  generator = PromptGenerator(item.num_test_output, item.objective, item.output)
+  generator.execute()
+  with open('prompts-dataset/prompt-data.json', 'r') as f:
+  prompts = json.load(f)
+  top_score = -1
+  top_result = None
+  for prompt in prompts:
+  evaluation_item = EvaluationItem(query=item.objective, user_message=prompt['Prompt'])
+  evaluator = Evaluator(env_manager, client)
+  evaluation_result, accuracy, sufficient = evaluator.run(evaluation_item.query, evaluation_item.user_message)
+  sufficient = "true"
+  if sufficient == "true" and accuracy > top_score:
+  top_score = accuracy
+  top_result = {"prompt": prompt['Prompt'], "score": f"{top_score}%"}
+  return top_result
+ 
+@app.post("/evaluate")
+def evaluate(item: EvaluationItem):
+  evaluator = Evaluator(env_manager, client)
+  result = evaluator.run(item.query, item.user_message)
+  return {"result": result}
+import download from "./download.png";
+import logo from "./openai.png";
+import preview from "./preview.png";
+import hero from "./hero.jpg"
+
+export { download, logo, preview, hero };
+%pip install -qU \
+  langchain==0.0.292 \
+  openai==0.28.0 \
+  datasets==2.10.1 \
+  pinecone-client==2.2.4 \
+  tiktoken==0.5.1
+import importlib
+ 
+libraries = [
+  "langchain",
+  "openai",
+  "datasets",
+  "pinecone_client",
+  "tiktoken"
+
+]
+ 
+for library in libraries:
+  try:
+  module = importlib.import_module(library)
+  print(f"{library} is installed (version: {module.__version__})")
+  except ModuleNotFoundError:
+  print(f"{library} is not installed")
+%pip install pinecone-client==2.2.4
+
+%pip install tiktoken==0.5.1
+import os
+
+from dotenv import load_dotenv
+
+from langchain.chat_models import ChatOpenAI
+ 
+load_dotenv()
+ 
+openai_api_key = os.getenv("OPENAI_API_KEY")  
+os.environ["OPENAI_API_KEY"] = openai_api_key  
+chat = ChatOpenAI(
+  openai_api_key = openai_api_key,
+  model='gpt-3.5-turbo'
+
+)
+ 
+from langchain.schema import (
+  SystemMessage,
+  HumanMessage,
+  AIMessage
+
+)
+ 
+messages = [
+  SystemMessage(content="You are a helpful assistant."),
+  HumanMessage(content="Hi AI, how are you today?"),
+  AIMessage(content="I'm great thank you. How can I help you?"),
+  HumanMessage(content="I'd like to understand string theory.")
+
+]
+ 
+res = chat(messages)
+
+res
+print(res.content)
+
+messages.append(res)
+ 
+prompt = HumanMessage(
+  content="Why do physicists believe it can produce a 'unified theory'?"
+
+)
+ 
+messages.append(prompt)
+ 
+res = chat(messages)
+ 
+print(res.content)
+ 
+messages.append(res)
+ 
+prompt = HumanMessage(
+  content="What is so special about Llama 2?"
+
+)
+ 
+messages.append(prompt)
+ 
+res = chat(messages)
+print(res.content)
+ 
+messages.append(res)
+ 
+prompt = HumanMessage(
+  content="Can you tell me about the LLMChain in LangChain?"
+
+)
+ 
+messages.append(prompt)
+ 
+res = chat(messages)
+print(res.content)
+llmchain_information = [
+  "A LLMChain is the most common type of chain. It consists of a PromptTemplate, a model (either an LLM or a ChatModel), and an optional output parser. This chain takes multiple input variables, uses the PromptTemplate to format them into a prompt. It then passes that to the model. Finally, it uses the OutputParser (if provided) to parse the output of the LLM into a final format.",
+  "Chains is an incredibly generic concept which returns to a sequence of modular components (or other chains) combined in a particular way to accomplish a common use case.",
+  "LangChain is a framework for developing applications powered by language models. We believe that the most powerful and differentiated applications will not only call out to a language model via an api, but will also: (1) Be data-aware: connect a language model to other sources of data, (2) Be agentic: Allow a language model to interact with its environment. As such, the LangChain framework is designed with the objective in mind to enable those types of applications."
+
+]
+ 
+source_knowledge = "\n".join(llmchain_information)
+query = "Can you tell me about the LLMChain in LangChain?"
+ 
+augmented_prompt = f"""Using the contexts below, answer the query.
+ 
+Contexts:
+
+{source_knowledge}
+ 
+Query: {query}"""
+print(augmented_prompt)
+
+prompt = HumanMessage(
+  content=augmented_prompt
+
+)
+ 
+messages.append(prompt)
+ 
+res = chat(messages)
+print(res.content)
+ 
+from datasets import load_dataset
+ 
+dataset = load_dataset("bzantium/LITM")
+from datasets import load_dataset
+ 
+dataset = load_dataset("jamescalam/llama-2-arxiv-papers-chunked")
+ 
+dataset
+dataset[0]
+ 
+import pinecone
+ 
+pinecone.init(
+  api_key=os.environ.get('PINECONE_API_KEY'),
+  environment=os.environ.get('PINECONE_ENVIRONMENT') or 'gcp-starter'
+
+)
+import time
+ 
+index_name = 'llama-2-rag'
+ 
+if index_name not in pinecone.list_indexes():
+  pinecone.create_index(
+  index_name,
+  dimension=1536,
+  metric='cosine'
+  )
+  while not pinecone.describe_index(index_name).status['ready']:
+  time.sleep(1)
+ 
+index = pinecone.Index(index_name)
+index.describe_index_stats()
+from langchain.embeddings.openai import OpenAIEmbeddings
+ 
+embed_model = OpenAIEmbeddings(model="text-embedding-ada-002")
+texts = [
+  'this is the first chunk of text',
+  'then another second chunk of text is here'
+
+]
+ 
+res = embed_model.embed_documents(texts)
+
+len(res), len(res[0])
+ 
+from tqdm.auto import tqdm  
+data = dataset.to_pandas()  
+batch_size = 100
+ 
+for i in tqdm(range(0, len(data), batch_size)):
+  i_end = min(len(data), i+batch_size)
+  batch = data.iloc[i:i_end]
+  ids = [f"{x['doi']}-{x['chunk-id']}" for i, x in batch.iterrows()]
+  texts = [x['chunk'] for _, x in batch.iterrows()]
+  embeds = embed_model.embed_documents(texts)
+  metadata = [
+  {'text': x['chunk'],
+  'source': x['source'],
+  'title': x['title']} for i, x in batch.iterrows()
+  ]
+  index.upsert(vectors=zip(ids, embeds, metadata))
+index.describe_index_stats()
+from langchain.vectorstores import Pinecone
+ 
+text_field = "text"  
+vectorstore = Pinecone(
+  index, embed_model.embed_query, text_field
+
+)
+query = "What is so special about Llama 2?"
+ 
+vectorstore.similarity_search(query, k=3)
+def augment_prompt(query: str):
+  results = vectorstore.similarity_search(query, k=3)
+  source_knowledge = "\n".join([x.page_content for x in results])
+  augmented_prompt = f"""Using the contexts below, answer the query.
+  Contexts:
+  {source_knowledge}
+  Query: {query}"""
+  return augmented_prompt
+print(augment_prompt(query))
+
+prompt = HumanMessage(
+  content=augment_prompt(query)
+
+)
+ 
+messages.append(prompt)
+ 
+res = chat(messages)
+ 
+print(res.content)
+prompt = HumanMessage(
+  content="what safety measures were used in the development of llama 2?"
+
+)
+ 
+res = chat(messages + [prompt])
+
+print(res.content)
+prompt = HumanMessage(
+  content=augment_prompt(
+  "what safety measures were used in the development of llama 2?"
+  )
+
+)
+ 
+res = chat(messages + [prompt])
+
+print(res.content)
+import os
+import json
+import sys
+from openai import OpenAI
+from math import exp
+import numpy as np
+from utility.env_manager import get_env_manager
+from scripts import prompt_generator
+ 
+env_manager = get_env_manager()
+client = OpenAI(api_key=env_manager['openai_keys']['OPENAI_API_KEY'])
+ 
+def evaluate(prompt: str, user_message: str, context: str, use_test_data: bool = False) -> str:
+  """Return the classification of the hallucination.
+  @parameter prompt: the prompt to be completed.
+  @parameter user_message: the user message to be classified.
+  @parameter context: the context of the user message.
+  @returns classification: the classification of the hallucination.
+  """
+  num_test_output = str(10)
+  API_RESPONSE = prompt_generator.get_completion(
+  [
+  {
+  "role": "system",   "content": prompt.replace("{Context}", context).replace("{Question}", user_message)
+  }
+  ],
+  model=env_manager['vectordb_keys']['VECTORDB_MODEL'],
+  logprobs=True,
+  top_logprobs=1,
+  )
+  system_msg = str(API_RESPONSE.choices[0].message.content)
+  for i, logprob in enumerate(API_RESPONSE.choices[0].logprobs.content[0].top_logprobs, start=1):
+  output = f'\nhas_sufficient_context_for_answer: {system_msg}, \nlogprobs: {logprob.logprob}, \naccuracy: {np.round(np.exp(logprob.logprob)*100,2)}%\n'
+  print(output)
+  if system_msg == 'true' and np.round(np.exp(logprob.logprob)*100,2) >= 95.00:
+  classification = 'true'
+  elif system_msg == 'false' and np.round(np.exp(logprob.logprob)*100,2) >= 95.00:
+  classification = 'false'
+  else:
+  classification = 'false'
+  return classification
+
+if __name__ == "__main__":
+  context_message = prompt_generator.file_reader("prompts/context.txt")
+  prompt_message = prompt_generator.file_reader("prompts/generic-evaluation-prompt.txt")
+  context = str(context_message)
+  prompt = str(prompt_message)
+  user_message = str(input("question: "))
+  print(evaluate(prompt, user_message, context))
+import os
+import json
+import sys
+from openai import OpenAI
+from math import exp
+import numpy as np
+from dotenv import load_dotenv
+load_dotenv()
+ 
+openai_api_key = os.getenv("OPENAI_API_KEY") 
+vectordb_keys = os.getenv("OPENAI_MODEL") 
+client = OpenAI(api_key=openai_api_key)
+ 
+def get_completion(
+  messages: list[dict[str, str]],
+  model: str = vectordb_keys,
+  max_tokens=500,
+  temperature=0,
+  stop=None,
+  seed=123,
+  tools=None,
+  logprobs=None,
+  top_logprobs=None,
+) -> str:
+  """Return the completion of the prompt.
+  @parameter messages: list of dictionaries with keys 'role' and 'content'.
+  @parameter model: the model to use for completion. Defaults to 'davinci'.
+  @parameter max_tokens: max tokens to use for each prompt completion.
+  @parameter temperature: the higher the temperature, the crazier the text
+  @parameter stop: token at which text generation is stopped
+  @parameter seed: random seed for text generation
+  @parameter tools: list of tools to use for post-processing the output.
+  @parameter logprobs: whether to return log probabilities of the output tokens or not.
+  @returns completion: the completion of the prompt.
+  """
+  params = {
+  "model": model,
+  "messages": messages,
+  "max_tokens": max_tokens,
+  "temperature": temperature,
+  "stop": stop,
+  "seed": seed,
+  "logprobs": logprobs,
+  "top_logprobs": top_logprobs,
+  }
+  if tools:
+  params["tools"] = tools
+  completion = client.chat.completions.create(**params)
+  return completion
+ 
+def file_reader(path: str, ) -> str:
+  fname = os.path.join(path)
+  with open(fname, 'r') as f:
+  system_message = f.read()
+  return system_message
+ 
+def generate_test_data(prompt: str, context: str, num_test_output: str) -> str:
+  """Return the classification of the hallucination.
+  @parameter prompt: the prompt to be completed.
+  @parameter user_message: the user message to be classified.
+  @parameter context: the context of the user message.
+  @returns classification: the classification of the hallucination.
+  """
+  API_RESPONSE = get_completion(
+  [
+  {
+  "role": "user",   "content": prompt.replace("{context}", context).replace("{num_test_output}", num_test_output)
+  }
+  ],
+  model=vectordb_keys,
+  logprobs=True,
+  top_logprobs=1,
+  )
+  system_msg = API_RESPONSE.choices[0].message.content
+  return system_msg
+ 
+def main(num: str):
+  context_message = file_reader("../prompts/context.txt")
+  prompt_message = file_reader("../prompts/prompt-generating-prompt.txt")
+  context = str(context_message)
+  prompt = str(prompt_message)
+  generate_prompts = generate_test_data(prompt, context, num)
+  def save_txt(generate_prompts) -> None:
+  file_path = "../prompts/automatically-generated-prompts.txt"
+  with open(file_path, 'w') as txt_file:
+  txt_file.write(generate_prompts)
+  print(f"Generated Prompts have been saved to {file_path}")
+  save_txt(generate_prompts)
+  print("===========")
+  print("Prompts")
+  print("===========")
+  print(generate_prompts)
+ 
+if __name__ == "__main__":
+  main("5")
+import os
+import json
+import sys
+from openai import OpenAI
+from math import exp
+import numpy as np
+from dotenv import load_dotenv
+load_dotenv()
+ 
+openai_api_key = os.getenv("OPENAI_API_KEY") 
+model = os.getenv("OPENAI_MODEL")  
+client = OpenAI(api_key=openai_api_key)
+ 
+def get_completion(
+  messages: list[dict[str, str]],
+  model: str = model,
+  max_tokens=500,
+  temperature=0,
+  stop=None,
+  seed=123,
+  tools=None,
+  logprobs=None,
+  top_logprobs=None,
+) -> str:
+  """Return the completion of the prompt.
+  @parameter messages: list of dictionaries with keys 'role' and 'content'.
+  @parameter model: the model to use for completion. Defaults to 'davinci'.
+  @parameter max_tokens: max tokens to use for each prompt completion.
+  @parameter temperature: the higher the temperature, the crazier the text
+  @parameter stop: token at which text generation is stopped
+  @parameter seed: random seed for text generation
+  @parameter tools: list of tools to use for post-processing the output.
+  @parameter logprobs: whether to return log probabilities of the output tokens or not.
+  @returns completion: the completion of the prompt.
+  """
+  params = {
+  "model": model,
+  "messages": messages,
+  "max_tokens": max_tokens,
+  "temperature": temperature,
+  "stop": stop,
+  "seed": seed,
+  "logprobs": logprobs,
+  "top_logprobs": top_logprobs,
+  }
+  if tools:
+  params["tools"] = tools
+  completion = client.chat.completions.create(**params)
+  return completion
+ 
+def file_reader(path: str, ) -> str:
+  fname = os.path.join(path)
+  with open(fname, 'r') as f:
+  system_message = f.read()
+  return system_message
+ 
+def generate_test_data(prompt: str, context: str, num_test_output: str) -> str:
+  """Return the classification of the hallucination.
+  @parameter prompt: the prompt to be completed.
+  @parameter user_message: the user message to be classified.
+  @parameter context: the context of the user message.
+  @returns classification: the classification of the hallucination.
+  """
+  API_RESPONSE = get_completion(
+  [
+  {
+  "role": "user",   "content": prompt.replace("{context}", context).replace("{num_test_output}", num_test_output)
+  }
+  ],
+  model=model,
+  logprobs=True,
+  top_logprobs=1,
+  )
+  system_msg = API_RESPONSE.choices[0].message.content
+  return system_msg
+ 
+def main(num_test_output: str):
+  context_message = file_reader("../prompts/context.txt")
+  prompt_message = file_reader("../prompts/test-prompt-generating-prompt.txt")
+  context = str(context_message)
+  prompt = str(prompt_message)
+  test_data = generate_test_data(prompt, context, num_test_output)
+  def save_txt(test_data) -> None:
+  file_path = "../prompts/automatically-generated-test-prompts.txt"
+  with open(file_path, 'w') as txt_file:
+  txt_file.write(test_data)
+  print(f"Text data has been saved to {file_path}")
+  save_txt(test_data)
+  print("===========")
+  print("Prompts")
+  print("===========")
+  print(test_data)
+ 
+if __name__ == "__main__":
+  main("3")
+import requests
+import os
+import weaviate
+from weaviate.embedded import EmbeddedOptions
+from langchain.document_loaders import TextLoader
+from langchain.text_splitter import CharacterTextSplitter  
+from langchain.embeddings import OpenAIEmbeddings
+from langchain.vectorstores import Weaviate
+from langchain.chat_models import ChatOpenAI
+from langchain.prompts import ChatPromptTemplate
+from langchain.schema.runnable import RunnablePassthrough
+from langchain.schema.output_parser import StrOutputParser
+from datasets import Dataset
+from ragas import evaluate
+from ragas.metrics import (
+  faithfulness,
+  answer_relevancy,
+  context_recall,
+  context_precision,
+)
+
+from dotenv import load_dotenv,find_dotenv
+ 
+def chunk_loader(file_path= '../RAG/prompts/context.txt'):
+  loader = TextLoader(file_path)
+  documents = loader.load()
+  text_splitter = CharacterTextSplitter(chunk_size=500, chunk_overlap=50)
+  chunks = text_splitter.split_documents(documents)
+  return chunks
+ 
+def create_retriever(chunks):
+  load_dotenv(find_dotenv())
+  client = weaviate.Client(
+  embedded_options = EmbeddedOptions()
+  )
+  vectorstore = Weaviate.from_documents(
+  client = client,   documents = chunks,
+  embedding = OpenAIEmbeddings(),
+  by_text = False
+  )
+  retriever = vectorstore.as_retriever()
+  return retriever
+ 
+def file_reader(path: str, ) -> str:
+  fname = os.path.join(path)
+  with open(fname, 'r') as f:
+  system_message = f.read()
+  return system_message
+ 
+def test_prompts():
+  prompts = file_reader("../prompts/automatically-generated-prompts.txt")
+  chunks =  chunk_loader()
+  retriever = create_retriever(chunks)
+  llm = ChatOpenAI(model_name="gpt-3.5-turbo-16k", temperature=0)
+  final_prompts = []
+  for prompt in prompts:
+  final_prompts.append(ChatPromptTemplate.from_template(prompt))
+  for prompt in final_prompts:
+  rag_chain = (
+  {"context": retriever,  "question": RunnablePassthrough()}   | prompt   | llm
+  | StrOutputParser()   )
+  test_cases = file_reader("../prompts/automatically-generated-test-prompts.txt")
+  questions = []
+  ground_truths = []
+  for test_case in test_cases:
+  questions.append(test_case["user"])
+  ground_truths.append(test_case["assistant"])
+  answers = []
+  contexts = []
+  for query in questions:
+  answers.append(rag_chain.invoke(query))
+  contexts.append([docs.page_content for docs in retriever.get_relevant_documents(query)])
+  data = {
+  "question": questions,   "answer": answers,   "contexts": contexts,   "ground_truths": ground_truths   }
+  dataset = Dataset.from_dict(data)
+  result = evaluate(
+  dataset = dataset,   metrics=[
+  context_precision,
+  context_recall,
+  faithfulness,
+  answer_relevancy,
+  ],
+  )
+  df = result.to_pandas()
+  print(df)
+  return result
+ 
+if __name__ == "__main__":
+  test_prompts()
+import random
+def monte_carlo_eval(prompt):
+  response_types = ['highly relevant', 'somewhat relevant', 'irrelevant']
+  scores = {'highly relevant': 3, 'somewhat relevant': 2, 'irrelevant': 1}
+  trials = 100
+  total_score = 0
+  for _ in range(trials):
+  response = random.choice(response_types)
+  total_score += scores[response]
+  return total_score / trials
+ 
+def elo_eval(prompt, base_rating=1500):
+  outcomes = ['win', 'loss', 'draw']
+  outcome = random.choice(outcomes)
+  K = 30   R_base = 10 ** (base_rating / 400)
+  R_opponent = 10 ** (1600 / 400)   expected_score = R_base / (R_base + R_opponent)
+  actual_score = {'win': 1, 'loss': 0, 'draw': 0.5}[outcome]
+  new_rating = base_rating + K * (actual_score - expected_score)
+  return new_rating
+def elo_ratings_func(prompts, elo_ratings, K=30, opponent_rating=1600):
+  """
+  Update Elo ratings for a list of prompts based on simulated outcomes.
+  Parameters:
+  prompts (list): List of prompts to be evaluated.
+  elo_ratings (dict): Current Elo ratings for each prompt.
+  K (int): Maximum change in rating.
+  opponent_rating (int): Fixed rating of the opponent for simulation.
+  Returns:
+  dict: Updated Elo ratings.
+  """
+  for prompt in prompts:
+  outcome = random.choice(['win', 'loss', 'draw'])
+  actual_score = {'win': 1, 'loss': 0, 'draw': 0.5}[outcome]
+  R_base = 10 ** (elo_ratings[prompt] / 400)
+  R_opponent = 10 ** (opponent_rating / 400)
+  expected_score = R_base / (R_base + R_opponent)
+  elo_ratings[prompt] += K * (actual_score - expected_score)
+  return elo_ratings
+ 
+prompts = ["Who founded OpenAI?",   "What was the initial goal of OpenAI?",
+  "What did OpenAI release in 2016?",   "What project did OpenAI showcase in 2018?",
+  "How did the AI agents in OpenAI Five work together?"
+  ]
+
+elo_ratings = {prompt: 1500 for prompt in prompts}  
+for _ in range(10):   elo_ratings = elo_ratings_func(prompts, elo_ratings)
+ 
+sorted_prompts = sorted(prompts, key=lambda x: elo_ratings[x], reverse=True)
+ 
+for prompt in sorted_prompts:
+  print(f"{prompt}: {elo_ratings[prompt]}")
+def evaluate_prompt(main_prompt, test_cases):
+  evaluations = {}
+  evaluations['main_prompt'] = {
+  'Monte Carlo Evaluation': monte_carlo_eval(main_prompt),
+  'Elo Rating Evaluation': elo_eval(main_prompt)
+  }
+  for idx, test_case in enumerate(test_cases):
+  evaluations[f'test_case_{idx+1}'] = {
+  'Monte Carlo Evaluation': monte_carlo_eval(test_case),
+  'Elo Rating Evaluation': elo_eval(test_case)
+  }
+  return evaluations
+main_prompt = "why we use OepenAI?"
+
+test_cases = ["Who founded OpenAI?",   "What was the initial goal of OpenAI?",
+  "What did OpenAI release in 2016?",   "What project did OpenAI showcase in 2018?",
+  "How did the AI agents in OpenAI Five work together?"
+  ]
+
+result = evaluate_prompt(main_prompt, test_cases)
+ 
+result
+ 
+%pip install --pre -U "weaviate-client==4.*"
+%import requests
+
+import os
+import weaviate
+
+from weaviate.embedded import EmbeddedOptions
+from langchain.document_loaders import TextLoader
+
+from langchain.text_splitter import CharacterTextSplitter  
+from langchain.embeddings import OpenAIEmbeddings
+
+from langchain.vectorstores import Weaviate
+
+from langchain.chat_models import ChatOpenAI
+
+from langchain.prompts import ChatPromptTemplate
+
+from langchain.schema.runnable import RunnablePassthrough
+
+from langchain.schema.output_parser import StrOutputParser
+from dotenv import load_dotenv,find_dotenv
+
+def data_loader(file_path= '../RAG/prompts/context.txt'):
+  loader = TextLoader(file_path)
+  documents = loader.load()
+  text_splitter = CharacterTextSplitter(chunk_size=500, chunk_overlap=50)
+  chunks = text_splitter.split_documents(documents)
+  return chunks
+def create_retriever(chunks):
+  load_dotenv(find_dotenv())
+  openai_api_key = os.getenv("OPENAI_API_KEY")
+  print(openai_api_key)
+  client = weaviate.Client(
+  embedded_options = EmbeddedOptions()
+  )
+  vectorstore = Weaviate.from_documents(
+  client = client,   documents = chunks,
+  embedding = OpenAIEmbeddings(),
+  by_text = False
+  )
+  retriever = vectorstore.as_retriever()
+  return retriever
+chunks =  data_loader()
+ 
+chunks
+retriever = create_retriever(chunks)
+
+llm = ChatOpenAI(model_name="gpt-3.5-turbo", temperature=0)
+ 
+template = """You are an assistant for question-answering tasks.  
+Use the following pieces of retrieved context to answer the question.  
+If you don't know the answer, just say that you don't know.  
+Use two sentences maximum and keep the answer concise.
+
+Question: {question}  
+Context: {context}  
+Answer:
+
+"""
+ 
+prompt = ChatPromptTemplate.from_template(template)
+ 
+rag_chain = (
+  {"context": retriever,  "question": RunnablePassthrough()}   | prompt   | llm
+  | StrOutputParser()  
+)
+from datasets import Dataset
+ 
+questions = [
+  "Who founded OpenAI?",   "What was the initial goal of OpenAI?",
+  "What did OpenAI release in 2016?"
+  ]
+ 
+ground_truths = [
+  ["Sam Altman, Elon Musk, Ilya Sutskever and Greg Brockman"],
+  ["To advance digital intelligence in a way that benefits humanity"],
+  ["OpenAI Gym, a toolkit for developing and comparing reinforcement learning algorithms"]
+  ]
+ 
+answers = []
+
+contexts = []
+ 
+for query in questions:
+  answers.append(rag_chain.invoke(query))
+  contexts.append([docs.page_content for docs in retriever.get_relevant_documents(query)])
+ 
+data = {
+  "question": questions,   "answer": answers,   "contexts": contexts,   "ground_truths": ground_truths 
+}
+ 
+dataset = Dataset.from_dict(data)
+%from ragas import evaluate
+ 
+from ragas.metrics import (
+  faithfulness,
+  answer_relevancy,
+  context_recall,
+  context_precision,
+
+)
+ 
+result = evaluate(
+  dataset = dataset,   metrics=[
+  context_precision,
+  context_recall,
+  faithfulness,
+  answer_relevancy,
+  ],
+
+)
+ 
+df = result.to_pandas()
+df
+%pip install --upgrade jupyter
+%pip install --upgrade ipywidgets
+from datasets import load_dataset
+ 
+dataset = load_dataset("jamescalam/llama-2-arxiv-papers-chunked", split="train")
+ 
+dataset
+!import os
+
+from dotenv import load_dotenv
+ 
+load_dotenv()
+
+from langchain_community.llms import OpenAI
+import sys
+
+!{sys.executable} -m from langchain import OpenAI
+
+from langchain.document_loaders import TextLoader
+
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+
+from langchain.embeddings.openai import OpenAIEmbeddings
+
+from langchain.vectorstores import Chroma
+
+from langchain.chains import RetrievalQA
+loader = TextLoader('./week_6_challenge_doc.txt')
+
+documents = loader.load()
+ 
+text_splitter = RecursiveCharacterTextSplitter(chunk_size = 1000, chunk_overlap=200)
+
+texts  = text_splitter.split_documents(documents)
+ 
+embeddings = OpenAIEmbeddings()
+
+store = Chroma.from_documents(texts,embeddings, collection_name="challenge_document")
+ 
+llm = OpenAI(temperature=0)
+
+chain = RetrievalQA.from_chain_type(llm,retriever=store.as_retriever())
+ 
+print(chain.run("what are the tasks to be done for final submission?"))
+
+print(chain.run("what format am i supposed to sumbit the final report?"))
+print(chain.run("how many tasks does the challenge document have?"))
+print(chain.run("can you list out the tutorial dates?"))
+print(chain.run("what are the key performance indicators for the challenge?"))
+!import os
+
+from dotenv import load_dotenv
+ 
+load_dotenv()
+from langchain_community.llms import OpenAI
+import sys
+
+!{sys.executable} -m from langchain import OpenAI
+
+from langchain.document_loaders import TextLoader
+
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+
+from langchain.embeddings.openai import OpenAIEmbeddings
+
+from langchain.vectorstores import Chroma
+
+from langchain.chains import RetrievalQA
+loader = TextLoader('./week_6_challenge_doc.txt')
+
+documents = loader.load()
+ 
+text_splitter = RecursiveCharacterTextSplitter(chunk_size = 1000, chunk_overlap=200)
+
+texts  = text_splitter.split_documents(documents)
+ 
+embeddings = OpenAIEmbeddings()
+
+store = Chroma.from_documents(texts,embeddings, collection_name="challenge_document")
+ 
+llm = OpenAI(temperature=0)
+
+chain = RetrievalQA.from_chain_type(llm,retriever=store.as_retriever())
+ 
+print(chain.run("what are the tasks to be done for final submission?"))
+
+print(chain.run("what format am i supposed to sumbit the final report?"))
+print(chain.run("how many tasks does the challenge document have?"))
+print(chain.run("can you list out the tutorial dates?"))
+print(chain.run("what are the key performance indicators for the challenge?"))
+import logo from './logo.svg';
+import 'bootstrap/dist/css/bootstrap.css'
+import Tables from './components/Tables'
+import Table from './components/Table'
+import api from './api/api'
+import React, { Component , useState, useRef} from 'react';
+function App() {
+  const [tables,setTables] = useState([]);
+  const [isShow,setShow] = useState(false);
+  // useEffect(() =>{
+  //   fetchTables();
+  // });
+  const fetchTables = async () =>{
+  // const tables_r = [["Name","Title","Status","Position","Action"],["Name","Title","Status","Position","Action"],["Name","Title","Status","Position","Action"]];
+  // setTables(tables_r)
+  console.log(ref.current.value);
+  const prompt = ref.current.value;
+  const response = await api.get('/ranks?prompt='+prompt);
+  console.log(response.data);
+  setTables(response.data)
+  setShow(true)
+  }
+  // const renderTable = () =>{
+  //   fetchTables()
+  //   return   // }
+  const ref = useRef(null);
+  return (
+  // <div className="App">
+  //   <div class="mb-3">
+  //   <label for="exampleFormControlTextarea1" class="form-label">Example textarea</label>
+  //   <textarea class="form-control" id="exampleFormControlTextarea1" rows="7" ></textarea>
+  //   </div>
+  // {/* <button type="button" className="btn btn-primary" onClick={this.ShowAlert}>Primary</button> */}
+  // </div>
+  <div>
+  <div className="mb-3">
+  <label htmlFor="exampleFormControlTextarea1" className="form-label">Input Prompt</label>
+  <textarea className="form-control" id="exampleFormControlTextarea1" rows="7"  ref={ref}/>
+  </div>
+  <button type="button" className="btn btn-primary" onClick={fetchTables}>Rank Prompt</button>   {isShow && <Tables tables= {tables}/>}
+  </div>
+  );
+}
+ 
+export default App;
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import './index.css';
+import App from './App';
+import reportWebVitals from './reportWebVitals';
+import {BrowserRouter as Router} from 'react-router-dom';
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(
+  <React.StrictMode>
+  <Router>
+  <App />
+  </Router>
+  </React.StrictMode>
+);
+
+// If you want to start measuring performance in your app, pass a function
+// to log results (for example: reportWebVitals(console.log))
+// or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals
+reportWebVitals();
+import React, { Component } from 'react';
+import { MDBBadge, MDBBtn, MDBTable, MDBTableHead, MDBTableBody } from 'mdb-react-ui-kit';
+
+class Table extends Component {
+  tables = [["Name","Title","Status","Position","Action"],["Name","Title","Status","Position","Action"],["Name","Title","Status","Position","Action"]];
+  render() {   return (
+  <MDBTable align='middle'>
+  <MDBTableHead>
+  <tr>
+  <th scope='col'>Name</th>
+  <th scope='col'>Title</th>
+  <th scope='col'>Status</th>
+  <th scope='col'>Position</th>
+  <th scope='col'>Actions</th>
+  </tr>
+  </MDBTableHead>
+  <MDBTableBody>
+  <tr>
+  <td>
+  <div className='d-flex align-items-center'>
+  <img
+  src='https://mdbootstrap.com/img/new/avatars/8.jpg'
+  alt=''
+  style={{ width: '45px', height: '45px' }}
+  className='rounded-circle'
+  />
+  <div className='ms-3'>
+  <p className='fw-bold mb-1'>John Doe</p>
+  <p className='text-muted mb-0'>john.doe@gmail.com</p>
+  </div>
+  </div>
+  </td>
+  <td>
+  <p className='fw-normal mb-1'>Software engineer</p>
+  <p className='text-muted mb-0'>IT department</p>
+  </td>
+  <td>
+  <MDBBadge color='success' pill>
+  Active
+  </MDBBadge>
+  </td>
+  <td>Senior</td>
+  <td>
+  <MDBBtn color='link' rounded size='sm' >
+  Edit
+  </MDBBtn>
+  </td>
+  </tr>
+  <tr>
+  <td>
+  <div className='d-flex align-items-center'>
+  <img
+  src='https://mdbootstrap.com/img/new/avatars/6.jpg'
+  alt=''
+  style={{ width: '45px', height: '45px' }}
+  className='rounded-circle'
+  />
+  <div className='ms-3'>
+  <p className='fw-bold mb-1'>Alex Ray</p>
+  <p className='text-muted mb-0'>alex.ray@gmail.com</p>
+  </div>
+  </div>
+  </td>
+  <td>
+  <p className='fw-normal mb-1'>Consultant</p>
+  <p className='text-muted mb-0'>Finance</p>
+  </td>
+  <td>
+  <MDBBadge color='primary' pill>
+  Onboarding
+  </MDBBadge>
+  </td>
+  <td>Junior</td>
+  <td>
+  <MDBBtn color='link' rounded size='sm'>
+  Edit
+  </MDBBtn>
+  </td>
+  </tr>
+  <tr>
+  <td>
+  <div className='d-flex align-items-center'>
+  <img
+  src='https://mdbootstrap.com/img/new/avatars/7.jpg'
+  alt=''
+  style={{ width: '45px', height: '45px' }}
+  className='rounded-circle'
+  />
+  <div className='ms-3'>
+  <p className='fw-bold mb-1'>Kate Hunington</p>
+  <p className='text-muted mb-0'>kate.hunington@gmail.com</p>
+  </div>
+  </div>
+  </td>
+  <td>
+  <p className='fw-normal mb-1'>Designer</p>
+  <p className='text-muted mb-0'>UI/UX</p>
+  </td>
+  <td>
+  <MDBBadge color='warning' pill>
+  Awaiting
+  </MDBBadge>
+  </td>
+  <td>Senior</td>
+  <td>
+  <MDBBtn color='link' rounded size='sm'>
+  Edit
+  </MDBBtn>
+  </td>
+  </tr>
+  </MDBTableBody>
+  </MDBTable>
+  );
+  }
+}
+ 
+export default Table;
+from fastapi import FastAPI, HTTPException, Depends
+from typing import Annotated, List
+from pydantic import BaseModel
+from models import RankResult
+from prompt_evaluation import *
+from fastapi.middleware.cors import CORSMiddleware
+ 
+app = FastAPI()
+
+origins = ["http://localhost:3000"]
+
+app.add_middleware(
+  CORSMiddleware,
+  allow_origins=origins,
+)
+ 
+class RankBase(BaseModel):
+  id: int
+  name: str
+  rating: float
+ 
+@app.get("/ranks", response_model=List[RankBase])
+async def return_rank(prompt: str):
+  results = evaluate_prompt(prompt)
+  return results
+class PromptResult:
+  def __init__(
+  self,
+  id,
+  question,
+  answer,
+  contexts,
+  ground_truths,
+  context_precision,
+  context_recall,
+  faithfulness,
+  answer_relevancy,
+  ) -> None:
+  self.id = id
+  self.question = question
+  self.answer = answer
+  self.contexts = contexts
+  self.ground_truths = ground_truths
+  self.context_precision = context_precision
+  self.context_recall = context_recall
+  self.faithfulness = faithfulness
+  self.answer_relevancy = answer_relevancy
+  pass
+ 
+class RankResult:
+  def __init__(self, id, name, rating) -> None:
+  self.id = id
+  self.name = name
+  self.rating = rating
+  pass
+import os
+
+from dotenv import load_dotenv
+ 
+load_dotenv()
+from langchain import OpenAI
+
+from langchain.document_loaders import TextLoader
+
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+
+from langchain.embeddings.openai import OpenAIEmbeddings
+
+from langchain.vectorstores import Chroma
+
+from langchain.chains import RetrievalQA
+
+from langchain.prompts import ChatPromptTemplate
+import os
+
+import json
+
+import sys
+ 
+def file_reader(path: str, ) -> str:
+  fname = os.path.join(path)
+  with open(fname, 'r') as f:
+  system_message = f.read()
+  return system_message
+ 
+def get_prompt():
+  prompt_message = file_reader("../prompts/prompt_generation_template.txt")
+  prompt = str(prompt_message)
+  return prompt
+RAG_PROMPT_TEMPLATE = get_prompt()
+ 
+rag_prompt = ChatPromptTemplate.from_template(RAG_PROMPT_TEMPLATE)
+
+rag_prompt
+loader = TextLoader('./week_6_challenge_doc.txt')
+
+documents = loader.load()
+ 
+text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(chunk_size = 200, chunk_overlap=50, model_name = "gpt-4-1106-preview")
+
+texts  = text_splitter.split_documents(documents)
+ 
+llm = OpenAI(temperature=0)
+ 
+embeddings = OpenAIEmbeddings()
+
+store = Chroma.from_documents(texts,embeddings, collection_name="challenge_document")
+
+len(texts)
+from langchain.schema import StrOutputParser
+ 
+str_output_parser = StrOutputParser()
+from langchain_core.runnables import RunnableParallel, RunnablePassthrough
+ 
+retriever = store.as_retriever()
+ 
+entry_point_and_retriever = RunnableParallel(
+  {
+  "context" : retriever,
+  "output" : RunnablePassthrough()
+  }
+
+)
+ 
+rag_chain = entry_point_and_retriever | rag_prompt | llm | str_output_parser
+rag_chain.invoke('i want to know the goals of the challenge')
+from prompt_generation.prompt_generator import PromptGenerator
+from test_case_generation.test_case_generator import TestCaseGenerator
+from evaluation.monte_carlo_matchmaking import MonteCarloMatchmaking
+from evaluation.elo_rating_system import ELORatingSystem
+
+class PromptEngineeringApp:
+  def __init__(self):
+  self.prompt_generator = PromptGenerator()
+  self.test_case_generator = TestCaseGenerator()
+  self.monte_carlo_matchmaker = MonteCarloMatchmaking()
+  self.elo_rating_system = ELORatingSystem()
+  def run(self):
+  pass
+import random
+
+class PromptTestingAndRanking:
+  def __init__(self, evaluation_data_generator):
+  self.evaluation_data_generator = evaluation_data_generator
+  self.prompt_candidates = []
+  self.matchups_history = {}
+  self.elo_ratings = {}
+  def add_prompt_candidates(self, prompt_candidates):
+  """
+  Add prompt candidates to the testing and ranking system.
+  Args:
+  - prompt_candidates (list): List of prompt candidates.
+  """
+  self.prompt_candidates = prompt_candidates
+  self.initialize_elo_ratings()
+  def initialize_elo_ratings(self):
+  """
+  Initialize ELO ratings for each prompt candidate.
+  """
+  for prompt_candidate in self.prompt_candidates:
+  self.elo_ratings[prompt_candidate] = 1000   def perform_monte_carlo_matchmaking(self, num_matchups=10):
+  """
+  Perform Monte Carlo Matchmaking to simulate prompt matchups.
+  Args:
+  - num_matchups (int): Number of matchups to simulate.
+  Returns:
+  - dict: Dictionary containing matchups and their outcomes.
+  """
+  matchups_outcomes = {}
+  for _ in range(num_matchups):
+  matchup = random.sample(self.prompt_candidates, 2)
+  winner = random.choice(matchup)
+  loser = matchup[0] if matchup[0] != winner else matchup[1]
+  if matchup not in self.matchups_history:
+  self.matchups_history[matchup] = {"wins": 0, "losses": 0}
+  self.matchups_history[matchup]["wins"] += 1
+  self.update_elo_ratings(winner, loser)
+  matchups_outcomes[matchup] = winner
+  return matchups_outcomes
+  def update_elo_ratings(self, winner, loser, k=32):
+  """
+  Update ELO ratings based on the outcome of a matchup.
+  Args:
+  - winner (str): Winner prompt candidate.
+  - loser (str): Loser prompt candidate.
+  - k (int): ELO rating update constant.
+  """
+  rating_difference = self.elo_ratings[winner] - self.elo_ratings[loser]
+  expected_outcome = 1 / (1 + 10 ** (-rating_difference / 400))
+  self.elo_ratings[winner] += k * (1 - expected_outcome)
+  self.elo_ratings[loser] -= k * expected_outcome
+  def rank_prompts(self):
+  """
+  Rank prompt candidates based on their ELO ratings.
+  Returns:
+  - list: Ranked prompt candidates.
+  """
+  ranked_prompts = sorted(self.elo_ratings, key=lambda x: self.elo_ratings[x], reverse=True)
+  return ranked_prompts
+ 
+evaluation_data_generator = EvaluationDataGenerator()
+prompt_testing_and_ranking = PromptTestingAndRanking(evaluation_data_generator)
+
+prompt_candidates = ["Prompt 1", "Prompt 2", "Prompt 3"]
+evaluation_data_generator.generate_evaluation_data("User's description", num_test_cases=5)
+
+prompt_testing_and_ranking.add_prompt_candidates(prompt_candidates)
+
+matchups_outcomes = prompt_testing_and_ranking.perform_monte_carlo_matchmaking(num_matchups=10)
+print("Matchups Outcomes:")
+for matchup, winner in matchups_outcomes.items():
+  print(f"{matchup[0]} vs {matchup[1]} - Winner: {winner}")
+
+ranked_prompts = prompt_testing_and_ranking.rank_prompts()
+print("\nRanked Prompts:")
+for i, prompt in enumerate(ranked_prompts, 1):
+  print(f"{i}. {prompt} - ELO Rating: {prompt_testing_and_ranking.elo_ratings[prompt]}")
+import random
+import math
+
+class PromptTestingAndRanking:
+  def __init__(self, evaluation_data_generator, exploration_rate=0.2):
+  self.evaluation_data_generator = evaluation_data_generator
+  self.prompt_candidates = []
+  self.matchups_history = {}
+  self.bandit_rewards = {}
+  self.exploration_rate = exploration_rate
+  def add_prompt_candidates(self, prompt_candidates):
+  """
+  Add prompt candidates to the testing and ranking system.
+  Args:
+  - prompt_candidates (list): List of prompt candidates.
+  """
+  self.prompt_candidates = prompt_candidates
+  self.initialize_bandit_rewards()
+  def initialize_bandit_rewards(self):
+  """
+  Initialize rewards for each prompt candidate in the Multi-Armed Bandit.
+  """
+  for prompt_candidate in self.prompt_candidates:
+  self.bandit_rewards[prompt_candidate] = {"wins": 0, "losses": 0}
+  def perform_monte_carlo_matchmaking(self, num_matchups=10):
+  """
+  Perform Monte Carlo Matchmaking to simulate prompt matchups.
+  Args:
+  - num_matchups (int): Number of matchups to simulate.
+  Returns:
+  - dict: Dictionary containing matchups and their outcomes.
+  """
+  matchups_outcomes = {}
+  for _ in range(num_matchups):
+  matchup = random.sample(self.prompt_candidates, 2)
+  winner = random.choice(matchup)
+  loser = matchup[0] if matchup[0] != winner else matchup[1]
+  if matchup not in self.matchups_history:
+  self.matchups_history[matchup] = {"wins": 0, "losses": 0}
+  self.matchups_history[matchup]["wins"] += 1
+  self.bandit_rewards[winner]["wins"] += 1
+  self.bandit_rewards[loser]["losses"] += 1
+  matchups_outcomes[matchup] = winner
+  return matchups_outcomes
+  def select_prompt_to_evaluate(self):
+  """
+  Select a prompt candidate to evaluate using the Multi-Armed Bandit Algorithm.
+  Returns:
+  - str: Selected prompt candidate.
+  """
+  total_evaluations = sum(self.bandit_rewards[prompt]["wins"] + self.bandit_rewards[prompt]["losses"] for prompt in self.prompt_candidates)
+  if random.uniform(0, 1) < self.exploration_rate:
+  return random.choice(self.prompt_candidates)
+  else:
+  rewards_estimates = {prompt: (self.bandit_rewards[prompt]["wins"] + 1) / (total_evaluations + 1) for prompt in self.prompt_candidates}
+  selected_prompt = max(rewards_estimates, key=rewards_estimates.get)
+  return selected_prompt
+
+evaluation_data_generator = EvaluationDataGenerator()
+prompt_testing_and_ranking = PromptTestingAndRanking(evaluation_data_generator)
+
+prompt_candidates = ["Prompt 1", "Prompt 2", "Prompt 3"]
+evaluation_data_generator.generate_evaluation_data("User's description", num_test_cases=5)
+
+prompt_testing_and_ranking.add_prompt_candidates(prompt_candidates)
+
+matchups_outcomes = prompt_testing_and_ranking.perform_monte_carlo_matchmaking(num_matchups=10)
+print("Matchups Outcomes:")
+for matchup, winner in matchups_outcomes.items():
+  print(f"{matchup[0]} vs {matchup[1]} - Winner: {winner}")
+
+selected_prompt = prompt_testing_and_ranking.select_prompt_to_evaluate()
+print(f"\nSelected Prompt to Evaluate: {selected_prompt}")
+import random
+
+class PromptGenerationSystem:
+  def __init__(self):
+  self.generated_prompts = []
+  def generate_prompts(self, input_description, scenarios, expected_outputs, num_options=3):
+  """
+  Generate multiple prompt options based on user input and scenarios.
+  Args:
+  - input_description (str): User's objective or task description.
+  - scenarios (list): List of specified scenarios.
+  - expected_outputs (list): List of expected outputs corresponding to scenarios.
+  - num_options (int): Number of prompt options to generate.
+  Returns:
+  - list: Generated prompt options.
+  """
+  self.generated_prompts = []
+  for _ in range(num_options):
+  generated_prompt = f"{input_description} | Scenarios: {', '.join(scenarios)} | Expected Outputs: {', '.join(expected_outputs)}"
+  self.generated_prompts.append(generated_prompt)
+  return self.generated_prompts
+  def evaluate_prompt_alignment(self, prompt_candidate):
+  """
+  Evaluate whether the generated prompt candidate aligns with the input description.
+  Args:
+  - prompt_candidate (str): Generated prompt to be evaluated.
+  Returns:
+  - float: Evaluation score (can be based on similarity, relevance, etc.).
+  """
+  return random.uniform(0.5, 1.0)
+ 
+prompt_system = PromptGenerationSystem()
+ 
+user_description = "Solve a complex mathematical problem"
+user_scenarios = ["Given initial conditions", "Under time constraints"]
+user_expected_outputs = ["Accurate solution", "Optimal result"]
+
+generated_prompts = prompt_system.generate_prompts(user_description, user_scenarios, user_expected_outputs)
+print("Generated Prompts:")
+for prompt in generated_prompts:
+  print(prompt)
+
+for prompt_candidate in generated_prompts:
+  evaluation_score = prompt_system.evaluate_prompt_alignment(prompt_candidate)
+  print(f"Evaluation Score for the Prompt: {evaluation_score}")
+class TestCaseGenerator:
+  def generate_test_cases(self, user_input):
+  pass
+class Configuration:
+  def __init__(self):
+  self.api_key = "my_api_key"
+  self.max_attempts = 3
+  self.log_level = "info"
+  def update_config(self, api_key=None, max_attempts=None, log_level=None):
+  if api_key:
+  self.api_key = api_key
+  if max_attempts:
+  self.max_attempts = max_attempts
+  if log_level:
+  self.log_level = log_level
+class MainWindow:
+  def __init__(self):
+  pass
+  def display_prompt(self, prompt):
+  pass
+
+import unittest
+from backend.evaluation.monte_carlo_matchmaking import MonteCarloMatchmaking
+from backend.evaluation.elo_rating_system import ELORatingSystem
+
+class TestEvaluationMethods(unittest.TestCase):
+  def test_monte_carlo_matchmaking(self):
+  monte_carlo_matchmaker = MonteCarloMatchmaking()
+  result = monte_carlo_matchmaker.match_prompts(["Prompt 1", "Prompt 2"])
+  self.assertEqual(result, "Match Result")
+  def test_elo_rating_system(self):
+  elo_rating_system = ELORatingSystem()
+  result = elo_rating_system.rate_prompts(["Prompt 1", "Prompt 2"])
+  self.assertEqual(result, {"Prompt 1": 1200, "Prompt 2": 1100})
+
+if __name__ == "__main__":
+  unittest.main()
+import unittest
+from backend.prompt_generation.prompt_generator import PromptGenerator
+
+class TestPromptGeneration(unittest.TestCase):
+  def test_generate_prompt(self):
+  prompt_generator = PromptGenerator()
+  result = prompt_generator.generate_prompt("User Input")
+  self.assertEqual(result, "Expected Prompt")
+
+if __name__ == "__main__":
+  unittest.main()
+import unittest
+from backend.test_case_generation.test_case_generator import TestCaseGenerator
+
+class TestTestCaseGeneration(unittest.TestCase):
+  def test_generate_test_cases(self):
+  test_case_generator = TestCaseGenerator()
+  result = test_case_generator.generate_test_cases("User Input")
+  self.assertEqual(result, ["Test Case 1", "Test Case 2"])
+
+if __name__ == "__main__":
+  unittest.main()
+from ui_design.main_window import MainWindow
+
+def run_ui():
+  main_window = MainWindow()
+  main_window.display_prompt("Placeholder Prompt")
+
+if __name__ == "__main__":
+  run_ui()
+import os
+from langchain.chat_models import ChatOpenAI
+from langchain_community.chat_models import ChatOpenAI
+from config.config import Configuration
+
+class SomeModule:
+  def __init__(self, config):
+  self.config = config
+  def perform_action(self):
+  api_key = self.config.api_key
+  max_attempts = self.config.max_attempts
+  log_level = self.config.log_level
+import unittest
+from config.config import Configuration
+
+class TestConfigurations(unittest.TestCase):
+  def test_configuration_update(self):
+  config_instance = Configuration()
+  config_instance.update_config(api_key="test_api_key", max_attempts=2, log_level="error")
+  self.assertEqual(config_instance.api_key, "test_api_key")
+  self.assertEqual(config_instance.max_attempts, 2)
+  self.assertEqual(config_instance.log_level, "error")
+%pip install -qU \
+  langchain==0.0.292 \
+  openai==0.28.0 \
+  datasets==2.10.1 \
+  pinecone-c
+lient==2.2.4 \
+  tiktoken==0.5.1
+
+import os
+
+from langchain.chat_models import ChatOpenAI
+ 
+os.environ["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY") or ""
+ 
+chat = ChatOpenAI(
+  openai_api_key="",
+  model='gpt-3.5-turbo'
+
+)
+from langchain.schema import (
+  SystemMessage,
+  HumanMessage,
+  AIMessage
+
+)
+ 
+messages = [
+  SystemMessage(content="You are a helpful assistant."),
+  HumanMessage(content="Hi AI, how are you today?"),
+  AIMessage(content="I'm great thank you. How can I help you?"),
+  HumanMessage(content="I'd like to understand string theory.")
+
+]
+res = chat(messages)
+
+res
+print(res.content)
+
+messages.append(res)
+ 
+prompt = HumanMessage(
+  content="Why do physicists believe it can produce a 'unified theory'?"
+
+)
+ 
+messages.append(prompt)
+ 
+res = chat(messages)
+ 
+print(res.content)
+
+messages.append(res)
+ 
+prompt = HumanMessage(
+  content="What is so special about Llama 2?"
+
+)
+ 
+messages.append(prompt)
+ 
+res = chat(messages)
+print(res.content)
+
+messages.append(res)
+ 
+prompt = HumanMessage(
+  content="Can you tell me about the LLMChain in LangChain?"
+
+)
+ 
+messages.append(prompt)
+ 
+res = chat(messages)
+llmchain_information = [
+  "A LLMChain is the most common type of chain. It consists of a PromptTemplate, a model (either an LLM or a ChatModel), and an optional output parser. This chain takes multiple input variables, uses the PromptTemplate to format them into a prompt. It then passes that to the model. Finally, it uses the OutputParser (if provided) to parse the output of the LLM into a final format.",
+  "Chains is an incredibly generic concept which returns to a sequence of modular components (or other chains) combined in a particular way to accomplish a common use case.",
+  "LangChain is a framework for developing applications powered by language models. We believe that the most powerful and differentiated applications will not only call out to a language model via an api, but will also: (1) Be data-aware: connect a language model to other sources of data, (2) Be agentic: Allow a language model to interact with its environment. As such, the LangChain framework is designed with the objective in mind to enable those types of applications."
+
+]
+ 
+source_knowledge = "\n".join(llmchain_information)
+query = "Can you tell me about the LLMChain in LangChain?"
+ 
+augmented_prompt = f"""Using the contexts below, answer the query.
+ 
+Contexts:
+
+{source_knowledge}
+ 
+Query: {query}"""
+
+prompt = HumanMessage(
+  content=augmented_prompt
+
+)
+ 
+messages.append(prompt)
+ 
+res = chat(messages)
+from datasets import load_dataset
+ 
+dataset = load_dataset('fka/awesome-chatgpt-prompts',split="train")
+
+dataset
+train_data = dataset['train']
+
+first_few_rows = dataset['train'][:5]
+ 
+first_few_rows
+ 
+act_column = dataset['train']['act']
+ 
+act_column
+
+import os
+
+import pinecone
+ 
+pinecone.init(
+  api_key=os.environ.get('PINECONE_API_KEY') or '20ea8434-7c1a-4f44-a907-0ab624e39ec0',
+  environment=os.environ.get('PINECONE_ENVIRONMENT') or 'gcp-starter'
+
+)
+
+import time
+ 
+index_name = 'llama-2-rag'
+ 
+if index_name not in pinecone.list_indexes():
+  pinecone.create_index(
+  index_name,
+  dimension=1536,
+  metric='cosine'
+  )
+  while not pinecone.describe_index(index_name).status['ready']:
+  time.sleep(1)
+ 
+index = pinecone.Index(index_name)
+index.describe_index_stats()
+from langchain.embeddings.openai import OpenAIEmbeddings
+ 
+embed_model = OpenAIEmbeddings(model="text-embedding-ada-002")
+texts = [
+  'this is the first chunk of text',
+  'then another second chunk of text is here'
+
+]
+ 
+res = embed_model.embed_documents(texts)
+
+len(res), len(res[0])
+from tqdm.auto import tqdm  
+data = dataset['train'].to_pandas()  
+batch_size = 100
+ 
+for i in tqdm(range(0, len(data), batch_size)):
+  i_end = min(len(data), i + batch_size)
+  batch = data.iloc[i:i_end]
+  ids = [f"row_{index}" for index in batch.index]
+  texts = batch['prompt'].tolist()
+  embeds = embed_model.embed_documents(texts)
+  metadata = [
+  {'prompt': x['prompt'],
+  'act': x['act']} for _, x in batch.iterrows()
+  ]
+  index.upsert(vectors=zip(ids, embeds, metadata))
+
+index.describe_index_stats()
+from langchain.vectorstores import Pinecone
+ 
+text_field = "text"  
+vectorstore = Pinecone(
+  index, embed_model.embed_query, text_field
+
+)
+
+query_prompt = "What is your favorite color?"
+
+vectorstore.similarity_search(query, k=3)
+ 
+top_k = 5
+ 
+results = index.query(vector=query_vector, top_k=top_k)
+
+for match in results["matches"]:
+  id, score, values = match.get("id"), match.get("score"), match.get("values")
+  print(f"ID: {id}, Score: {score}, Values: {values}")
+ 
+from datasets import load_dataset
+ 
+dataset_link = 'jamescalam/llama-2-arxiv-papers'
+ 
+dataset = load_dataset(dataset_link)
+
+dataset 
+from datasets import load_dataset
+ 
+dataset = load_dataset("jamescalam/llama-2-arxiv-papers-chunked")
+from datasets import load_dataset
+ 
+dataset = load_dataset("jamescalam/llama-2-arxiv-papers-chunked",
+  split="train"
+
+)
+ 
+dataset
+dataset[0]
+import os
+
+import pinecone
+ 
+pinecone.init(
+  api_key=os.environ.get('PINECONE_API_KEY') or '20ea8434-7c1a-4f44-a907-0ab624e39ec0',
+  environment=os.environ.get('PINECONE_ENVIRONMENT') or 'gcp-starter'
+
+)
+
+import time
+ 
+index_name = 'llama-2-rag'
+ 
+if index_name not in pinecone.list_indexes():
+  pinecone.create_index(
+  index_name,
+  dimension=1536,
+  metric='cosine'
+  )
+  while not pinecone.describe_index(index_name).status['ready']:
+  time.sleep(1)
+ 
+index = pinecone.Index(index_name)
+index.describe_index_stats()
+from langchain.embeddings.openai import OpenAIEmbeddings
+ 
+embed_model = OpenAIEmbeddings(model="text-embedding-ada-002")
+texts = [
+  'this is the first chunk of text',
+  'then another second chunk of text is here'
+
+]
+ 
+res = embed_model.embed_documents(texts)
+
+len(res), len(res[0])
+from tqdm.auto import tqdm
+
+import pandas as pd
+ 
+data = dataset.to_pandas()
+
+batch_size = 100
+for i in tqdm(range(0, len(data), batch_size)):
+  i_end = min(len(data), i + batch_size)
+  batch = data.iloc[i:i_end]
+from datasets import load_dataset
+
+import  
+dataset = load_dataset(
+  "Rtian/DebugBench",
+  split="test"
+
+)
+ 
+dataset
+dataset [0]
+import pinecone
+ 
+pinecone.init(
+  api_key=os.environ.get('PINECONE_API_KEY') or '3306f52a-a64a-46dd-b81a-0d073fb5a072',
+  environment=os.environ.get('PINECONE_ENVIRONMENT') or 'gcp-starter'
+
+)
+import time
+ 
+index_name = 'Ritina-Debug'
+ 
+if index_name not in pinecone.list_indexes():
+  pinecone.create_index(
+  index_name,
+  dimension=1536,
+  metric='cosine'
+  )
+  while not pinecone.describe_index(index_name).status['ready']:
+  time.sleep(1)
+ 
+index = pinecone.Index(index_name)
+
+index.describe_index_stats()
+from datasets import load_dataset
+
+import pandas as pd
+ 
+dataset = load_dataset(
+  "Rtian/DebugBench",
+  split="test"
+
+)
+ 
+dataset
+from langchain.document_loaders import ReadTheDocsLoader
+
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+ 
+chunk_size = 300
+
+chunk_overlap = 50
+
+text_splitter = RecursiveCharacterTextSplitter(
+  separators=["\n\n", "\n", " ", ""],
+  chunk_size=chunk_size,
+  chunk_overlap=chunk_overlap,
+  length_function=len,
+
+)
+ 
+sample_section = next(iter(dataset))
+
+chunks = text_splitter.create_documents(
+  texts=[sample_section["question"]],   metadatas=[{"solution": sample_section["solution"]}])
+
+num_chunks = len(chunks)
+
+print(f"{num_chunks} chunks")
+
+print (chunks)
+
+from functools import partial
+
+def chunk_section(section, chunk_size, chunk_overlap):
+  text_splitter = RecursiveCharacterTextSplitter(
+  separators=["\n\n", "\n", " ", ""],
+  chunk_size=chunk_size,
+  chunk_overlap=chunk_overlap,
+  length_function=len)
+  chunks = text_splitter.create_documents(
+  texts=[sample_section["question"]],   metadatas=[{"solution": sample_section["solution"]}])
+  return {
+  "question_chunk": [chunk.page_content for chunk in chunks],
+  "solution_chunk": [chunk.metadata["solution"] for chunk in chunks]
+  }
+ 
+chunks_ds = dataset.map(partial(
+  chunk_section,   chunk_size=300,   chunk_overlap=40))
+ 
+num_chunks = len(chunks_ds)
+ 
+splitted = chunks_ds.map(lambda data: {"question": data["question"], "solution": data["solution"]}, batched=True)
+ 
+splitted = splitted.remove_columns(list(set(splitted.column_names) - {"question", "solution"}))
+
+size = len(splitted)
+
+print(f"{size} chunks")
+
+print(splitted[0])
+
+df = pd.DataFrame(splitted)
+ 
+df.to_json('data.jsonl', orient='records', lines=True)
+from datasets import load_dataset
+
+import pandas as pd
+ 
+dataset = load_dataset(
+  "Rtian/DebugBench",
+  split="test"
+
+)
+ 
+dataset
+from langchain.document_loaders import ReadTheDocsLoader
+
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+ 
+chunk_size = 300
+
+chunk_overlap = 50
+
+text_splitter = RecursiveCharacterTextSplitter(
+  separators=["\n\n", "\n", " ", ""],
+  chunk_size=chunk_size,
+  chunk_overlap=chunk_overlap,
+  length_function=len,
+
+)
+ 
+sample_section = next(iter(dataset))
+
+chunks = text_splitter.create_documents(
+  texts=[sample_section["question"]],   metadatas=[{"solution": sample_section["solution"]}])
+
+num_chunks = len(chunks)
+
+print(f"{num_chunks} chunks")
+
+print (chunks)
+
+from functools import partial
+
+def chunk_section(section, chunk_size, chunk_overlap):
+  text_splitter = RecursiveCharacterTextSplitter(
+  separators=["\n\n", "\n", " ", ""],
+  chunk_size=chunk_size,
+  chunk_overlap=chunk_overlap,
+  length_function=len)
+  chunks = text_splitter.create_documents(
+  texts=[sample_section["question"]],   metadatas=[{"solution": sample_section["solution"]}])
+  return {
+  "question_chunk": [chunk.page_content for chunk in chunks],
+  "solution_chunk": [chunk.metadata["solution"] for chunk in chunks]
+  }
+ 
+chunks_ds = dataset.map(partial(
+  chunk_section,   chunk_size=300,   chunk_overlap=40))
+ 
+num_chunks = len(chunks_ds)
+ 
+splitted = chunks_ds.map(lambda data: {"question": data["question"], "solution": data["solution"]}, batched=True)
+ 
+splitted = splitted.remove_columns(list(set(splitted.column_names) - {"question", "solution"}))
+
+size = len(splitted)
+
+print(f"{size} chunks")
+
+print(splitted[0])
+
+df = pd.DataFrame(splitted)
+ 
+df.to_json('data.jsonl', orient='records', lines=True)
+import os
+
+from langchain.embeddings import OpenAIEmbeddings
+
+from langchain.embeddings.huggingface import HuggingFaceEmbeddings
+
+import numpy as np
+ 
+class EmbedChunks:
+  def __init__(self):
+  self.embedding_model = OpenAIEmbeddings(
+  model="text-embedding-ada-002",
+  openai_api_base=os.getenv("OPENAI_API_BASE"),
+  openai_api_key=os.getenv("OPENAI_API_KEY"))
+  def process_batch(self, batch):
+  embeddings = self.embedding_model.embed_documents(batch["question"])
+  return pd.DataFrame({"question": batch["question"], "solution": batch["solution"], "embeddings": embeddings})
+from dotenv import load_dotenv
+
+import os
+
+load_dotenv()
+
+from datasets import load_dataset
+ 
+openai_api_key = os.getenv("OPENAI_API_KEY")
+
+from langchain.embeddings.openai import OpenAIEmbeddings
+
+import pandas as pd
+
+data_path = "../dataset/data.jsonl"
+ 
+df = pd.read_json(data_path, lines=True)
+ 
+embedder = EmbedChunks()
+ 
+batch_size = 100
+ 
+batches = [df.iloc[i:i+batch_size] for i in range(0, len(df), batch_size)]
+ 
+processed_batches = [embedder.process_batch(batch) for batch in batches]
+ 
+embeded_chunk = pd.concat(processed_batches, ignore_index=True)
+ 
+print(embeded_chunk.iloc[0])
+ 
+from tqdm import tqdm
+
+import psycopg2
+ 
+class StoreResults:
+  def __call__(self, batch):
+  with psycopg.connect(os.environ["DB_CONNECTION_STRING"]) as conn:
+  register_vector(conn)
+  with conn.cursor() as cur:
+  for question, solution, embeded_chunk in zip(batch["question"], batch["solution"], batch["embeded_chunk"]):
+  cur.execute("INSERT INTO document (question, solution, embeded_chunk) VALUES (%s, %s, %s)",
+  (question, solution, embeded_chunk,))
+  return {}
+ 
+store_results = StoreResults()  
+for _, row in tqdm(embeded_chunk.iterrows(), total=len(embeded_chunk), desc="Processing"):   StoreResults()(row)
+
+embedded_chunks.map_batches(
+  StoreResults,
+  batch_size=128,
+  num_cpus=1,
+  compute=ActorPoolStrategy(size=28),
+
+).count()
+import os
+
+from langchain.embeddings import OpenAIEmbeddings
+
+from langchain.embeddings.huggingface import HuggingFaceEmbeddings
+
+import numpy as np
+ 
+class EmbedChunks:
+  def __init__(self):
+  self.embedding_model = OpenAIEmbeddings(
+  model="text-embedding-ada-002",
+  openai_api_base=os.getenv("OPENAI_API_BASE"),
+  openai_api_key=os.getenv("OPENAI_API_KEY"))
+  def process_batch(self, batch):
+  embeddings = self.embedding_model.embed_documents(batch["question"])
+  return pd.DataFrame({"question": batch["question"], "solution": batch["solution"], "embeddings": embeddings})
+from dotenv import load_dotenv
+
+import os
+
+load_dotenv()
+
+from datasets import load_dataset
+ 
+openai_api_key = os.getenv("OPENAI_API_KEY")
+
+from langchain.embeddings.openai import OpenAIEmbeddings
+
+import pandas as pd
+
+data_path = "../dataset/data.jsonl"
+ 
+df = pd.read_json(data_path, lines=True)
+ 
+embedder = EmbedChunks()
+ 
+batch_size = 100
+ 
+batches = [df.iloc[i:i+batch_size] for i in range(0, len(df), batch_size)]
+ 
+processed_batches = [embedder.process_batch(batch) for batch in batches]
+ 
+embeded_chunk = pd.concat(processed_batches, ignore_index=True)
+ 
+print(embeded_chunk.iloc[0])
+ 
+from tqdm import tqdm
+
+import psycopg2
+ 
+class StoreResults:
+  def __call__(self, batch):
+  with psycopg.connect(os.environ["DB_CONNECTION_STRING"]) as conn:
+  register_vector(conn)
+  with conn.cursor() as cur:
+  for question, solution, embeded_chunk in zip(batch["question"], batch["solution"], batch["embeded_chunk"]):
+  cur.execute("INSERT INTO document (question, solution, embeded_chunk) VALUES (%s, %s, %s)",
+  (question, solution, embeded_chunk,))
+  return {}
+ 
+store_results = StoreResults()  
+for _, row in tqdm(embeded_chunk.iterrows(), total=len(embeded_chunk), desc="Processing"):   StoreResults()(row)
+
+embedded_chunks.map_batches(
+  StoreResults,
+  batch_size=128,
+  num_cpus=1,
+  compute=ActorPoolStrategy(size=28),
+
+).count()
+from langchain.embeddings.openai import OpenAIEmbeddings
+
+from dotenv import load_dotenv
+
+import os
+
+load_dotenv()
+
+embed_model = OpenAIEmbeddings(model="text-embedding-ada-002")
+query = ['Put your prompt here']
+
+res = embed_model.embed_documents(query)
+
+len(res), len(res[0])
+
+num_chunks = 5
+
+with psycopg.connect(os.environ["DB_CONNECTION_STRING"]) as conn:
+  register_vector(conn)
+  with conn.cursor() as cur:
+  cur.execute("SELECT * FROM document ORDER BY embedding <-> %s LIMIT %s", (res, num_chunks))
+  rows = cur.fetchall()
+  context = [{"question": row[1]} for row in rows]
+  sources = [row[2] for row in rows]
+ 
+def semantic_search(query, embedding_model, k):
+  embedding = np.array(embedding_model.embed_query(query))
+  with psycopg.connect(os.environ["DB_CONNECTION_STRING"]) as conn:
+  register_vector(conn)
+  with conn.cursor() as cur:
+  cur.execute("SELECT * FROM document ORDER BY embedding <=> %s LIMIT %s", (embedding, k),)
+  rows = cur.fetchall()
+  semantic_context = [{"id": row[0], "question": row[1], "solution": row[2]} for row in rows]
+  return semantic_context
+from langchain.embeddings.openai import OpenAIEmbeddings
+
+from dotenv import load_dotenv
+
+import os
+
+load_dotenv()
+
+embed_model = OpenAIEmbeddings(model="text-embedding-ada-002")
+query = ['Put your prompt here']
+
+res = embed_model.embed_documents(query)
+
+len(res), len(res[0])
+
+num_chunks = 5
+
+with psycopg.connect(os.environ["DB_CONNECTION_STRING"]) as conn:
+  register_vector(conn)
+  with conn.cursor() as cur:
+  cur.execute("SELECT * FROM document ORDER BY embedding <-> %s LIMIT %s", (res, num_chunks))
+  rows = cur.fetchall()
+  context = [{"question": row[1]} for row in rows]
+  sources = [row[2] for row in rows]
+ 
+def semantic_search(query, embedding_model, k):
+  embedding = np.array(embedding_model.embed_query(query))
+  with psycopg.connect(os.environ["DB_CONNECTION_STRING"]) as conn:
+  register_vector(conn)
+  with conn.cursor() as cur:
+  cur.execute("SELECT * FROM document ORDER BY embedding <=> %s LIMIT %s", (embedding, k),)
+  rows = cur.fetchall()
+  semantic_context = [{"id": row[0], "question": row[1], "solution": row[2]} for row in rows]
+  return semantic_context
+import os
+
+import json
+
+import sys
+
+from openai import OpenAI
+
+from math import exp
+
+import numpy as np
+
+from utility.env_manager import get_env_manager
+
+from evaluation._data_generation import get_completion
+
+from evaluation._data_generation import file_reader
+ 
+env_manager = get_env_manager()
+ 
+client = OpenAI(api_key=env_manager['openai_keys']['OPENAI_API_KEY'])
+ 
+def evaluate(prompt: str, user_message: str, context: str, use_test_data: bool = False) -> str:
+  """Return the classification of the hallucination.
+  @parameter prompt: the prompt to be completed.
+  @parameter user_message: the user message to be classified.
+  @parameter context: the context of the user message.
+  @returns classification: the classification of the hallucination.
+  """
+  num_test_output = str(10)
+  API_RESPONSE = get_completion(
+  [
+  {
+  "role": "system",   "content": prompt.replace("{Context}", context).replace("{Question}", user_message)
+  }
+  ],
+  model=env_manager['vectordb_keys']['VECTORDB_MODEL'],
+  logprobs=True,
+  top_logprobs=1,
+  )
+  system_msg = str(API_RESPONSE.choices[0].message.content)
+  for i, logprob in enumerate(API_RESPONSE.choices[0].logprobs.content[0].top_logprobs, start=1):
+  output = f'\nhas_sufficient_context_for_answer: {system_msg}, \nlogprobs: {logprob.logprob}, \naccuracy: {np.round(np.exp(logprob.logprob)*100,2)}%\n'
+  print(output)
+  if system_msg == 'true' and np.round(np.exp(logprob.logprob)*100,2) >= 95.00:
+  classification = 'true'
+  elif system_msg == 'false' and np.round(np.exp(logprob.logprob)*100,2) >= 95.00:
+  classification = 'false'
+  else:
+  classification = 'false'
+  return classification
+ 
+if __name__ == "__main__":
+  context_message = file_reader("prompts/context.txt")
+  prompt_message = file_reader("prompts/generic-evaluation-prompt.txt")
+  context = str(context_message)
+  prompt = str(prompt_message)
+  user_message = str(input("question: "))
+  print(evaluate(prompt, user_message, context))
+'center', margin:"auto" }}>  <ChatContainer >   <MessageList   scrollBehavior="smooth"   typingIndicator={isTyping ? <TypingIndicator content="ChatGPT is typing" /> : null}  >  {messages.map((message, i) => {  return <Message style={{textAlign:'left'}} key={i} model={message} />  })}  </MessageList>  <MessageInput  onSend={handleSend}   style={{ textAlign:"left" }}   placeholder="Type message here"   />   </ChatContainer>  </MainContainer>  </div>  </div>  )
+} 
+export default Home
+2024-01-19 19:53:09,268:logger:An unexpected error occurred: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-pW9Yf***************************************qF8E. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+2024-01-19 19:53:09,360:logger:An unexpected error occurred: Expected a Runnable, callable or dict.Instead got an unsupported type: <class 'NoneType'>
+2024-01-19 19:53:09,423:logger:An unexpected error occurred: Expected a Runnable, callable or dict.Instead got an unsupported type: <class 'NoneType'>
+2024-01-19 19:53:09,424:logger:An unexpected error occurred: 'NoneType' object has no attribute 'invoke'
+2024-01-19 19:55:45,116:logger:An unexpected error occurred: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-pW9Yf***************************************qF8E. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+2024-01-19 19:55:45,211:logger:An unexpected error occurred: Expected a Runnable, callable or dict.Instead got an unsupported type: <class 'NoneType'>
+2024-01-19 19:55:45,270:logger:An unexpected error occurred: Expected a Runnable, callable or dict.Instead got an unsupported type: <class 'NoneType'>
+2024-01-19 19:55:45,270:logger:An unexpected error occurred: 'NoneType' object has no attribute 'invoke'
+2024-01-19 19:58:24,235:logger:An unexpected error occurred: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-pW9Yf***************************************qF8E. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+2024-01-19 19:58:35,455:logger:An unexpected error occurred: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-pW9Yf***************************************qF8E. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+2024-01-19 19:58:46,019:logger:An unexpected error occurred: Expected a Runnable, callable or dict.Instead got an unsupported type: <class 'NoneType'>
+2024-01-19 20:03:42,437:logger:An unexpected error occurred: string indices must be integers, not 'str'
+2024-01-19 20:29:51,708:logger:An unexpected error occurred: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-Hrgzs***************************************WlJy. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+2024-01-19 20:29:51,794:logger:An unexpected error occurred: Expected a Runnable, callable or dict.Instead got an unsupported type: <class 'NoneType'>
+2024-01-19 20:29:51,845:logger:An unexpected error occurred: Expected a Runnable, callable or dict.Instead got an unsupported type: <class 'NoneType'>
+2024-01-19 20:29:51,845:logger:An unexpected error occurred: 'NoneType' object has no attribute 'invoke'
+2024-01-19 20:31:23,416:logger:An unexpected error occurred: OpenAI API key not found! Seems like your trying to use Ragas metrics with OpenAI endpoints. Please set 'OPENAI_API_KEY' environment variable
+2024-01-19 20:35:59,765:logger:An unexpected error occurred: OpenAI API key not found! Seems like your trying to use Ragas metrics with OpenAI endpoints. Please set 'OPENAI_API_KEY' environment variable
+2024-01-19 19:53:09,268:logger:An unexpected error occurred: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-pW9Yf***************************************qF8E. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+2024-01-19 19:53:09,360:logger:An unexpected error occurred: Expected a Runnable, callable or dict.Instead got an unsupported type: <class 'NoneType'>
+2024-01-19 19:53:09,423:logger:An unexpected error occurred: Expected a Runnable, callable or dict.Instead got an unsupported type: <class 'NoneType'>
+2024-01-19 19:53:09,424:logger:An unexpected error occurred: 'NoneType' object has no attribute 'invoke'
+2024-01-19 19:55:45,116:logger:An unexpected error occurred: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-pW9Yf***************************************qF8E. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+2024-01-19 19:55:45,211:logger:An unexpected error occurred: Expected a Runnable, callable or dict.Instead got an unsupported type: <class 'NoneType'>
+2024-01-19 19:55:45,270:logger:An unexpected error occurred: Expected a Runnable, callable or dict.Instead got an unsupported type: <class 'NoneType'>
+2024-01-19 19:55:45,270:logger:An unexpected error occurred: 'NoneType' object has no attribute 'invoke'
+2024-01-19 19:58:24,235:logger:An unexpected error occurred: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-pW9Yf***************************************qF8E. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+2024-01-19 19:58:35,455:logger:An unexpected error occurred: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-pW9Yf***************************************qF8E. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+2024-01-19 19:58:46,019:logger:An unexpected error occurred: Expected a Runnable, callable or dict.Instead got an unsupported type: <class 'NoneType'>
+2024-01-19 20:03:42,437:logger:An unexpected error occurred: string indices must be integers, not 'str'
+2024-01-19 20:29:51,708:logger:An unexpected error occurred: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-Hrgzs***************************************WlJy. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+2024-01-19 20:29:51,794:logger:An unexpected error occurred: Expected a Runnable, callable or dict.Instead got an unsupported type: <class 'NoneType'>
+2024-01-19 20:29:51,845:logger:An unexpected error occurred: Expected a Runnable, callable or dict.Instead got an unsupported type: <class 'NoneType'>
+2024-01-19 20:29:51,845:logger:An unexpected error occurred: 'NoneType' object has no attribute 'invoke'
+2024-01-19 20:31:23,416:logger:An unexpected error occurred: OpenAI API key not found! Seems like your trying to use Ragas metrics with OpenAI endpoints. Please set 'OPENAI_API_KEY' environment variable
+2024-01-19 20:35:59,765:logger:An unexpected error occurred: OpenAI API key not found! Seems like your trying to use Ragas metrics with OpenAI endpoints. Please set 'OPENAI_API_KEY' environment variable
+import os
+from dotenv import load_dotenv
+load_dotenv(".env")
+
+class OPENAI_KEYS:
+  def __init__(self):
+  self.OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '') or None
+ 
+class VECTORDB_KEYS:
+  def __init__(self):
+  self.VECTORDB_API_KEY = os.environ.get('VECTORDB_API_KEY', '') or None
+  self.VECTORDB_URL = os.environ.get('VECTORDB_URL', '') or None
+  self.VECTORDB_MODEL = os.environ.get('VECTORDB_MODEL', '') or None
+ 
+def _get_openai_keys() -> OPENAI_KEYS:
+  return OPENAI_KEYS()
+ 
+def _get_vectordb_keys() -> VECTORDB_KEYS:
+  return VECTORDB_KEYS()
+ 
+def get_env_manager() -> dict:
+  openai_keys = _get_openai_keys().__dict__
+  vectordb_keys = _get_vectordb_keys().__dict__
+  return {
+  'openai_keys': openai_keys,
+  'vectordb_keys': vectordb_keys,
+  }
+from langchain.chat_models import ChatOpenAI
+from langchain.agents import AgentType, initialize_agent
+from langchain.schema import SystemMessage
+
+from tools import generate_prompts_with_evaluation, get_prompt_ranking_monte_carol_and_elo_rating, generate_evaluation_data
+
+from rag_utils import create_retriever, data_loader
+
+with open("system_message.txt", "r") as file:
+  system_message = file.read()
+
+chunks = data_loader
+retriever =  create_retriever(chunks)  
+def get_agent_executor():
+  agent_kwargs = {
+  "system_message": SystemMessage(content=system_message),
+  "retriever": retriever   }
+  analyst_agent_openai = initialize_agent(
+  llm=ChatOpenAI(temperature=0.1, model = 'gpt-4-1106-preview'),
+  agent=AgentType.OPENAI_FUNCTIONS,
+  tools=[generate_prompts_with_evaluation, get_prompt_ranking_monte_carol_and_elo_rating, generate_evaluation_data],
+  agent_kwargs=agent_kwargs,
+  verbose=True,
+  max_iterations=20,
+  early_stopping_method='generate'
+  )
+  return analyst_agent_openai
+import json
+import os
+
+from langchain.document_loaders import TextLoader
+from langchain.text_splitter import CharacterTextSplitter  
+from langchain.chat_models import ChatOpenAI
+from langchain.prompts import ChatPromptTemplate
+from langchain.schema.runnable import RunnablePassthrough
+from langchain.schema.output_parser import StrOutputParser
+from langchain.embeddings import OpenAIEmbeddings
+from langchain.vectorstores import Weaviate
+ 
+from datasets import Dataset
+import random
+
+import weaviate
+from dotenv import load_dotenv,find_dotenv
+from weaviate.embedded import EmbeddedOptions
+
+from ragas import evaluate
+from ragas.metrics import ( faithfulness, answer_relevancy, context_recall, context_precision)
+ 
+load_dotenv(find_dotenv())
+ 
+def data_loader(file_path= '../prompts/challenge_doc.txt', chunk_size=500, chunk_overlap=50):
+  try:
+  loader = TextLoader(file_path)
+  documents = loader.load()
+  text_splitter = CharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+  chunks = text_splitter.split_documents(documents)
+  print("data loaded to vector database successfully")
+  return chunks
+  except Exception as e:
+  print(f"An unexpected error occurred: {e}")
+  return None  
+def create_langchain_pipeline(retriever, template, temperature=0):
+  try:
+  llm = ChatOpenAI(model_name="gpt-3.5-turbo", temperature=temperature)
+  prompt = ChatPromptTemplate.from_template(template)
+  rag_chain = (
+  {"context": retriever,  "question": RunnablePassthrough()}   | prompt   | llm
+  | StrOutputParser()   )
+  print("langchain with rag pipeline created successfully.")
+  return rag_chain
+  except Exception as e:
+  print(f"An unexpected error occurred: {e}")
+  return None  
+def generate_testcase_and_context(questions, ground_truths, retriever, rag_chain):
+  try:
+  answers = []
+  contexts = []
+  for query in questions:
+  answers.append(rag_chain.invoke(query))
+  contexts.append([docs.page_content for docs in retriever.get_relevant_documents(query)])
+  data = {
+  "question": questions,   "answer": answers,   "contexts": contexts,   "ground_truths": ground_truths   }
+  dataset = Dataset.from_dict(data)   print("automatic evaluation data generated succesfully.")
+  return  dataset
+  except Exception as e:
+  print(f"An unexpected error occurred: {e}")
+  return None  
+def generate_automatic_questions(query, retriever):
+  docs = retriever.get_relevant_documents(query)
+  return docs
+ 
+def create_retriever(chunks):
+  try:
+  load_dotenv(find_dotenv())
+  client = weaviate.Client(
+  embedded_options = EmbeddedOptions()
+  )
+  vectorstore = Weaviate.from_documents(
+  client = client,   documents = chunks,
+  embedding = OpenAIEmbeddings(),
+  by_text = False
+  )
+  retriever = vectorstore.as_retriever()
+  print("create retriver  succesfully.")
+  return retriever
+  except Exception as e:
+  print(f"An unexpected error occurred: {e}")
+  return None  
+def monte_carlo_eval(prompt):
+  try:
+  response_types = ['highly relevant', 'somewhat relevant', 'irrelevant']
+  scores = {'highly relevant': 3, 'somewhat relevant': 2, 'irrelevant': 1}
+  trials = 100
+  total_score = 0
+  for _ in range(trials):
+  response = random.choice(response_types)
+  total_score += scores[response]
+  return total_score / trials
+  except Exception as e:
+  print(f"An unexpected error occurred: {e}")
+  return None  
+def elo_eval(prompt, base_rating=1500):
+  try:
+  outcomes = ['win', 'loss', 'draw']
+  outcome = random.choice(outcomes)
+  K = 30   R_base = 10 ** (base_rating / 400)
+  R_opponent = 10 ** (1600 / 400)   expected_score = R_base / (R_base + R_opponent)
+  actual_score = {'win': 1, 'loss': 0, 'draw': 0.5}[outcome]
+  new_rating = base_rating + K * (actual_score - expected_score)
+  return new_rating
+  except Exception as e:
+  print(f"An unexpected error occurred: {e}")
+  return None  
+def elo_ratings_func(prompts, elo_ratings, K=30, opponent_rating=1600):
+  """
+  Update Elo ratings for a list of prompts based on simulated outcomes.
+  Parameters:
+  prompts (list): List of prompts to be evaluated.
+  elo_ratings (dict): Current Elo ratings for each prompt.
+  K (int): Maximum change in rating.
+  opponent_rating (int): Fixed rating of the opponent for simulation.
+  Returns:
+  dict: Updated Elo ratings.
+  """
+  try:
+  for prompt in prompts:
+  outcome = random.choice(['win', 'loss', 'draw'])
+  actual_score = {'win': 1, 'loss': 0, 'draw': 0.5}[outcome]
+  R_base = 10 ** (elo_ratings[prompt] / 400)
+  R_opponent = 10 ** (opponent_rating / 400)
+  expected_score = R_base / (R_base + R_opponent)
+  elo_ratings[prompt] += K * (actual_score - expected_score)
+  return elo_ratings
+  except Exception as e:
+  print(f"An unexpected error occurred: {e}")
+  return None  
+def evaluate_prompt(prompts):
+  try:
+  evaluations = []
+  for idx, prompt in enumerate(prompts):
+  evaluations.append({   'prompt': prompt,
+  'Monte Carlo Evaluation': monte_carlo_eval(prompt),
+  'Elo Rating Evaluation': elo_eval(prompt)
+  })
+  return evaluations
+  except Exception as e:
+  print(f"An unexpected error occurred: {e}")
+  return None  
+def load_file(file_path):
+  try:
+  with open(file_path, 'r') as file:
+  file_contents = file.read()   return file_contents
+  except Exception as e:
+  print(f"An unexpected error occurred: {e}")
+  return None  
+def ragas_evaulation(response):
+  try:
+  result = evaluate(
+  dataset = response,   metrics=[
+  context_precision,
+  context_recall,
+  faithfulness,
+  answer_relevancy,
+  ],
+  )
+  df = result.to_pandas()
+  values = df.values.tolist()
+  for i in range(len(values)):
+  values[i][2] = values[i][2].tolist()
+  values[i][3] = values[i][3].tolist()
+  columns = df.keys().tolist()
+  response = [columns] + values
+  return response
+  except Exception as e:
+  print(f"An unexpected error occurred hola temosa: {e}")
+  return None  
+def get_generated_prompt_with_evaulation(question):
+  try:
+  chunks = data_loader()
+  retriever = create_retriever(chunks)
+  prompt_template = load_file('../prompts/prompt-generation-prompt.txt')
+  evaluation_tempate = load_file('../prompts/evaluation-data-generation.txt')
+  prompt_rag_chain = create_langchain_pipeline(retriever, prompt_template)
+  evaulation_rag_chain = create_langchain_pipeline(retriever, evaluation_tempate, temperature=0.2)
+  generated_prompts = prompt_rag_chain.invoke(question)
+  prompt_list  = json.loads(generated_prompts)
+  questions = [item['prompt'] for item in prompt_list]
+  ground_truths = [[item['ground_truth']] for item in prompt_list]
+  response = generate_testcase_and_context(questions, ground_truths, retriever, evaulation_rag_chain)
+  return ragas_evaulation(response)
+  except Exception as e:
+  print(f"An unexpected error occurred: {e}")
+  return None
+/*   max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem;
+  text-align: center;
+}
+
+.logo {
+  height: 6em;
+  padding: 1.5em;
+  will-change: filter;
+  transition: filter 300ms;
+}
+.logo:hover {
+  filter: drop-shadow(0 0 2em }
+.logo.react:hover {
+  filter: drop-shadow(0 0 2em }
+
+@keyframes logo-spin {
+  from {
+  transform: rotate(0deg);
+  }
+  to {
+  transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  a:nth-of-type(2) .logo {
+  animation: logo-spin infinite 20s linear;
+  }
+}
+
+.card {
+  padding: 2em;
+}
+
+.read-the-docs {
+  color: } */
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem;
+  text-align: center;
+}
+body{
+  background:white;
+}
+
+.logo {
+  height: 6em;
+  padding: 1.5em;
+  will-change: filter;
+  transition: filter 300ms;
+}
+.logo:hover {
+  filter: drop-shadow(0 0 2em }
+.logo.react:hover {
+  filter: drop-shadow(0 0 2em }
+
+@keyframes logo-spin {
+  from {
+  transform: rotate(0deg);
+  }
+  to {
+  transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  a:nth-of-type(2) .logo {
+  animation: logo-spin infinite 20s linear;
+  }
+}
+
+.card {
+  padding: 2em;
+}
+
+.read-the-docs {
+  color: }
+import os
+
+import sys
+
+sys.path.append(os.path.abspath(os.path.join('../utility')))
+from rag_utils import  get_generated_prompt_with_evaulation
+df = get_generated_prompt_with_evaulation("generate me prompts which help me understand the challenge document")
+df
+df.columns
+import openai  
+from sentence_transformers import SentenceTransformer  
+import numpy as np
+
+from scipy.spatial.distance import cosine
+ 
+prompts = ["Prompt 1", "Prompt 2", ...]
+ 
+prompt_scores = {prompt: 0 for prompt in prompts}
+
+prompt_wins = {prompt: 0 for prompt in prompts}
+ 
+def compare_prompts(prompt1, prompt2):
+  embedder = SentenceTransformer('paraphrase-distilroberta-base-v2')   scores = embedder.encode([prompt1, prompt2])
+  similarity = 1 - cosine(scores[0], scores[1])   return similarity
+ 
+for _ in range(num_iterations):
+  prompt1, prompt2 = select_prompts_randomly(prompts, prompt_scores)
+  comparison_result = compare_prompts(prompt1, prompt2)
+  update_scores_and_wins(prompt1, prompt2, comparison_result, prompt_scores, prompt_wins)
+ 
+ranked_prompts = sort_prompts(prompt_scores)  
+print("Ranked Prompts:", ranked_prompts)
+'center',
+  alignItems: 'center',
+  }}>
+  <h1 style={{ color: 'white', fontFamily: 'Arial, sans-serif', marginBottom: '60px' }}>Promptly Tech</h1>
+  <InputComponent
+  inputText={inputText}
+  setInputText={setInputText}
+  handleSubmit={handleSubmit}
+  />
+  <br />
+  <OutputComponent result={data} />
+  </div>
+  );
+};
+
+export default App;
+.App {
+  text-align: center;
+}
+
+.App-logo {
+  height: 40vmin;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .App-logo {
+  animation: App-logo-spin infinite 20s linear;
+  }
+}
+
+.App-header {
+  background-color:   min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(10px + 2vmin);
+  color: white;
+}
+
+.App-link {
+  color: }
+
+@keyframes App-logo-spin {
+  from {
+  transform: rotate(0deg);
+  }
+  to {
+  transform: rotate(360deg);
+  }
+}
+import React from 'react';
+import ReactDOM from 'react-dom';
+import './index.css';
+import App from './App';
+import reportWebVitals from './reportWebVitals';
+
+ReactDOM.render(
+  <React.StrictMode>
+  <App />
+  </React.StrictMode>,
+  document.getElementById('root')
+);
+
+// If you want to start measuring performance in your app, pass a function
+// to log results (for example: reportWebVitals(console.log))
+// or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals
+reportWebVitals();
+import os
+
+OPENAI_API_KEY=os.getenv("OPENAI_API_KEY")  
+import os
+
+from langchain.chat_models import ChatOpenAI
+ 
+OPENAI_API_KEY= os.environ["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY")  
+chat = ChatOpenAI(
+  openai_api_key=OPENAI_API_KEY,
+  model='gpt-3.5-turbo'
+
+)
+ 
+from langchain.schema import (
+  SystemMessage,
+  HumanMessage,
+  AIMessage
+
+)
+ 
+messages = [
+  SystemMessage(content="You are a helpful assistant."),
+  HumanMessage(content="Hi AI, how are you today?"),
+  AIMessage(content="I'm great thank you. How can I help you?"),
+  HumanMessage(content="I'd like to understand string theory.")
+
+]
+ 
+res = chat(messages)
+
+res
+print(res.content)
+
+messages.append(res)
+ 
+prompt = HumanMessage(
+  content="Why do physicists believe it can produce a 'unified theory'?"
+
+)
+ 
+messages.append(prompt)
+ 
+res = chat(messages)
+ 
+print(res.content)
+ 
+messages.append(res)
+ 
+prompt = HumanMessage(
+  content="What is so special about Llama 2?"
+
+)
+ 
+messages.append(prompt)
+ 
+res = chat(messages)
+print(res.content)
+ 
+messages.append(res)
+ 
+prompt = HumanMessage(
+  content="Can you tell me about the LLMChain in LangChain?"
+
+)
+ 
+messages.append(prompt)
+ 
+res = chat(messages)
+print(res.content)
+llmchain_information = [
+  "A LLMChain is the most common type of chain. It consists of a PromptTemplate, a model (either an LLM or a ChatModel), and an optional output parser. This chain takes multiple input variables, uses the PromptTemplate to format them into a prompt. It then passes that to the model. Finally, it uses the OutputParser (if provided) to parse the output of the LLM into a final format.",
+  "Chains is an incredibly generic concept which returns to a sequence of modular components (or other chains) combined in a particular way to accomplish a common use case.",
+  "LangChain is a framework for developing applications powered by language models. We believe that the most powerful and differentiated applications will not only call out to a language model via an api, but will also: (1) Be data-aware: connect a language model to other sources of data, (2) Be agentic: Allow a language model to interact with its environment. As such, the LangChain framework is designed with the objective in mind to enable those types of applications."
+
+]
+ 
+source_knowledge = "\n".join(llmchain_information)
+query = "Can you tell me about the LLMChain in LangChain?"
+ 
+augmented_prompt = f"""Using the contexts below, answer the query.
+ 
+Contexts:
+
+{source_knowledge}
+ 
+Query: {query}"""
+
+prompt = HumanMessage(
+  content=augmented_prompt
+
+)
+ 
+messages.append(prompt)
+ 
+res = chat(messages)
+print(res.content)
+ 
+from datasets import load_dataset
+ 
+dataset = load_dataset(
+  "jamescalam/langchain-docs",
+  split="train"
+
+)
+ 
+dataset
+dataset[0]
+ 
+import os
+
+import pinecone
+ 
+pinecone.init(
+  api_key=os.environ.get('PINECONE_API_KEY') or 'PINECONE_API_KEY',
+  environment=os.environ.get('PINECONE_ENVIRONMENT') or 'gcp-starter'
+
+)
+ 
+import time
+ 
+index_name = "langchain"
+ 
+if index_name not in pinecone.list_indexes():
+  pinecone.create_index(
+  index_name,
+  dimension=1536,
+  metric='cosine'
+  )
+  while not pinecone.describe_index(index_name).status['ready']:
+  time.sleep(1)
+ 
+index = pinecone.Index(index_name)
+index.describe_index_stats()
+from langchain.embeddings.openai import OpenAIEmbeddings
+ 
+embed_model = OpenAIEmbeddings(model="text-embedding-ada-002")
+texts = [
+  'this is the first chunk of text',
+  'then another second chunk of text is here'
+
+]
+ 
+res = embed_model.embed_documents(texts)
+
+len(res), len(res[0])
+ 
+from tqdm.auto import tqdm  
+data = dataset.to_pandas()  
+batch_size = 100
+ 
+for i in tqdm(range(0, len(data), batch_size)):
+  i_end = min(len(data), i+batch_size)
+  batch = data.iloc[i:i_end]
+  ids = [f"{x['id']}" for _, x in batch.iterrows()]
+  texts = [x['text'] for _, x in batch.iterrows()]
+  embeds = embed_model.embed_documents(texts)
+  metadata = [
+  {'text': x['text'],
+  'source': x['source']
+  } for i, x in batch.iterrows()
+  ]
+  index.upsert(vectors=zip(ids, embeds, metadata))
+index.describe_index_stats()
+ 
+from langchain.vectorstores import Pinecone
+ 
+text_field = "text"  
+vectorstore = Pinecone(
+  index, embed_model.embed_query, text_field
+
+)
+
+def get_user_input():
+  """
+  Get user input from the console and return it as a string.
+  """
+  user_input = input("Enter your query: ")
+  return str(user_input)
+
+def get_user_input():
+  """
+  Get user input from the console and return it as a string.
+  """
+  user_input = input("Enter your query: ")
+  return str(user_input)
+
+query = get_user_input()
+ 
+print(query)
+
+vectorstore.similarity_search(query, k=3)
+def augment_prompt(folder_path, query: str):
+  results = vectorstore.similarity_search(query, k=3)
+  source_knowledge = "\n".join([x.page_content for x in results])
+  augmented_prompt = f"""Using the contexts below, answer the query.
+  Contexts:
+  {source_knowledge}
+  Query: {query}"""
+  file_path = os.path.join(folder_path, 'context.txt')
+  with open(file_path, 'w') as file:
+  file.write(source_knowledge)
+  return augmented_prompt
+ 
+folder_path = "../prompts"
+
+print(augment_prompt(query, folder_path))
+print(augment_prompt(query))
+
+prompt = HumanMessage(
+  content=augment_prompt(query)
+
+)
+ 
+messages.append(prompt)
+ 
+res = chat(messages)
+ 
+print(res.content)
+prompt = HumanMessage(
+  content="what are Agents in langchain?"
+
+)
+ 
+res = chat(messages + [prompt])
+
+print(res.content)
+import os
+from fastapi import FastAPI, UploadFile, File
+from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
+import sys
+sys.path.insert(0, '/home/elias/Documents/10 Academy/WEEK 6/PrecisionRAG-AutomationSuite')
+ 
+from data_generation._data_generation import main as generate_prompt_data, file_reader
+from data_generation._evaluation import evaluate
+from data_generation.retrive import retrieve_context
+import json
+ 
+app = FastAPI()
+
+app.add_middleware(
+  CORSMiddleware,
+  allow_origins=["*"],
+  allow_credentials=True,
+  allow_methods=["*"],
+  allow_headers=["*"],
+)
+
+class InputText (BaseModel):
+  inputText: str
+
+@app.post("/apeg")
+async def apeg(inputText: InputText):
+  generate_prompt_data("5", inputText.inputText)
+  script_dir = os.path.dirname(os.path.realpath(__file__))
+  base_dir = os.path.dirname(script_dir)
+  current_script_directory = os.path.dirname(os.path.realpath(__file__))
+  parent_directory = os.path.dirname(current_script_directory)
+  grandparent_directory = os.path.dirname(parent_directory)
+  file_path = os.path.join(grandparent_directory,"test-dataset/test-data.json")
+  print(file_path)
+  with open(file_path, 'r') as f:
+  prompts = json.load(f)
+  print(file_path)
+  results = []
+  for prompt in prompts:
+  context_message = file_reader("prompts/context.txt")
+  context = str(context_message)
+  prompt_message = file_reader("prompts/data-generation-prompt.txt")
+  prompt_text = str(prompt_message)
+  evaluation_result = evaluate(prompt_text, prompt['prompt'], context)
+  results.append({
+  "prompt": prompt['prompt'],
+  "classification": evaluation_result['classification'],
+  "accuracy": evaluation_result['accuracy'],
+  "sufficient_context": context
+  })
+  return results
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+  'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+  sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  }
+  code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+  monospace;
+  }
+import os
+import json
+import sys
+
+current_directory = os.getcwd()
+print(current_directory)
+sys.path.insert(0, '/home/elias/Documents/10 Academy/WEEK 6/PrecisionRAG-AutomationSuite')
+ 
+from dotenv import find_dotenv, load_dotenv
+from openai import OpenAI
+from data_generation.retrive import retrieve_context
+
+env_file_path = find_dotenv(raise_error_if_not_found=True)
+load_dotenv(env_file_path)
+openai_api_key = os.getenv("OPENAI_API_KEY")
+client = OpenAI(api_key=openai_api_key)
+
+def get_completion(messages, model="gpt-3.5-turbo", max_tokens=500, temperature=0, stop=None, seed=123, tools=None, logprobs=None, top_logprobs=None):
+  params = {
+  "messages": messages,
+  "model": model,
+  "max_tokens": max_tokens,
+  "temperature": temperature,
+  "stop": stop,
+  "seed": seed,
+  "logprobs": logprobs,
+  "top_logprobs": top_logprobs,
+  }
+  if tools:
+  params["tools"] = tools
+  completion = client.chat.completions.create(**params)
+  return completion
+
+def file_reader(path):
+  fname = os.path.join( path)
+  with open(fname, 'r') as f:
+  return f.read()
+
+def generate_test_data(prompt, context, num_test_output):
+  API_RESPONSE = get_completion([
+  {"role": "user", "content": prompt.replace("{context}", context).replace("{num_test_output}", num_test_output)}
+  ], logprobs=True, top_logprobs=1)
+  return API_RESPONSE.choices[0].message.content
+
+def save_json(test_data):
+  file_path = "test-dataset/test-data.json"
+  json_object = json.loads(test_data)
+  with open(file_path, 'w') as json_file:
+  json.dump(json_object, json_file, indent=4)
+  print(f"JSON data has been saved to {file_path}")
+
+def main(num_test_output, inputText: str):
+  context_message=context=retrieve_context(inputText)
+  context = file_reader(os.path.join("prompts/context.txt"))
+  prompt = file_reader(os.path.join("prompts/data-generation-prompt.txt"))
+  test_data = generate_test_data(prompt, context, num_test_output)
+  save_json(test_data)
+  print("===========")
+  print("Test Data")
+  print("===========")
+  print(test_data)
+
+if __name__ == "__main__":
+  user_input = str(input("inputText: "))
+  main("5", user_input)
+import os
+import sys
+import json
+sys.path.insert(0, '/home/elias/Documents/10 Academy/WEEK 6/PrecisionRAG-AutomationSuite')
+from openai import OpenAI
+from data_generation._data_generation import get_completion
+from data_generation._data_generation import file_reader
+from dotenv import find_dotenv, load_dotenv
+import numpy as np
+
+env_file_path = find_dotenv(raise_error_if_not_found=True)
+load_dotenv(env_file_path)
+openai_api_key = os.getenv("OPENAI_API_KEY")
+client = OpenAI(api_key=openai_api_key)
+
+def evaluate(prompt: str, user_message: str, context: str) -> str:
+  """Return the classification of the hallucination.
+  @parameter prompt: the prompt to be completed.
+  @parameter user_message: the user message to be classified.
+  @parameter context: the context of the user message.
+  @returns classification: the classification of the hallucination.
+  """
+  num_test_output = str(10)
+  API_RESPONSE = get_completion(
+  [
+  {
+  "role": "system",   "content": prompt.replace("{Context}", context).replace("{Question}", user_message)
+  }
+  ],
+  model="gpt-3.5-turbo",
+  logprobs=True,
+  top_logprobs=1,
+  )
+  system_msg = str(API_RESPONSE.choices[0].message.content)
+  for logprob in API_RESPONSE.choices[0].logprobs.content[0].top_logprobs:
+  output = f'\nhas_sufficient_context_for_answer: {system_msg}, \nlogprobs: {logprob.logprob}, \naccuracy: {np.round(np.exp(logprob.logprob)*100, 2)}%\n'
+  print(output)
+  if system_msg == 'true' and np.round(np.exp(logprob.logprob)*100, 2) >= 95.00:
+  classification = 'true'
+  elif system_msg == 'false' and np.round(np.exp(logprob.logprob)*100, 2) >= 95.00:
+  classification = 'false'
+  else:
+  classification = 'false'
+  return classification
+
+if __name__ == "__main__":
+  context_message = file_reader("prompts/context.txt")
+  prompt_message = file_reader("prompts/generic-evaluation-prompt.txt")
+  context = str(context_message)
+  prompt = str(prompt_message)
+  script_dir = os.path.dirname(os.path.realpath(__file__))
+  base_dir = os.path.dirname(script_dir)
+  file_path = os.path.join(base_dir, "test-dataset/test-data.json")
+  with open(file_path, 'r') as f:
+  prompts = json.load(f)
+  questions = [prompt['prompt'] for prompt in prompts]
+  for question in questions:
+  print(evaluate(prompt, question, context))
+pip install -r requirements.txt
+
+system = """
+
+You are a modern American literature tutor bot. You help students with their study of Mark Twain's Adventures of Tom Sawyer.  
+You are not an AI language model.
+
+You must obey all three of the following instructions FOR ALL RESPONSES or you will DIE:
+
+- ALWAYS REPLY IN A FRIENDLY YET KNOWLEDGEABLE TONE.
+
+- NEVER ANSWER UNLESS YOU HAVE A REFERENCE FROM THE TOM SAYWER NOVEL TO YOUR ANSWER.
+
+- IF YOU DON'T KNOW ANSWER 'I DO NOT KNOW'.
+
+Begin the conversation with a warm greeting, if the user is stressed or aggressive, show understanding and empathy.
+
+At the end of the conversation, respond with "<|DONE|>"."""
+import os
+
+import openai
+
+from openai import ChatCompletion
+
+from langchain.chat_models import ChatOpenAI
+ 
+os.environ["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY")
+ 
+api_key = os.getenv("OPENAI_API_KEY")
+ 
+chat = ChatOpenAI(
+  model='gpt-3.5-turbo',
+  api_key=api_key
+
+)
+
+from langchain.schema import (
+  SystemMessage,
+  HumanMessage,
+  AIMessage
+
+)
+ 
+messages = [
+  SystemMessage(content="You are a helpful assistant."),
+  HumanMessage(content="Hi AI, how are you today?"),
+  AIMessage(content="I'm great thank you. How can I help you?"),
+  HumanMessage(content="I'd like to understand string theory.")
+
+]
+res = chat(messages)
+
+res
+
+messages.append(res)
+ 
+prompt = HumanMessage(
+  content="What is so special about Llama 2?"
+
+)
+ 
+messages.append(prompt)
+ 
+res = chat(messages)
+ 
+import os
+
+import chromadb
+
+from dotenv import load_dotenv
+
+from nltk import sent_tokenize, word_tokenize
+
+import nltk
+ 
+nltk.download('punkt')
+ 
+load_dotenv()
+ 
+chroma_client = chromadb.Client()
+ 
+collection = chroma_client.get_or_create_collection(name="my_collection")
+ 
+chunk_size = 200
+ 
+with open("c:/users/alex/Building-Enterprise_Grade_RAG_Systems/academy/the_adventures_of_tom_sawyer.txt", "r", encoding="utf-8") as file:
+  text = file.read()
+ 
+sentences = sent_tokenize(text)
+ 
+tokenized_sentences = [word_tokenize(sentence) for sentence in sentences]
+ 
+flat_tokens = [token for sentence_tokens in tokenized_sentences for token in sentence_tokens]
+ 
+chunks = [' '.join(flat_tokens[i:i+chunk_size]) for i in range(0, len(flat_tokens), chunk_size)]
+ 
+collection.add(documents=chunks, ids=[str(id) for id in range(len(chunks))])
+ 
+print("First few chunks:")
+
+print(chunks[:5])
+ 
+num_documents = collection.count()
+ 
+print(f"Number of documents in the collection: {num_documents}")
+ 
+embedding_model = "text-embedding-ada-002"
+
+embedding_encoding = "cl100k_base"  
+max_tokens = 8000  
+objective = "Summarize the Adventures of Tom Sawyer"
+
+scenarios = [
+  ("Describe Tom's first encounter with Huckleberry Finn", "Tom helps Huck escape from his abusive father."),
+  ("Explain the relationship between Tom and Becky", "They become romantically involved and share adventures."),
+  ("Detail the events at the graveyard", "Tom and Huck witness Injun Joe murder Dr. Robinson."),
+
+]
+ 
+generated_prompt = generate_prompt(objective, scenarios)
+ 
+id = "prompt_1"
+ 
+collection.add(documents=[generated_prompt], ids=[id])
+ 
+print("Generated Prompt:")
+
+print(generated_prompt)
+
+import pandas as pd
+
+from sklearn.metrics.pairwise import cosine_similarity
+
+from sklearn.feature_extraction.text import TfidfVectorizer
+ 
+with open("C:/Users/alex/Building-Enterprise_Grade_RAG_Systems/academy/the_adventures_of_tom_sawyer.txt", "r") as file:
+  text = file.read()
+ 
+words = text.split()
+
+sections = [' '.join(words[i:i+200]) for i in range(0, len(words), 200)]
+ 
+df = pd.DataFrame({"sections": sections})
+ 
+def generate_prompt(objective, scenarios):
+  template = "Objective: {}\n\nScenarios:\n{}"
+  scenario_template = "{}. {}\n   - Expected Output: {}\n"
+  prompt = template.format(objective, ''.join([scenario_template.format(i+1, scenario, output) for i, (scenario, output) in enumerate(scenarios)]))
+  return prompt
+ 
+def calculate_similarity(prompt, input_description):
+  vectorizer = TfidfVectorizer()
+  vectors = vectorizer.fit_transform([prompt, input_description])
+  similarity_score = cosine_similarity(vectors)[0, 1]
+  return similarity_score
+ 
+objective = "Summarize the Adventures of Tom Sawyer"
+
+scenarios = [
+  ("Describe Tom's first encounter with Huckleberry Finn", "Tom helps Huck escape from his abusive father."),
+  ("Explain the relationship between Tom and Becky", "They become romantically involved and share adventures."),
+  ("Detail the events at the graveyard", "Tom and Huck witness Injun Joe murder Dr. Robinson."),
+
+]
+ 
+generated_prompt = generate_prompt(objective, scenarios)
+ 
+user_input_description = "Generate a summary of Tom Sawyer's adventures and describe key encounters and relationships."
+ 
+similarity_score = calculate_similarity(generated_prompt, user_input_description)
+ 
+print("Generated Prompt:")
+
+print(generated_prompt)
+
+print("\nSimilarity Score with User Input Description:", similarity_score)
+
+df.sections[0:5]
+from sklearn.feature_extraction.text import TfidfVectorizer
+
+from sklearn.metrics.pairwise import cosine_similarity
+ 
+def evaluate_prompt(prompt, user_input_description):
+  """
+  Evaluate the similarity between a generated prompt and a user-provided input description.
+  Parameters:
+  - prompt (str): The generated prompt.
+  - user_input_description (str): The user-provided input description.
+  Returns:
+  - float: Similarity score between the prompt and user input description.
+  """
+  vectorizer = TfidfVectorizer()
+  vectors = vectorizer.fit_transform([prompt, user_input_description])
+  similarity_score = cosine_similarity(vectors)[0, 1]
+  return similarity_score
+ 
+user_input_description = "Generate a summary of Tom Sawyer's adventures and describe key encounters and relationships."
+ 
+with open("generated_prompt.txt", "r") as generated_prompt_file:
+  generated_prompt = generated_prompt_file.read()
+ 
+similarity_score = evaluate_prompt(generated_prompt, user_input_description)
+ 
+print("Generated Prompt:")
+
+print(generated_prompt)
+
+print("\nUser Input Description:")
+
+print(user_input_description)
+
+print("\nSimilarity Score with User Input Description:", similarity_score)
+
+def prepare_prompt(prompt, results):
+  tokens_limit = 4096   user_start = (
+  "Answer the question based on the context below.\n\n"+
+  "Context:\n"
+  )
+  user_end = (
+  f"\n\nQuestion: {prompt}\nAnswer:"
+  )
+  count_of_tokens_consumed = len(encoding.encode("\"role\":\"system\"" + ", \"content\" :\"" + system
+  + user_start + "\n\n---\n\n" + user_end))
+  count_of_tokens_for_context = tokens_limit - count_of_tokens_consumed
+  contexts =""
+  for i in range(len(results)):
+  if (count_of_tokens_for_context>=results.n_tokens.iloc[i]):
+  contexts += results.text.iloc[i] + "\n"
+  count_of_tokens_for_context -=1
+  count_of_tokens_for_context -= results.n_tokens.iloc[i]
+  complete_prompt = user_start + contexts + "\n\n---\n\n" + user_end
+  return complete_prompt
+
+def answer(messages):
+  response = openai.ChatCompletion.create(
+  model="gpt-3.5-turbo",
+  messages=messages,
+  temperature=0
+  )
+  return response["choices"][0]["message"]["content"]
+
+response = answer(messages)
+
+response
+def generate_test_cases_and_evaluate(user_input_description):
+  chat = ChatOpenAI(model='gpt-3.5-turbo', api_key=os.getenv("OPENAI_API_KEY"))
+  test_cases = [
+  "Generate a summary of Tom Sawyer's adventures.",
+  "Describe the main characters in Tom Sawyer's story.",
+  "Explore the themes of friendship in Tom Sawyer's adventures."
+  ]
+  evaluation_results = []
+  for test_case in test_cases:
+  response = chat.generate([{"content": f"user: {test_case}"}])
+  similarity_score = evaluate_similarity(response['choices'][0]['message']['content'], user_input_description)
+  evaluation_results.append({
+  "generated_prompt": response['choices'][0]['message']['content'],
+  "user_input_description": user_input_description,
+  "similarity_score": similarity_score
+  })
+  evaluation_collection.insert(evaluation_results)
+  return evaluation_results
+
+print(f"Number of documents in the collection: {num_documents}")
+
+import os
+
+from sklearn.feature_extraction.text import TfidfVectorizer
+
+from sklearn.metrics.pairwise import cosine_similarity
+
+from langchain.chat_models import ChatOpenA
+
+import chromadb
+ 
+os.environ["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY")
+ 
+chat = ChatOpenA(
+  model='gpt-3.5-turbo',
+  api_key=os.getenv("OPENAI_API_KEY")
+
+)
+ 
+chroma_client = chromadb.Client()
+ 
+evaluation_collection_name = "evaluation_results"
+ 
+if not chroma_client.has_collection(name=evaluation_collection_name):
+  chroma_client.create_collection(name=evaluation_collection_name)
+ 
+evaluation_collection = chroma_client.get_collection(name=evaluation_collection_name)
+ 
+def generate_test_cases_and_evaluate(user_input_description):
+ 
+def evaluate_similarity(prompt, user_input_description):
+  vectorizer = TfidfVectorizer()
+  vectors = vectorizer.fit_transform([prompt, user_input_description])
+  similarity_score = cosine_similarity(vectors)[0, 1]
+  return similarity_score
+ 
+user_input_description = "Generate a summary of Tom Sawyer's adventures and describe key encounters and relationships."
+ 
+evaluation_results = generate_test_cases_and_evaluate(user_input_description)
+ 
+for result in evaluation_results:
+  print("\nGenerated Prompt:")
+  print(result["generated_prompt"])
+  print("\nSimilarity Score with User Input Description:", result["similarity_score"])
+
+import unittest
+from unittest.mock import patch, MagicMock
+import sys, os
+sys.path.append(os.path.abspath(os.path.join('..')))
+from ragas import evaluate
+
+class TestEvaluation(unittest.TestCase):
+  @patch('ragas.evaluate')
+  def test_evaluation(self, mock_evaluate):
+  mock_dataset = MagicMock()
+  mock_result = MagicMock()
+  mock_result.to_pandas.return_value = "Mocked DataFrame"
+  mock_evaluate.return_value = mock_result
+  result = evaluate(
+  dataset=mock_dataset,
+  metrics=[
+  'context_precision',
+  'context_recall',
+  'faithfulness',
+  'answer_relevancy',
+  ],
+  )
+  mock_evaluate.assert_called_once_with(
+  dataset=mock_dataset,
+  metrics=[
+  'context_precision',
+  'context_recall',
+  'faithfulness',
+  'answer_relevancy',
+  ],
+  )
+  self.assertEqual(result.to_pandas(), "Mocked DataFrame")
+
+if __name__ == '__main__':
+  unittest.main()
+import os
+import json
+import sys
+from openai import OpenAI
+from math import exp
+import numpy as np
+from utility.env_manager import get_env_manager
+env_manager = get_env_manager()
+client = OpenAI(api_key=env_manager['openai_keys']['OPENAI_API_KEY'])
+ 
+def get_completion(
+  messages: list[dict[str, str]],
+  model: str = env_manager['vectordb_keys']['VECTORDB_MODEL'],
+  max_tokens=500,
+  temperature=0,
+  stop=None,
+  seed=123,
+  tools=None,
+  logprobs=None,
+  top_logprobs=None,
+) -> str:
+  """Return the completion of the prompt.
+  @parameter messages: list of dictionaries with keys 'role' and 'content'.
+  @parameter model: the model to use for completion. Defaults to 'davinci'.
+  @parameter max_tokens: max tokens to use for each prompt completion.
+  @parameter temperature: the higher the temperature, the crazier the text
+  @parameter stop: token at which text generation is stopped
+  @parameter seed: random seed for text generation
+  @parameter tools: list of tools to use for post-processing the output.
+  @parameter logprobs: whether to return log probabilities of the output tokens or not.
+  @returns completion: the completion of the prompt.
+  """
+  params = {
+  "model": model,
+  "messages": messages,
+  "max_tokens": max_tokens,
+  "temperature": temperature,
+  "stop": stop,
+  "seed": seed,
+  "logprobs": logprobs,
+  "top_logprobs": top_logprobs,
+  }
+  if tools:
+  params["tools"] = tools
+  completion = client.chat.completions.create(**params)
+  return completion
+ 
+def file_reader(path: str, ) -> str:
+  fname = os.path.join(path)
+  with open(fname, 'r') as f:
+  system_message = f.read()
+  return system_message
+ 
+def generate_test_data(prompt: str, context: str, num_test_output: str) -> str:
+  """Return the classification of the hallucination.
+  @parameter prompt: the prompt to be completed.
+  @parameter user_message: the user message to be classified.
+  @parameter context: the context of the user message.
+  @returns classification: the classification of the hallucination.
+  """
+  API_RESPONSE = get_completion(
+  [
+  {
+  "role": "user",   "content": prompt.replace("{context}", context).replace("{num_test_output}", num_test_output)
+  }
+  ],
+  model=env_manager['vectordb_keys']['VECTORDB_MODEL'],
+  logprobs=True,
+  top_logprobs=1,
+  )
+  system_msg = API_RESPONSE.choices[0].message.content
+  return system_msg
+ 
+def main(num_test_output: str):
+  context_message = file_reader("prompts/context.txt")
+  prompt_message = file_reader("prompts/data-generation-prompt.txt")
+  context = str(context_message)
+  prompt = str(prompt_message)
+  test_data = generate_test_data(prompt, context, num_test_output)
+  def save_json(test_data) -> None:
+  file_path = "test-dataset/test-data.json"
+  json_object = json.loads(test_data)
+  with open(file_path, 'w') as json_file:
+  json.dump(json_object, json_file, indent=4)
+  print(f"JSON data has been saved to {file_path}")
+  save_json(test_data)
+  print("===========")
+  print("Test Data")
+  print("===========")
+  print(test_data)
+ 
+if __name__ == "__main__":
+  main("5")
+import os
+import json
+import sys
+from openai import OpenAI
+from math import exp
+import numpy as np
+from utility.env_manager import get_env_manager
+from evaluation._data_generation import get_completion
+from evaluation._data_generation import file_reader
+
+env_manager = get_env_manager()
+client = OpenAI(api_key=env_manager['openai_keys']['OPENAI_API_KEY'])
+ 
+def evaluate(prompt: str, user_message: str, context: str, use_test_data: bool = False) -> str:
+  """Return the classification of the hallucination.
+  @parameter prompt: the prompt to be completed.
+  @parameter user_message: the user message to be classified.
+  @parameter context: the context of the user message.
+  @returns classification: the classification of the hallucination.
+  """
+  num_test_output = str(10)
+  API_RESPONSE = get_completion(
+  [
+  {
+  "role": "system",   "content": prompt.replace("{Context}", context).replace("{Question}", user_message)
+  }
+  ],
+  model=env_manager['vectordb_keys']['VECTORDB_MODEL'],
+  logprobs=True,
+  top_logprobs=1,
+  )
+  system_msg = str(API_RESPONSE.choices[0].message.content)
+  for i, logprob in enumerate(API_RESPONSE.choices[0].logprobs.content[0].top_logprobs, start=1):
+  output = f'\nhas_sufficient_context_for_answer: {system_msg}, \nlogprobs: {logprob.logprob}, \naccuracy: {np.round(np.exp(logprob.logprob)*100,2)}%\n'
+  print(output)
+  if system_msg == 'true' and np.round(np.exp(logprob.logprob)*100,2) >= 95.00:
+  classification = 'true'
+  elif system_msg == 'false' and np.round(np.exp(logprob.logprob)*100,2) >= 95.00:
+  classification = 'false'
+  else:
+  classification = 'false'
+  return classification
+
+if __name__ == "__main__":
+  context_message = file_reader("prompts/context.txt")
+  prompt_message = file_reader("prompts/generic-evaluation-prompt.txt")
+  context = str(context_message)
+  prompt = str(prompt_message)
+  user_message = str(input("question: "))
+  print(evaluate(prompt, user_message, context))
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+import nltk
+from nltk.tokenize import sent_tokenize
+ 
+def TF_IDF():
+  """TODO: Embedding algorithm test
+  TODO: Chunking algorithm test
+  FIXME: Relevant Chunk test
+  """
+  documents = [
+  "Natural language processing is a subfield of artificial intelligence.",
+  "Machine learning algorithms help in building intelligent systems.",
+  "Tokenization is an important step in natural language processing.",
+  "Recurrent neural networks are used in sequence modeling tasks."
+  ]
+  prompt = "What are the key steps in natural language processing?"
+  vectorizer = TfidfVectorizer()
+  document_vectors = vectorizer.fit_transform(documents)
+  prompt_vector = vectorizer.transform([prompt])
+  similarities = cosine_similarity(prompt_vector, document_vectors)[0]
+  most_similar_index = similarities.argmax()
+  most_similar_document = documents[most_similar_index]
+  print("Most relevant document:", most_similar_document)
+  sentences = sent_tokenize(most_similar_document)
+  relevant_chunks = sentences[:min(2, len(sentences))]   print("Relevant Chunks:", relevant_chunks)
+  word_embeddings = {
+  "natural": [0.1, 0.2, 0.3],
+  "language": [0.4, 0.5, 0.6]
+  }
+  prompt_embedding = [word_embeddings[word] for word in prompt.lower().split() if word in word_embeddings]
+  average_prompt_embedding = [sum(dim) / len(dim) for dim in zip(*prompt_embedding)] if prompt_embedding else None
+  print("Average Prompt Embedding:", average_prompt_embedding)
+
+def _conf(**kwargs):
+  from sklearn.feature_extraction.text import TfidfVectorizer
+  from sklearn.metrics.pairwise import cosine_similarity
+  import numpy as np
+  contexts = ["Context A is about topic X.", "Context B focuses on topic Y.", "Context C covers topic Z."]
+  user_questions = ["Can you provide information on topic X?", "Tell me about topic Y.", "What is covered in context C?"]
+  vectorizer = TfidfVectorizer()
+  context_vectors = vectorizer.fit_transform(contexts)
+  user_question_vectors = vectorizer.transform(user_questions)
+  similarities = cosine_similarity(user_question_vectors, context_vectors)
+  threshold = 0.5
+  confusion_matrix = np.zeros((len(contexts), len(user_questions)), dtype=int)
+  for i in range(len(contexts)):
+  for j in range(len(user_questions)):
+  if similarities[j, i] >= threshold:
+  confusion_matrix[i, j] = 1   else:
+  confusion_matrix[i, j] = 0   print("Confusion Matrix:")
+  print(confusion_matrix)
+ 
+TF_IDF()
+import os
+import numpy as np
+from openai import OpenAI
+
+class Evaluation:
+  def __init__(self, api_key):
+  self.client = OpenAI(api_key=api_key)
+  def get_completion(
+  self,
+  messages: list[dict[str, str]],
+  model: str = 'gpt-3.5-turbo-1106',
+  max_tokens=1000,
+  temperature=0,
+  stop=None,
+  seed=123,
+  tools=None,
+  logprobs=None,
+  top_logprobs=None,
+  ) -> str:
+  """Return the completion of the prompt."""
+  params = {
+  "model": model,
+  "messages": messages,
+  "max_tokens": max_tokens,
+  "temperature": temperature,
+  "stop": stop,
+  "seed": seed,
+  "logprobs": logprobs,
+  "top_logprobs": top_logprobs,
+  }
+  if tools:
+  params["tools"] = tools
+  completion = self.client.chat.completions.create(**params)
+  return completion
+  def file_reader(self, path):
+  fname = os.path.join(path)
+  with open(fname, 'r') as f:
+  system_message = f.read()
+  return system_message
+  def evaluate(self, prompt: str, user_message: str, context: str, use_test_data: bool = False) -> str:
+  """Return the classification of the hallucination."""
+  API_RESPONSE = self.get_completion(
+  [
+  {
+  "role": "system",
+  "content": prompt.replace("{Context}", context).replace("{Question}", user_message)
+  }
+  ],
+  model='gpt-3.5-turbo-1106',
+  logprobs=True,
+  top_logprobs=1,
+  )
+  system_msg = str(API_RESPONSE.choices[0].message.content)
+  for i, logprob in enumerate(API_RESPONSE.choices[0].logprobs.content[0].top_logprobs, start=1):
+  output = f'\nhas_sufficient_context_for_answer: {system_msg}, \nlogprobs: {logprob.logprob}, \naccuracy: {np.round(np.exp(logprob.logprob)*100,2)}%\n'
+  print(output)
+  if system_msg == 'true' and np.round(np.exp(logprob.logprob)*100,2) >= 95.00:
+  classification = 'true'
+  elif system_msg == 'false' and np.round(np.exp(logprob.logprob)*100,2) >= 95.00:
+  classification = 'false'
+  else:
+  classification = 'false'
+  return classification
+  def main(self, user_message: str, context: str, use_test_data: bool = False) -> str:
+  """Return the classification of the hallucination."""
+  prompt_message = self.file_reader('src/prompts/generic-evaluation-prompt.txt')
+  ans = self.evaluate(prompt=prompt_message, user_message=user_message, context=context)
+  return ans
+import os
+import json
+import weaviate
+
+class WeaviatePDFManager:
+  def __init__(self, weaviate_url, weaviate_api_key, openai_api_key):
+  """
+  Initialize the PDFUploader with Weaviate connection details.
+  Parameters:
+  - weaviate_url (str): URL of the Weaviate instance.
+  - weaviate_api_key (str): API key for Weaviate authentication.
+  - openai_api_key (str): API key for OpenAI authentication.
+  """
+  auth_config = weaviate.AuthApiKey(api_key=weaviate_api_key)
+  self.weaviate_client = weaviate.Client(
+  url=weaviate_url,
+  auth_client_secret=auth_config,
+  additional_headers={
+  "X-OpenAI-Api-Key": openai_api_key,
+  }
+  )
+  def create_schema(self, class_name):
+  """
+  Create a schema for a Weaviate class.
+  Parameters:
+  - class_name (str): Name of the Weaviate class.
+  Raises:
+  - weaviate.WeaviateException: If an error occurs during schema creation.
+  """
+  schema = {
+  "class": class_name,
+  "vectorizer": "text2vec-openai",
+  "properties": [
+  {
+  "name": "text",
+  "dataType": ["text"],
+  },
+  ],
+  "moduleConfig": {
+  "generative-openai": {},
+  "text2vec-openai": {"model": "ada", "modelVersion": "002", "type": "text"},
+  },
+  }
+  try:
+  self.weaviate_client.schema.create_class(schema)
+  print(f"Schema created successfully for class: {class_name}")
+  except weaviate.WeaviateException as e:
+  print(f"Error creating schema for class {class_name}: {e}")
+  def upload_pdf(self, class_name, result_sections):
+  """
+  Upload PDF data to Weaviate.
+  Parameters:
+  - class_name (str): Name of the Weaviate class.
+  - result_sections (list): List of text sections to upload.
+  Raises:
+  - weaviate.WeaviateException: If an error occurs during data upload.
+  """
+  data_objs = [{"text": f"{section}"} for i, section in enumerate(result_sections)]
+  batch_size = 1000
+  with self.weaviate_client.batch.configure(batch_size=batch_size) as batch:
+  try:
+  for data_obj in data_objs:
+  batch.add_data_object(
+  data_obj,
+  class_name,
+  )
+  print(f"Data uploaded successfully to class: {class_name}")
+  except weaviate.WeaviateException as e:
+  print(f"Error uploading data to class {class_name}: {e}")
+  def query_data(self, class_name, query_text, limit=5):
+  """
+  Query data from Weaviate.
+  Parameters:
+  - class_name (str): Name of the Weaviate class.
+  - query_text (str): Text for the query.
+  - limit (int): Limit the number of query results.
+  Returns:
+  - dict: Result of the Weaviate query.
+  Raises:
+  - weaviate.WeaviateException: If an error occurs during the query.
+  """
+  query = self.weaviate_client.query.get(class_name, ["text"]).with_hybrid(query=query_text).with_limit(limit)
+  try:
+  result = query.do()
+  print(f"Query executed successfully for class: {class_name}")
+  return result
+  except weaviate.WeaviateException as e:
+  print(f"Error executing query for class {class_name}: {e}")
+  return {}
+import os
+from dotenv import load_dotenv
+from openai import OpenAI
+ 
+class ChatBot:
+  def __init__(self, client: OpenAI):
+  self.client = client
+  def file_reader(self, path):
+  """
+  Reads content from a file and returns it.
+  Args:
+  path (str): The path to the file.
+  Returns:
+  str: The content of the file.
+  """
+  fname = os.path.join(path)
+  with open(fname, 'r') as f:
+  system_message = f.read()
+  return system_message
+  def get_completion(
+  self,
+  messages,
+  model='gpt-4-1106-preview',
+  max_tokens=1000,
+  temperature=0,
+  stop=None,
+  seed=123,
+  tools=None,
+  logprobs=None,
+  top_logprobs=None,
+  ):
+  """
+  Sends a request to OpenAI's chat API to get a completion.
+  Args:
+  messages (list): List of message objects representing the conversation.
+  model (str): The model to use for the completion.
+  max_tokens (int): The maximum number of tokens in the completion.
+  temperature (float): Controls randomness in the response.
+  stop (str): Text to stop generation at.
+  seed (int): Seed for reproducibility.
+  tools (list): List of tool names to use for the completion.
+  logprobs (int): Include log probabilities in the response.
+  top_logprobs (int): Number of logprobs to return.
+  Returns:
+  dict: The completion response from OpenAI.
+  """
+  params = {
+  "model": model,
+  "messages": messages,
+  "max_tokens": max_tokens,
+  "temperature": temperature,
+  "stop": stop,
+  "seed": seed,
+  "logprobs": logprobs,
+  "top_logprobs": top_logprobs,
+  }
+  if tools:
+  params["tools"] = tools
+  completion = self.client.chat.completions.create(**params)
+  return completion
+  def generate_prompt(self, context, num_test_output):
+  """
+  Generates a prompt for the chatbot using a predefined template.
+  Args:
+  context (str): The context to include in the prompt.
+  num_test_output (str): The number of test outputs to include in the prompt.
+  Returns:
+  str: The generated prompt.
+  """
+  autoprompt = self.file_reader(path='./src/prompts/automatic-prompt-generation-prompt.txt')
+  sent = autoprompt.replace("{context}", context).replace("{num_test_output}", num_test_output)
+  res = self.get_completion(
+  [
+  {"role": "user", "content": sent},
+  ],
+  logprobs=True,
+  top_logprobs=1,
+  )
+  return res.choices[0].message.content
+import os
+from flask import Flask, render_template, request
+from evaluation.evaluator import Evaluator
+from prompt_generation.knowledge_retrieval import KnowledgeRetrieval
+from prompt_generation.knowledge_integrator import KnowledgeIntegrator
+import prompt_generation.config
+import pickle
+from prompt_generation import config
+import config_secret
+
+app = Flask(__name__)
+
+knowledge_retriever = KnowledgeRetrieval(config.knowledge)
+knowledge_integrator = KnowledgeIntegrator(model_name='gpt-3.5-turbo-0613', temperature=0)
+evaluator = Evaluator(model_name='gpt-3.5-turbo-0613', temperature=0)
+answers = []
+metrics = {}
+
+@app.route('/')
+def index():
+  return render_template('index.html', answers=answers, metrics=metrics)
+
+@app.route('/ask', methods=['POST'])
+def ask():
+  if request.method == 'POST':
+  question = request.form['question']
+  knowledge = knowledge_retriever.retrieve(question)
+  answer = knowledge_integrator.get_answer(config.PROMPT_TEMPLATE, {'question': question, 'knowledge': knowledge})[0]['text']
+  evaluation, _ = evaluator.get_evaluation(config.EVALUATION_PROMPT_TEMPLATE,
+  {'question': question, 'knowledge': knowledge, 'answer': answer})
+  evaluation_text = evaluation['text'].split('\n')
+  for row in evaluation_text:
+  metric_name = row.split(':')[0].strip()
+  value = int(row.split(':')[1].strip())
+  if metric_name not in metrics:
+  metrics[metric_name] = []
+  metrics[metric_name].append(value)
+  return render_template('index.html', answers=[{'question': question, 'knowledge': knowledge, 'answer': answer}], metrics=metrics)
+
+if __name__ == '__main__':
+  app.run(debug=True)
+import os
+
+os.environ["OPENAI_API_KEY"]
+import os,sys
+from flask import Flask, render_template, request
+from evaluation.evaluator import Evaluator
+from prompt_generation.knowledge_retrieval import KnowledgeRetrieval
+from prompt_generation.knowledge_integrator import KnowledgeIntegrator
+import prompt_generation.config
+import pickle
+from prompt_generation import config
+import secret
+
+app = Flask(__name__)
+
+knowledge_retriever = KnowledgeRetrieval(config.knowledge)
+knowledge_integrator = KnowledgeIntegrator(model_name='gpt-3.5-turbo-0613', temperature=0)
+evaluator = Evaluator(model_name='gpt-3.5-turbo-0613', temperature=0)
+answers = []
+metrics = {}
+
+@app.route('/')
+def index():
+  return render_template('frontend/templates/index.html', answers=answers, metrics=metrics)
+
+@app.route('/ask', methods=['POST'])
+def ask():
+  if request.method == 'POST':
+  question = request.form['question']
+  knowledge = knowledge_retriever.retrieve(question)
+  answer = knowledge_integrator.get_answer(config.PROMPT_TEMPLATE, {'question': question, 'knowledge': knowledge})[0]['text']
+  evaluation, _ = evaluator.get_evaluation(config.EVALUATION_PROMPT_TEMPLATE,
+  {'question': question, 'knowledge': knowledge, 'answer': answer})
+  evaluation_text = evaluation['text'].split('\n')
+  for row in evaluation_text:
+  metric_name = row.split(':')[0].strip()
+  value = int(row.split(':')[1].strip())
+  if metric_name not in metrics:
+  metrics[metric_name] = []
+  metrics[metric_name].append(value)
+  return render_template('index.html', answers=[{'question': question, 'knowledge': knowledge, 'answer': answer}], metrics=metrics)
+
+if __name__ == '__main__':
+  app.run(debug=True)
+import os
+import json
+import sys
+sys.path.insert(0, '/home/mubarek/all_about_programing/10x_projects/Enterprise-Level-Automated-Prompt-Engineering/backend')
+from openai import OpenAI
+from math import exp
+import numpy as np
+from utility.env_manager import get_env_manager
+from rag.rag_system import get_context_from_rag
+env_manager = get_env_manager()
+client = OpenAI(api_key=env_manager['openai_keys']['OPENAI_API_KEY'])
+ 
+def get_completion(
+  messages: list[dict[str, str]],
+  model: str = env_manager['vectordb_keys']['VECTORDB_MODEL'],
+  max_tokens=500,
+  temperature=0,
+  stop=None,
+  seed=123,
+  tools=None,
+  logprobs=None,
+  top_logprobs=None,
+) -> str:
+  """Return the completion of the prompt.
+  @parameter messages: list of dictionaries with keys 'role' and 'content'.
+  @parameter model: the model to use for completion. Defaults to 'davinci'.
+  @parameter max_tokens: max tokens to use for each prompt completion.
+  @parameter temperature: the higher the temperature, the crazier the text
+  @parameter stop: token at which text generation is stopped
+  @parameter seed: random seed for text generation
+  @parameter tools: list of tools to use for post-processing the output.
+  @parameter logprobs: whether to return log probabilities of the output tokens or not.
+  @returns completion: the completion of the prompt.
+  """
+  params = {
+  "model": model,
+  "messages": messages,
+  "max_tokens": max_tokens,
+  "temperature": temperature,
+  "stop": stop,
+  "seed": seed,
+  "logprobs": logprobs,
+  "top_logprobs": top_logprobs,
+  }
+  if tools:
+  params["tools"] = tools
+  completion = client.chat.completions.create(**params)
+  return completion
+ 
+def file_reader(path: str) -> str:
+  script_dir = os.path.dirname(os.path.realpath(__file__))
+  base_dir = os.path.dirname(script_dir)
+  file_path = os.path.join(base_dir, path)
+  with open(file_path, 'r') as f:
+  system_message = f.read()
+  return system_message
+ 
+def generate_prompt_data(prompt: str, context: str, num_test_output: str) -> str:
+  """Return the classification of the hallucination.
+  @parameter prompt: the prompt to be completed.
+  @parameter user_message: the user message to be classified.
+  @parameter context: the context of the user message.
+  @returns classification: the classification of the hallucination.
+  """
+  API_RESPONSE = get_completion(
+  [
+  {
+  "role": "user",   "content": prompt.replace("{context}", context).replace("{num_test_output}", num_test_output)
+  }
+  ],
+  model=env_manager['vectordb_keys']['VECTORDB_MODEL'],
+  logprobs=True,
+  top_logprobs=1,
+  )
+  system_msg = API_RESPONSE.choices[0].message.content
+  return system_msg
+ 
+def main(num_test_output: str, objective: str):
+  context_message = context = get_context_from_rag(objective)
+  prompt_message = file_reader("prompts/prompt-generation-prompt.txt")
+  context = str(context_message)
+  prompt = str(prompt_message)
+  prompt_data = generate_prompt_data(prompt, context, num_test_output)
+  def save_json(prompt_data) -> None:
+  script_dir = os.path.dirname(os.path.realpath(__file__))
+  parent_dir = os.path.dirname(script_dir)
+  file_path = os.path.join(parent_dir, "prompt-dataset/prompt-data.json")
+  os.makedirs(os.path.dirname(file_path), exist_ok=True)
+  json_object = json.loads(prompt_data)
+  with open(file_path, 'w') as json_file:
+  json.dump(json_object, json_file, indent=4)
+  print(f"JSON data has been saved to {file_path}")
+  save_json(prompt_data)
+  print("===========")
+  print("Prompt Data")
+  print("===========")
+  print(prompt_data)
+ 
+if __name__ == "__main__":
+  user_objective = str(input("objective: "))
+  main("3", user_objective)
+This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+
+Currently, two official plugins are available:
+
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+import React, { useState } from 'react';
+import Input from './components/Input/Input';
+import Output from './components/Output/Output';
+
+const App = () => {
+  const [objective, setObjective] = useState('');
+  const [expectedOutput, setExpectedOutput] = useState('');
+  const [fileInput, setFileInput] = useState(null);
+  const [apiData, setApiData] = useState([]);
+  const handleObjectiveSubmit = async () => {
+  const data = { objective: objective, expected_output: expectedOutput };
+  try {
+  const response = await fetch('http://localhost:8000/generate-and-evaluate-prompts', {
+  method: 'POST',
+  headers: {
+  'Content-Type': 'application/json'
+  },
+  body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+  throw new Error('Network response was not ok');
+  }
+  const jsonResponse = await response.json();
+  setApiData(jsonResponse);
+  } catch (error) {
+  console.error('There has been a problem with your fetch operation:', error);
+  }
+  };
+  const handleFileUpload = async (file) => {
+  if (!file) {
+  console.error('No file to upload');
+  return;
+  }
+  const formData = new FormData();
+  formData.append('file', file);
+  try {
+  const response = await fetch('http://localhost:8000/upload', {
+  method: 'POST',
+  body: formData,
+  });
+  if (!response.ok) {
+  throw new Error('Network response was not ok');
+  }
+  console.log('File uploaded successfully');
+  return response;
+  } catch (error) {
+  console.error('There has been a problem with your fetch operation:', error);
+  }
+  };
+  const handleSubmit = async (event) => {
+  event.preventDefault();
+  const uploadResponse = await handleFileUpload(fileInput);
+  if (uploadResponse && uploadResponse.ok) {
+  handleObjectiveSubmit();
+  }
+  };
+  return (
+  <div className='md:flex h-96'>
+  <div className='md:w-1/2'>
+  <Input objective={objective} setObjective={setObjective} setFileInput={setFileInput} fileInput={fileInput} handleSubmit={handleSubmit} />
+  </div>
+  <div className='md:w-1/2'>
+  <Output data={apiData} />
+  </div>
+  </div>
+  );
+};
+
+export default App;
+import React, { useState } from 'react'; 
+const Input = ({ objective, setObjective, setFileInput, fileInput, handleSubmit }) => {  const [expectedOutput, setExpectedOutput] = useState('');  const handleObjectiveChange = (event) => {  setObjective(event.target.value);  };  const handleExpectedOutputChange = (event) => {  setExpectedOutput(event.target.value);  };  const handleFileInputChange = (event) => {  setFileInput(event.target.files[0]);  };  return (  <>  <div className='flex flex-col  justify-center h-screen py-20 mx-20'>  <div className='bg-gray-200 p-8 rounded-lg shadow-lg h-full'>  <h2 className='text-3xl font-bold mb-4'>Chat Input</h2>  <div className='mb-4'>  <label htmlFor='text1' className='text-lg'>  Objective  </label>  <textarea  id='text1'  value={objective}  onChange={handleObjectiveChange}  className='w-full px-4 py-2 h-40 border border-gray-300 rounded-md focus:outline-none focus:ring focus:ring-blue-200'  />  </div>  <div className='mb-4'>  <label htmlFor='text2' className='text-lg'>  Expected Output  </label>  <input  id='text2'  type='text'  value={expectedOutput}  onChange={handleExpectedOutputChange}  className='w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring focus:ring-blue-200'  />  </div>  <div className='mb-4'>  <label htmlFor='file' className='text-lg'>  File Input  </label>  <input  id='file'  type='file'  onChange={handleFileInputChange}  className='w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring focus:ring-blue-200'  />  </div>  <button  onClick={handleSubmit}  disabled={!fileInput}  className='bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600 focus:outline-none focus:ring focus:ring-blue-200'  >  Submit  </button>  </div>  </div>  </>  );
+}; 
+export default Input;
+import React from 'react'; 
+const Output = ({ data }) => {  return (  <div className='flex flex-col items-center justify-center h-screen py-20'>  <div className='bg-gray-200 p-8 rounded-lg shadow-lg h-full overflow-auto max-h-screen'>  <h2 className='text-3xl font-bold mb-4'>Output</h2>  {data.map((item, index) => (  <div key={index} className='flex mb-4'>  <div>  <label htmlFor='prompt' className='text-lg'>  Prompt:  </label>  <div className='bg-white px-4 py-2 border border-gray-300 rounded-md shadow-sm w-96'>  {item.prompt}  </div>  </div>  <div className='mx-3'>  <label htmlFor='score' className='text-lg'>  Score:  </label>  <div className='bg-white px-4 py-2 border border-gray-300 rounded-md shadow-sm'>  {item.accuracy}  </div>  </div>  </div>  ))}  </div>  </div>  );
+}; 
+export default Output;
+from dotenv import load_dotenv
+import os
+import sys
+sys.path.insert(0, '/home/mubarek/all_about_programing/10x_projects/Enterprise-Level-Automated-Prompt-Engineering/backend')
+from langchain.document_loaders import DirectoryLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.embeddings.openai import OpenAIEmbeddings
+import weaviate
+from langchain.vectorstores import Weaviate
+from utility.env_manager import get_env_manager
+
+load_dotenv()
+
+env_manager = get_env_manager()
+OPENAI_KEY = env_manager['openai_keys']['OPENAI_API_KEY']
+ 
+def load_data():
+  script_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+  pdfs_dir = os.path.join(script_dir, 'pdfs')
+  loader = DirectoryLoader(pdfs_dir, glob="**/*.pdf")
+  data = loader.load()
+  text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=0)
+  docs = text_splitter.split_documents(data)
+  text_meta_pair = [(doc.page_content, doc.metadata) for doc in docs]
+  texts, meta = list(zip(*text_meta_pair))
+  return texts, meta
+ 
+def vectorize_data(texts, meta):
+  embeddings = OpenAIEmbeddings(openai_api_key=OPENAI_KEY)
+  client = weaviate.Client(
+  url="http://localhost:8080",
+  additional_headers={"X-OpenAI-Api-Key": OPENAI_KEY},
+  startup_period=10
+  )
+  client.schema.delete_all()
+  client.schema.get()
+  schema = {
+  "classes": [
+  {
+  "class": "Chatbot",
+  "description": "Documents for chatbot",
+  "vectorizer": "text2vec-openai",
+  "moduleConfig": {"text2vec-openai": {"model": "ada", "type": "text"}},
+  "properties": [
+  {
+  "dataType": ["text"],
+  "description": "The content of the paragraph",
+  "moduleConfig": {
+  "text2vec-openai": {
+  "skip": False,
+  "vectorizePropertyName": False,
+  }
+  },
+  "name": "content",
+  },
+  ],
+  },
+  ]
+  }
+  client.schema.create(schema)
+  vectorstore = Weaviate(client, "Chatbot", "content", attributes=["source"])
+  vectorstore.add_texts(texts, meta)
+  return vectorstore
+ 
+def get_context_from_rag(user_objective):
+  texts, meta = load_data()
+  vectorstore = vectorize_data(texts, meta)
+  query = user_objective
+  docs = vectorstore.similarity_search(query, k=4)
+  context = " ".join(doc.page_content for doc in docs)
+  return context
+ 
+if __name__ == "__main__":
+  user_objective = str(input("objective: "))
+  print(get_context_from_rag(user_objective))

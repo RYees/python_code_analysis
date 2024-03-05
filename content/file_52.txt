@@ -1,0 +1,995 @@
+import pandas as pd
+import numpy as np
+from sklearn.preprocessing import Normalizer, MinMaxScaler, StandardScaler
+ 
+class Cleaner:
+  def __init__(self):
+  pass
+  def drop_columns(self, df: pd.DataFrame, columns: list) -> pd.DataFrame:
+  """
+  drop columns
+  """
+  return df.drop(columns=columns)
+  def drop_nan(self, df: pd.DataFrame) -> pd.DataFrame:
+  """
+  drop rows with nan values
+  """
+  return df.dropna()
+  def drop_nan_column(self, df: pd.DataFrame, col:str) -> pd.DataFrame:
+  """
+  drop rows with nan values
+  """
+  return df.dropna(subset=[col])   def drop_duplicates(self, df: pd.DataFrame) -> pd.DataFrame:
+  """
+  drop duplicate rows
+  """
+  return df.drop_duplicates()
+  def convert_to_datetime(self, df: pd.DataFrame, col:str) -> pd.DataFrame:
+  """
+  convert column to datetime
+  """
+  df[col] = df[col].apply(pd.to_datetime)
+  return df
+  def convert_to_string(self, df: pd.DataFrame, col = list) -> pd.DataFrame:
+  """
+  convert columns to string
+  """
+  df[col] = df[col].astype(str)
+  return df
+  def remove_whitespace_column(self, df: pd.DataFrame) -> pd.DataFrame:
+  """
+  remove whitespace from columns
+  """
+  return df.columns.str.replace(' ', '_').str.lower()
+  def percent_missing(self, df: pd.DataFrame) -> float:
+  """
+  calculate the percentage of missing values from dataframe
+  """
+  totalCells = np.product(df.shape)
+  missingCount = df.isnull().sum()
+  totalMising = missingCount.sum()
+  return round(totalMising / totalCells * 100, 2)
+  def percent_missing_column(self, df: pd.DataFrame, col:str) -> float:
+  """
+  calculate the percentage of missing values for the specified column
+  """
+  try:
+  col_len = len(df[col])
+  except KeyError:
+  print(f"{col} not found")
+  missing_count = df[col].isnull().sum()
+  return round(missing_count / col_len * 100, 2)
+  def get_numerical_columns(self, df: pd.DataFrame) -> list:
+  """
+  get numerical columns
+  """
+  return df.select_dtypes(include=['number']).columns.to_list()
+  def get_categorical_columns(self, df: pd.DataFrame) -> list:   """
+  get categorical columns
+  """
+  return  df.select_dtypes(include=['object','datetime64[ns]']).columns.to_list()
+  def fill_missing_values_categorical(self, df: pd.DataFrame, method: str) -> pd.DataFrame:
+  """
+  fill missing values with specified method
+  """
+  categorical_columns = df.select_dtypes(include=['object','datetime64[ns]']).columns
+  if method == "ffill":
+  for col in categorical_columns:
+  df[col] = df[col].fillna(method='ffill')
+  return df
+  elif method == "bfill":
+  for col in categorical_columns:
+  df[col] = df[col].fillna(method='bfill')
+  return df
+  elif method == "mode":
+  for col in categorical_columns:
+  df[col] = df[col].fillna(df[col].mode()[0])
+  return df
+  else:
+  print("Method unknown")
+  return df
+  def fill_missing_values_numeric(self, df: pd.DataFrame, method: str,columns: list =None) -> pd.DataFrame:
+  """
+  fill missing values with specified method
+  """
+  if(columns==None):
+  numeric_columns = self.get_numerical_columns(df)
+  else:
+  numeric_columns=columns
+  if method == "mean":
+  for col in numeric_columns:
+  df[col].fillna(df[col].mean(), inplace=True)
+  elif method == "median":
+  for col in numeric_columns:
+  df[col].fillna(df[col].median(), inplace=True)
+  else:
+  print("Method unknown")
+  return df
+  def normalizer(self, df: pd.DataFrame) -> pd.DataFrame:
+  """
+  normalize numerical columns
+  """
+  norm = Normalizer()
+  return pd.DataFrame(norm.fit_transform(df[self.get_numerical_columns(df)]), columns=self.get_numerical_columns(df))
+  def min_max_scaler(self, df: pd.DataFrame) -> pd.DataFrame:
+  """
+  scale numerical columns
+  """
+  minmax_scaler = MinMaxScaler()
+  return pd.DataFrame(minmax_scaler.fit_transform(df[self.get_numerical_columns(df)]), columns=self.get_numerical_columns(df))
+  def standard_scaler(self, df: pd.DataFrame) -> pd.DataFrame:
+  """
+  scale numerical columns
+  """
+  standard_scaler = StandardScaler()
+  return pd.DataFrame(standard_scaler.fit_transform(df[self.get_numerical_columns(df)]), columns=self.get_numerical_columns(df))
+  def handle_outliers(self, df:pd.DataFrame, col:str, method:str ='IQR') -> pd.DataFrame:
+  """
+  Handle Outliers of a specified column using Turkey's IQR method
+  """
+  df = df.copy()
+  q1 = df[col].quantile(0.25)
+  q3 = df[col].quantile(0.75)
+  lower_bound = q1 - ((1.5) * (q3 - q1))
+  upper_bound = q3 + ((1.5) * (q3 - q1))
+  if method == 'mode':
+  df[col] = np.where(df[col] < lower_bound, df[col].mode()[0], df[col])
+  df[col] = np.where(df[col] > upper_bound, df[col].mode()[0], df[col])
+  elif method == 'median':
+  df[col] = np.where(df[col] < lower_bound, df[col].median, df[col])
+  df[col] = np.where(df[col] > upper_bound, df[col].median, df[col])
+  else:
+  df[col] = np.where(df[col] < lower_bound, lower_bound, df[col])
+  df[col] = np.where(df[col] > upper_bound, upper_bound, df[col])
+  return df
+  def find_agg(self,df:pd.DataFrame, agg_column:str, agg_metric:str, col_name:str, top:int, order=False )->pd.DataFrame:
+  new_df = df.groupby(agg_column)[agg_column].agg(agg_metric).reset_index(name=col_name).\
+  sort_values(by=col_name, ascending=order)[:top]
+  return new_df
+  def convert_bytes_to_megabytes(self,df, bytes_data):
+  """
+  This function takes the dataframe and the column which has the bytes values
+  returns the megabytesof that value
+  Args:
+  -----
+  df: dataframe
+  bytes_data: column with bytes values
+  Returns:
+  --------
+  A series
+  """
+  megabyte = 1*10e+5
+  df[bytes_data] = df[bytes_data] / megabyte
+  return df[bytes_data]
+%reload_ext autoreload
+
+%autoreload 2
+import pandas as pd
+
+import sys
+
+sys.path.append('../script')
+
+from data_extraction import pgdatabase
+
+from utils import Cleaner
+
+clean = Cleaner()
+
+from plots import plots
+
+plt = plots()
+
+db = pgdatabase()
+
+conn = db.connection()
+ 
+data = db.get_dataframe_sql(conn, 'xdr_data')
+data.shape
+
+data.head()
+
+data.info()
+data.describe()
+data.isnull().sum()
+
+clean.missing_values_table(data)
+ 
+data['TCP UL Retrans. Vol (Bytes)'].describe()
+data['TCP DL Retrans. Vol (Bytes)'].describe()
+data['HTTP UL (Bytes)'].describe()
+data['HTTP DL (Bytes)'].describe()
+percent = clean.percent_missing(data)
+
+print(f'The data has {percent}% missing values')
+
+col = ['Start ms', 'End ms']
+
+data1 = clean.convert_to_datetime(data, col)
+
+data.skew()
+ 
+col = ['Nb of sec with 37500B < Vol UL',
+  'Nb of sec with 6250B < Vol UL < 37500B',
+  'Nb of sec with 1250B < Vol UL < 6250B',
+  'Nb of sec with 125000B < Vol DL',
+  'Nb of sec with 31250B < Vol DL < 125000B',
+  'Nb of sec with 6250B < Vol DL < 31250B']
+ 
+data2 = clean.impute_zero(data1, col)
+ 
+col1 = ['TCP DL Retrans. Vol (Bytes)',
+  'TCP UL Retrans. Vol (Bytes)',
+  'Avg RTT DL (ms)',
+  'Avg RTT UL (ms)',
+  'HTTP DL (Bytes)',
+  'HTTP UL (Bytes)']
+ 
+data2 = clean.fill_missing_values_numeric(data1, 'mean', col1)
+ 
+data2['Handset Type'] = data2['Handset Type'].fillna('unknown')
+
+data2['Handset Manufacturer'] = data2['Handset Manufacturer'].fillna('unknown')
+categorical_columns = data.select_dtypes(include=['object','datetime64[ns]']).columns
+ 
+for col in categorical_columns:
+  data2[col] = data2[col].fillna(data2[col].mode()[0])
+
+cleand_data = clean.fill_missing_values_numeric(data2, 'median')
+clean.missing_values_table(cleand_data)
+
+plt.plot_box(cleand_data, 'Activity Duration UL (ms)', 'Active Duration UL Outliers')
+
+plt.plot_box(cleand_data, 'Activity Duration DL (ms)', 'Active Duration DL Outliers')
+numeric_columns = clean.get_numerical_columns(cleand_data)
+
+data5 = data[numeric_columns]
+indices = clean.detect_outliers(data5,6)
+
+print(len(indices))
+telecom_data = clean.handle_outliers(data5, indices, 'mean')
+%reload_ext autoreload
+
+%autoreload 2
+from urllib.parse import quote_plus
+
+from sqlalchemy import create_engine
+ 
+password = 'kerod53@'
+ 
+encoded_password = quote_plus(password)
+ 
+db_string = f'postgresql://postgres:{encoded_password}@localhost:5432/Telecom'
+ 
+engine = create_engine(db_string)
+table_name = 'telecom_data'
+ 
+cleand_data.to_sql(table_name, engine, index=False, if_exists='replace')
+import pandas as pd
+import numpy as np
+from sklearn.preprocessing import Normalizer, MinMaxScaler, StandardScaler
+ 
+class Cleaner:
+  def __init__(self):
+  pass
+  def drop_columns(self, df: pd.DataFrame, columns: list) -> pd.DataFrame:
+  """
+  drop columns
+  """
+  return df.drop(columns=columns)
+  def drop_nan(self, df: pd.DataFrame) -> pd.DataFrame:
+  """
+  drop rows with nan values
+  """
+  return df.dropna()
+  def drop_nan_column(self, df: pd.DataFrame, col:str) -> pd.DataFrame:
+  """
+  drop rows with nan values
+  """
+  return df.dropna(subset=[col])   def drop_duplicates(self, df: pd.DataFrame) -> pd.DataFrame:
+  """
+  drop duplicate rows
+  """
+  return df.drop_duplicates()
+  def convert_to_datetime(self, df: pd.DataFrame, col: list) -> pd.DataFrame:
+  """
+  convert column to datetime
+  """
+  df[col] = df[col].apply(pd.to_datetime)
+  return df
+  def convert_to_string(self, df: pd.DataFrame, col = list) -> pd.DataFrame:
+  """
+  convert columns to string
+  """
+  df[col] = df[col].astype(str)
+  return df
+  def remove_whitespace_column(self, df: pd.DataFrame) -> pd.DataFrame:
+  """
+  remove whitespace from columns
+  """
+  return df.columns.str.replace(' ', '_').str.lower()
+  def percent_missing(self, df: pd.DataFrame) -> float:
+  """
+  calculate the percentage of missing values from dataframe
+  """
+  totalCells = np.product(df.shape)
+  missingCount = df.isnull().sum()
+  totalMising = missingCount.sum()
+  return round(totalMising / totalCells * 100, 2)
+  def get_numerical_columns(self, df: pd.DataFrame) -> list:
+  """
+  get numerical columns
+  """
+  return df.select_dtypes(include=['float64']).columns.to_list()
+  def get_categorical_columns(self, df: pd.DataFrame) -> list:   """
+  get categorical columns
+  """
+  return  df.select_dtypes(include=['object','datetime64[ns]']).columns.to_list()
+  def impute_zero(self, df: pd.DataFrame, column: list) -> pd.DataFrame:
+  """
+  imputes 0 inplace of NaN for a given columon(s)
+  """
+  df[column] = df[column].fillna(0)
+  return df   def fill_missing_values_categorical(self, df: pd.DataFrame, method: str) -> pd.DataFrame:
+  """
+  fill missing values with specified method
+  """
+  categorical_columns = df.select_dtypes(include=['object','datetime64[ns]']).columns
+  if method == "ffill":
+  for col in categorical_columns:
+  df[col] = df[col].fillna(method='ffill')
+  return df
+  elif method == "bfill":
+  for col in categorical_columns:
+  df[col] = df[col].fillna(method='bfill')
+  return df
+  elif method == "mode":
+  for col in categorical_columns:
+  df[col] = df[col].fillna(df[col].mode()[0])
+  return df
+  else:
+  print("Method unknown")
+  return df
+  def fill_missing_values_numeric(self, df: pd.DataFrame, method: str,columns: list = None) -> pd.DataFrame:
+  """
+  fill missing values with specified method
+  """
+  if(columns==None):
+  numeric_columns = df.select_dtypes(include=['float64','int64']).columns
+  else:
+  numeric_columns=columns
+  if method == "mean":
+  for col in numeric_columns:
+  df[col].fillna(df[col].mean(), inplace=True)
+  elif method == "median":
+  for col in numeric_columns:
+  df[col].fillna(df[col].median(), inplace=True)
+  else:
+  print("Method unknown")
+  return df
+  def normalizer(self, df: pd.DataFrame) -> pd.DataFrame:
+  """
+  normalize numerical columns
+  """
+  norm = Normalizer()
+  return pd.DataFrame(norm.fit_transform(df[self.get_numerical_columns(df)]), columns=self.get_numerical_columns(df))
+  def min_max_scaler(self, df: pd.DataFrame) -> pd.DataFrame:
+  """
+  scale numerical columns
+  """
+  minmax_scaler = MinMaxScaler()
+  return pd.DataFrame(minmax_scaler.fit_transform(df[self.get_numerical_columns(df)]), columns=self.get_numerical_columns(df))
+  def standard_scaler(self, df: pd.DataFrame) -> pd.DataFrame:
+  """
+  scale numerical columns
+  """
+  standard_scaler = StandardScaler()
+  return pd.DataFrame(standard_scaler.fit_transform(df[self.get_numerical_columns(df)]), columns=self.get_numerical_columns(df))
+  def detect_outliers(self, df:pd.DataFrame, threshold: int) -> list:
+  """
+  detect the indices of outliers using Z-method   """
+  z_scores = df.apply(lambda x: np.abs((x - x.mean()) / x.std()))
+  tr = threshold
+  outliers = np.where(z_scores > tr)
+  outlier_indices = [(df.index[i], df.columns[j]) for i, j in zip(*outliers)]
+  return outlier_indices
+  def handle_outliers(self, df:pd.DataFrame, indices:list, method:str) -> pd.DataFrame:
+  """
+  Handle Outliers of a specified column using the Z method
+  """
+  if method == 'mean':
+  for idx, col_name in indices:
+  column_mean = df[col_name].mean()
+  df.iloc[idx, df.columns.get_loc(col_name)] = column_mean
+  elif method == 'mode':
+  for idx, col_name in indices:
+  column_mode = df[col_name].mode()
+  df.iloc[idx, df.columns.get_loc(col_name)] = column_mode
+  elif method == 'median':
+  for idx, col_name in indices:
+  column_median = df[col_name].median()
+  df.loc[idx, col_name] = column_median
+  else:
+  print("Method unknown")
+  return df
+  def find_agg(self,df:pd.DataFrame, agg_column:str, agg_metric:str, col_name:str, top:int, order=False )->pd.DataFrame:
+  new_df = df.groupby(agg_column)[agg_column].agg(agg_metric).reset_index(name=col_name).\
+  sort_values(by=col_name, ascending=order)[:top]
+  return new_df
+  def convert_bytes_to_megabytes(self,df, bytes_data):
+  """
+  This function takes the dataframe and the column which has the bytes values
+  returns the megabytesof that value
+  Args:
+  -----
+  df: dataframe
+  bytes_data: column with bytes values
+  Returns:
+  --------
+  A series
+  """
+  megabyte = 1*10e+5
+  df[bytes_data] = df[bytes_data] / megabyte
+  return df[bytes_data]
+  def missing_values_table(self,df):
+  mis_val = df.isnull().sum()
+  mis_val_percent = 100 * df.isnull().sum() / len(df)
+  mis_val_dtype = df.dtypes
+  mis_val_table = pd.concat([mis_val, mis_val_percent, mis_val_dtype], axis=1)
+  mis_val_table_ren_columns = mis_val_table.rename(
+  columns = {0 : 'Missing Values', 1 : '% of Total Values', 2: 'Dtype'})
+  mis_val_table_ren_columns = mis_val_table_ren_columns[
+  mis_val_table_ren_columns.iloc[:,1] != 0].sort_values(
+  '% of Total Values', ascending=False).round(1)
+  print ("Your selected dataframe has " + str(df.shape[1]) + " columns.\n"   "There are " + str(mis_val_table_ren_columns.shape[0]) +
+  " columns that have missing values.")
+  return mis_val_table_ren_columns
+import sys
+
+import pandas as pd
+
+import numpy as np
+
+import matplotlib.pyplot as plt
+
+sys.path.append('../script')
+
+from utils import Cleaner
+
+from plots import *
+
+from data_extraction import *
+ 
+clean = Cleaner()
+
+%reload_ext autoreload
+
+%autoreload 2
+
+conn = connection()
+
+data = table_to_sql(conn, "telecom_data")
+data.head()
+data.info()
+top_10 = data["Handset Type"].value_counts()[:10]
+
+plt.figure(figsize= (10,5))
+
+top_10.plot(kind="bar",title="top 10 handset types")
+
+plt.show()
+top_3 = data["Handset Manufacturer"].value_counts()[:3]
+
+plt.figure(figsize=(10,5))
+
+top_3.plot(kind="bar",title="top 3 handset manufacturers")
+
+plt.show()
+handsets_per_manufacturers=data[data["Handset Manufacturer"].str.contains("Apple|Samsung|Huawei") ][["Handset Manufacturer","Handset Type"]]
+
+plt.figure(figsize=(10,5))
+
+top_five_apple_handset_type=handsets_per_manufacturers.groupby(["Handset Manufacturer"]).get_group('Apple')["Handset Type"].value_counts()[:5]
+
+handsets_per_manufacturers.groupby(["Handset Manufacturer"]).get_group('Apple')["Handset Type"].value_counts()[:5].plot(kind='bar', title="Top 5 handset types by Apple")
+
+plt.show()
+plt.figure(figsize=(10,5))
+
+top_five_samsung_handset_type=handsets_per_manufacturers.groupby(["Handset Manufacturer"]).get_group('Samsung')["Handset Type"].value_counts()[:5]
+
+handsets_per_manufacturers.groupby(["Handset Manufacturer"]).get_group('Samsung')["Handset Type"].value_counts()[:5].plot(kind='bar', title="Top 5 handset types by Samsung")
+
+plt.show()
+plt.figure(figsize=(10,5))
+
+top_five_huawei_handset_type=handsets_per_manufacturers.groupby(["Handset Manufacturer"]).get_group('Huawei')["Handset Type"].value_counts()[:5]
+
+handsets_per_manufacturers.groupby(["Handset Manufacturer"]).get_group('Huawei')["Handset Type"].value_counts()[:5].plot(kind='bar', title="Top 5 handset types by Huawei")
+
+plt.show()
+
+session=data.groupby(["MSISDN/Number"]).agg({"Bearer Id":"count"})
+
+session = session.rename(columns={"Bearer Id":"XDR_sessions"})
+
+session = session.sort_values(by=["XDR_sessions"],ascending=False)
+ 
+session.head(10)
+
+duration = data.groupby(["MSISDN/Number"]).agg({"Dur. (ms)":"sum"})
+
+duration.sort_values(by=["Dur. (ms)"],ascending=False,inplace=True)
+
+duration=duration.rename(columns={"Dur. (ms)":"total_duration(ms) "})
+
+duration.head(10)
+
+total_data = data.groupby(["MSISDN/Number"]).agg({"Total UL (Bytes)":"sum","Total DL (Bytes)":"sum"})
+
+total_data["total_data(bytes)"]=total_data["Total UL (Bytes)"]+total_data["Total DL (Bytes)"]
+
+total_data.sort_values(by=["total_data(bytes)"],ascending=False,inplace=True)
+
+total_data.head(10)
+ 
+data['social_media'] = data['Social Media DL (Bytes)'] + data['Social Media UL (Bytes)']
+
+data['google'] = data['Google DL (Bytes)'] + data['Google UL (Bytes)']
+
+data['email'] = data['Email DL (Bytes)'] + data['Email UL (Bytes)']
+
+data['youtube'] = data['Youtube DL (Bytes)'] + data['Youtube UL (Bytes)']
+
+data['netflix'] = data['Netflix DL (Bytes)'] + data['Netflix UL (Bytes)']
+
+data['gaming'] = data['Gaming DL (Bytes)'] + data['Gaming UL (Bytes)']
+
+data['other'] = data['Other DL (Bytes)'] + data['Other UL (Bytes)']
+
+data['total_data'] = data['Total UL (Bytes)'] + data['Total DL (Bytes)']
+app_total_data = data[['MSISDN/Number','social_media','google', 'email', 'youtube','netflix', 'gaming','other']].copy()
+
+app_total_data.groupby('MSISDN/Number').sum().sample(10)
+ 
+variables = data[['MSISDN/Number', 'Dur. (ms)', 'Total UL (Bytes)', 'total_data', 'Total DL (Bytes)', 'social_media', 'google', 'email', 'youtube', 'netflix', 'gaming', 'other']].copy()
+
+variables.groupby('MSISDN/Number').sum().sample(10)
+ 
+non_graphical_univariate = variables.drop('MSISDN/Number', axis=1).describe()
+
+non_graphical_univariate.transpose()
+
+plot_hist(variables,'email','cornflowerblue')
+
+plot_hist(variables,'gaming','cornflowerblue')
+
+plot_hist(variables,'google','cornflowerblue')
+
+plot_hist(variables,'netflix','cornflowerblue')
+
+plot_hist(variables,'other','cornflowerblue')
+
+plot_hist(variables,'social_media','cornflowerblue')
+
+plot_hist(variables,'total_data','cornflowerblue')
+
+plot_hist(variables,'youtube','cornflowerblue')
+
+plot_hist(variables,'Total DL (Bytes)','cornflowerblue')
+
+plot_hist(variables,'Total UL (Bytes)','cornflowerblue')
+
+plot_hist(variables,'Dur. (ms)','cornflowerblue')
+ 
+agg_data = variables.groupby('MSISDN/Number').sum()
+
+agg_data.head(10)
+plot_scatter(agg_data, 'social_media', 'total_data', 'social media data vs total data',  None,  None)
+
+import seaborn as sns
+
+plt.figure(figsize=(15,12))
+
+plt.subplot(2,3,1,title="social media data vs total_data data")
+
+sns.scatterplot(data=agg_data,x="social_media",y="total_data",hue=None,style=None)
+ 
+plt.subplot(2,3,2,title="email data vs total_data data")
+
+sns.scatterplot(data=agg_data,x="email",y="total_data",hue=None,style=None)
+ 
+plt.subplot(2,3,3,title="gaming data vs total_data data")
+
+sns.scatterplot(data=agg_data,x="gaming",y="total_data",hue=None,style=None)
+ 
+plt.subplot(2,3,4,title="google data vs total_data data")
+
+sns.scatterplot(data=agg_data,x="google",y="total_data",hue=None)
+ 
+plt.subplot(2,3,5,title="netflix data vs total_data data")
+
+sns.scatterplot(data=agg_data,x="netflix",y="total_data",hue="netflix")
+ 
+plt.subplot(2,3,6,title="youtube data vs total_data data")
+
+sns.scatterplot(data=variables,x="youtube",y="total_data",hue="youtube")
+ 
+plt.show()
+ 
+from sklearn.preprocessing import MinMaxScaler
+ 
+scaled_explore_feature_df = variables[['MSISDN/Number', 'total_data', 'Dur. (ms)']]
+ 
+scaled_explore_feature_df['Dur. (ms)'] = variables['Dur. (ms)'] /1000
+ 
+scaled_explore_feature_df = scaled_explore_feature_df.rename(columns={'Dur. (ms)': 'duration'})
+ 
+scaled_explore_feature_df_agg = scaled_explore_feature_df.groupby('MSISDN/Number').agg({'duration':'sum', 'total_data': 'sum'})
+ 
+deciles = pd.qcut(scaled_explore_feature_df_agg['duration'], 5, labels=["1st_decile", "2nd_decile",
+  "3rd_decile", "4th_decile",
+  "5th_decile"])
+ 
+explore_feature_df_with_decile = scaled_explore_feature_df_agg.copy()
+ 
+explore_feature_df_with_decile['decile'] = deciles
+ 
+explore_feature_df_with_decile_agg = explore_feature_df_with_decile.groupby('decile').agg({'total_data': 'sum',
+  'duration': 'sum'})
+
+explore_feature_df_with_decile_agg
+feature2 = variables.drop(['MSISDN/Number', 'Dur. (ms)'], axis=1)
+
+feature2.corr(method='pearson')
+plt.figure(figsize=(12,5))
+
+sns.heatmap(feature2.corr(),cmap="YlGnBu")
+
+plt.title("Application Data Correlation")
+
+plt.show()
+data_reduction = variables.drop(['MSISDN/Number', 'Dur. (ms)', 'Total UL (Bytes)', 'Total DL (Bytes)'], axis=1)
+
+data_reduction.head()
+
+from sklearn.preprocessing import StandardScaler
+
+from sklearn.decomposition import PCA
+ 
+scaler = StandardScaler()
+
+scaled_explore_feature_df = scaler.fit_transform(data_reduction)
+ 
+pca = PCA(n_components=2)
+
+pca.fit(scaled_explore_feature_df)
+
+pca_df = pd.DataFrame(pca.transform(scaled_explore_feature_df))
+ 
+plt.figure(figsize=(8, 6))
+
+plt.scatter(pca_df[0], pca_df[1])
+
+plt.xlabel('PCA 1')
+
+plt.ylabel('PCA 2')
+
+plt.title('PCA')
+
+plt.show()
+pca_df.head()
+%reload_ext autoreload
+
+%autoreload 2
+import pandas as pd
+from sqlalchemy import create_engine
+import psycopg2
+ 
+def connection():
+  """
+  connects to my pg database
+  """
+  conn = psycopg2.connect(dbname = 'Telecom',
+  user = 'postgres',
+  password = 'kerod53@',
+  host = 'localhost',
+  port = '5432')
+  return conn
+
+def table_to_sql(conn, table_name:str) -> pd.DataFrame:
+  query = f'SELECT * FROM public.{table_name}'
+  data = pd.read_sql_query(query, conn)
+  return data
+my_parameters = {'dbname': 'Telecom',
+  'user': 'postgres',
+  'password':'kerod53@',
+  'host':'localhost',
+  'port': '5432'}
+
+def connection2(self, parameters: dict = my_parameters):
+  """
+  Connects to the PostgreSQL database. for a given paramters:
+  connection_params is a dictionary that define the following:
+  {
+  'dbname': 'your_database_name',
+  'user': 'your_username',
+  'password': 'your_password',
+  'host': 'your_host',
+  'port': 'your_port'
+  }
+  """
+  try:
+  conn = psycopg2.connect(**parameters)
+  return conn
+  except psycopg2.Error as e:
+  print(f"Error: Unable to connect to the database. {e}")
+  return None
+
+def get_dataframe_sql(self, conn, table_name) -> pd.DataFrame:
+  query = f'SELECT * FROM public.{table_name}'
+  data = pd.read_sql_query(query, conn)
+  return data
+
+def create_engine(self, connection_params: dict = my_parameters):
+  """
+  creates engine using sqlalchemy for a given paramters:
+  """
+  engine = create_engine("postgresql://postgres:kerod53@@localhost:5432/Telecom")
+  return engine
+
+def write_dataframe_to_table(self, df: pd.DataFrame, table_name: str,engine)->None:
+  """
+  Writes a pandas dataframe to a new table in the PostgreSQL database.
+  """
+  df.to_sql(table_name, engine, index=False, if_exists='replace')
+  print(f"Dataframe successfully written to the '{table_name}' table.")
+
+def update_table_by_appending(df, table_name, connection_params = my_parameters):
+  """
+  Appends a pandas dataframe to an existing PostgreSQL table.
+  """
+  engine = create_engine(f"postgresql://{connection_params['user']}:{connection_params['password']}@{connection_params['host']}:{connection_params['port']}/{connection_params['dbname']}")
+  df.to_sql(table_name, engine, index=False, if_exists='append')
+  print(f"Dataframe successfully appended to the '{table_name}' table.")
+
+def delete_table(table_name, connection_params = my_parameters):
+  """
+  Deletes a table from the PostgreSQL database.
+  """
+  connection = connect_to_database(connection_params)
+  if connection:
+  cursor = connection.cursor()
+  cursor.execute(f"DROP TABLE IF EXISTS {table_name};")
+  connection.commit()
+  connection.close()
+  print(f"Table '{table_name}' successfully deleted.")
+  else:
+  print("Error: Unable to connect to the database.")
+
+def connect(self):
+  conn = psycopg2.connect(dbname = 'Telecom',
+  user = 'postgres',
+  password = 'kerod53@',
+  host = 'localhost',
+  port = '5432')
+  return conn
+
+def get_data_sql(self, conn, table_name):
+  query = f'SELECT * FROM public.{table_name}'
+  data = pd.read_sql_query(query, conn)
+  return data
+import imp
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+def plot_hist(df:pd.DataFrame, column:str, color:str)->None:
+  plt.figure(figsize=(12, 7))
+  sns.histplot(data=df, x=column, color=color, kde=True)
+  plt.title(f'Distribution of {column}', size=20, fontweight='bold')
+  plt.show()
+
+def plot_count(self,df:pd.DataFrame, column:str) -> None:
+  plt.figure(figsize=(12, 7))
+  sns.countplot(data=df, x=column)
+  plt.title(f'Distribution of {column}', size=20, fontweight='bold')
+  plt.show()
+ 
+def plot_bar(self,df:pd.DataFrame, x_col:str, y_col:str, title:str, xlabel:str, ylabel:str)->None:
+  plt.figure(figsize=(12, 7))
+  sns.barplot(data = df, x=x_col, y=y_col)
+  plt.title(title, size=20)
+  plt.xticks(rotation=75, fontsize=14)
+  plt.yticks( fontsize=14)
+  plt.xlabel(xlabel, fontsize=16)
+  plt.ylabel(ylabel, fontsize=16)
+  plt.show()
+
+def plot_heatmap(self,df:pd.DataFrame, title:str, cbar=False)->None:
+  plt.figure(figsize=(12, 7))
+  sns.heatmap(df, annot=True, cmap='viridis', vmin=0, vmax=1, fmt='.2f', linewidths=.7, cbar=cbar )
+  plt.title(title, size=18, fontweight='bold')
+  plt.show()
+
+def plot_box(self,df:pd.DataFrame, x_col:str, title:str) -> None:
+  plt.figure(figsize=(12, 7))
+  sns.boxplot(data = df, x=x_col)
+  plt.title(title, size=20)
+  plt.xticks(rotation=75, fontsize=14)
+  plt.show()
+
+def plot_box_multi(self,df:pd.DataFrame, x_col:str, y_col:str, title:str) -> None:
+  plt.figure(figsize=(12, 7))
+  sns.boxplot(data = df, x=x_col, y=y_col)
+  plt.title(title, size=20)
+  plt.xticks(rotation=75, fontsize=14)
+  plt.yticks( fontsize=14)
+  plt.show()
+
+def plot_scatter(df: pd.DataFrame, x_col: str, y_col: str, title: str, hue: str, style: str) -> None:
+  plt.figure(figsize=(12, 7))
+  sns.scatterplot(data = df, x=x_col, y=y_col, hue=hue, style=style)
+  plt.title(title, size=20)
+  plt.xticks(fontsize=14)
+  plt.yticks( fontsize=14)
+  plt.show()
+import pandas as pd
+
+import seaborn as sns
+
+import matplotlib.pyplot as plt
+
+import numpy as np
+
+from sklearn.decomposition import PCA
+
+from sklearn.preprocessing import StandardScaler
+
+from sklearn import preprocessing
+
+from sklearn.cluster import KMeans
+
+from sklearn.preprocessing import MinMaxScaler
+
+from sklearn.preprocessing import Normalizer
+
+import sys
+
+sys.path.append('../script')
+
+from plots import *
+
+from data_extraction import *
+
+conn = connection()
+data = table_to_sql(conn, 'telecom_data')
+data.head()
+
+experiance = data[['Bearer Id', 'MSISDN/Number', 'Avg RTT DL (ms)','Avg RTT UL (ms)','TCP DL Retrans. Vol (Bytes)','TCP UL Retrans. Vol (Bytes)','Avg Bearer TP DL (kbps)','Avg Bearer TP UL (kbps)', 'Handset Type']]
+ 
+experiance.head()
+
+experiance['total_RTT'] = experiance['Avg RTT DL (ms)'] + experiance['Avg RTT UL (ms)']
+
+experiance['total_TCP'] = experiance['TCP DL Retrans. Vol (Bytes)'] + experiance['TCP UL Retrans. Vol (Bytes)']
+
+experiance['total_TP'] = experiance['Avg Bearer TP DL (kbps)'] + experiance['Avg Bearer TP UL (kbps)']
+ 
+experiance.head()
+ 
+agg_experiance = experiance.groupby('MSISDN/Number').agg({'total_RTT': 'mean', 'total_TCP': 'mean', 'total_TP': 'mean', 'Handset Type': 'first'})
+
+agg_experiance.rename(columns={'total_RTT': 'avg_RTT', 'total_TCP': 'avg_TCP', 'total_TP': 'avg_TP'}, inplace=True)
+
+agg_experiance.head()
+
+top_10_RTT = agg_experiance.sort_values(by='avg_RTT', ascending=False)
+
+print('The top 10 values of RTT per user are: \n', top_10_RTT['avg_RTT'].head(10))
+
+print('---------------------------------------------------')
+
+print('The bottom to values of RTT per user are: \n',top_10_RTT['avg_RTT'].tail(10))
+
+print('---------------------------------------------------')
+
+freq = agg_experiance['avg_RTT'].value_counts()
+
+print('The most frequent values of RTT are: \n', freq.head(10))
+
+top_10_TP = agg_experiance.sort_values(by='avg_TP', ascending=False)
+
+print('The top 10 values of TP per user are: \n', top_10_TP['avg_TP'].head(10))
+
+print('---------------------------------------------------')
+
+print('The bottom to values of TP per user are: \n',top_10_TP['avg_TP'].tail(10))
+
+print('---------------------------------------------------')
+
+freq = agg_experiance['avg_TP'].value_counts()
+
+print('The most frequent values of TP are: \n', freq.head(10))
+
+top_10_tcp = agg_experiance.sort_values(by='avg_TCP', ascending=False)
+
+print('The top 10 values of TCP per user are: \n', top_10_tcp['avg_TCP'].head(10))
+
+print('---------------------------------------------------')
+
+print('The bottom to values of TCP per user are: \n',top_10_tcp['avg_TCP'].tail(10))
+
+print('---------------------------------------------------')
+
+freq = agg_experiance['avg_TCP'].value_counts()
+
+print('The most frequent values of TCP are: \n', freq.head(10))
+
+freq = agg_experiance['Handset Type'].value_counts()
+
+print('The most frequent handsets are: \n', freq.head(10))
+
+avg_TP_by_handset_type=experiance.groupby('Handset Type').agg({'total_TP':'mean'})
+
+avg_TP_by_handset_type.rename(columns={'total_TP':'avg_tp'},inplace=True)
+
+avg_TP_by_handset_type.head()
+
+avg_TCP_by_handset_type=experiance.groupby('Handset Type').agg({'total_TCP':'mean'})
+
+avg_TCP_by_handset_type.rename(columns={'total_TCP':'avg_tcp'},inplace=True)
+
+avg_TCP_by_handset_type.head()
+
+experiance_cluster = experiance.groupby('MSISDN/Number').agg({'total_RTT': 'mean', 'total_TCP': 'mean', 'total_TP': 'mean'})
+
+experiance_cluster.rename(columns={'total_RTT': 'avg_RTT', 'total_TCP': 'avg_TCP', 'total_TP': 'avg_TP'}, inplace=True)
+
+experiance_cluster.head()
+
+experiance_cluster.reset_index(inplace=True)
+
+experiance_cluster.drop(columns=['MSISDN/Number'], inplace=False)
+
+from sklearn.preprocessing import Normalizer
+ 
+norm = Normalizer()
+
+normilzed_data = norm.fit_transform(experiance_cluster)
+
+normilized_data = pd.DataFrame(normilzed_data, columns=experiance_cluster.columns)
+
+normilized_data.head()
+kmeans = KMeans(n_clusters=3)
+
+kmeans.fit(normilized_data)
+
+labels = kmeans.labels_
+
+agg_experiance['clusters'] = labels
+ 
+agg_experiance.head()
+
+agg_experiance[agg_experiance['clusters']==0].describe().transpose()
+
+agg_experiance[agg_experiance['clusters']==1].describe().transpose()
+
+agg_experiance[agg_experiance['clusters']==2].describe().transpose()
+
+from urllib.parse import quote_plus
+
+from sqlalchemy import create_engine
+ 
+password = 'kerod53@'
+ 
+encoded_password = quote_plus(password)
+ 
+db_string = f'postgresql://postgres:{encoded_password}@localhost:5432/Telecom'
+ 
+engine = create_engine(db_string)
+
+table_name = 'user_experiance'
+ 
+agg_experiance.to_sql(table_name, engine, index=False, if_exists='replace')

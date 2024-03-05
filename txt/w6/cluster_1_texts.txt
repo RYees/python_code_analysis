@@ -1,0 +1,413 @@
+from fastapi import FastAPI, HTTPException, Query
+from typing import List, Dict
+app = FastAPI()
+def generate_prompts(description: str, scenarios: List[str], expected_outputs: List[str]) -> List[str]:
+  return [f"{description} {scenario} {expected_output}" for scenario, expected_output in zip(scenarios, expected_outputs)]
+def evaluate_prompt(description: str, generated_prompt: str) -> float:
+  return abs(len(description) - len(generated_prompt))
+def generate_evaluation_data(description: str, scenarios: List[str], expected_outputs: List[str]) -> List[Dict[str, float]]:
+  evaluation_data = []
+  for scenario, expected_output in zip(scenarios, expected_outputs):
+  generated_prompt = generate_prompts(description, [scenario], [expected_output])[0]
+  evaluation_score = evaluate_prompt(description, generated_prompt)
+  evaluation_data.append({"prompt": generated_prompt, "evaluation_score": evaluation_score})
+  return evaluation_data
+@app.post("/generate_prompts")
+def generate_prompts_api(description: str, scenarios: List[str], expected_outputs: List[str]):
+  prompts = generate_prompts(description, scenarios, expected_outputs)
+  return {"prompts": prompts}
+@app.post("/evaluate_prompt")
+def evaluate_prompt_api(description: str, generated_prompt: str):
+  evaluation_score = evaluate_prompt(description, generated_prompt)
+  return {"evaluation_score": evaluation_score}
+@app.post("/generate_evaluation_data")
+def generate_evaluation_data_api(description: str, scenarios: List[str], expected_outputs: List[str]):
+  evaluation_data = generate_evaluation_data(description, scenarios, expected_outputs)
+  return {"evaluation_data": evaluation_data}
+if __name__ == "__main__":
+  import uvicorn
+  uvicorn.run(app, host="127.0.0.1", port=8000)
+import React, { useState } from 'react';
+import './App.css';
+const App = () => {
+  const [userMessage, setUserMessage] = useState('');
+  const [generatedContent, setGeneratedContent] = useState('');
+  // const [selectedOption, setSelectedOption] = useState('Option 1');
+  const handleGeneratePrompts = async () => {
+  try {
+  const response = await fetch('http://127.0.0.1:8000/get_prompt_completion', {
+  method: 'POST',
+  headers: {
+  'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({ user_message: userMessage }),
+  });
+  if (!response.ok) {
+  throw new Error('Network response was not ok');
+  }
+  const result = await response.json();
+  setGeneratedContent(result.generated_content);
+  } catch (error) {
+  console.error('Error:', error.message);
+  }
+  };
+  const handleFileUpload = (event) => {
+  // Handle file upload logic here
+  const file = event.target.files[0];
+  console.log('Uploaded file:', file);
+  };
+  // const handleDropdownChange = (event) => {
+  //   setSelectedOption(event.target.value);
+  // };
+  return (
+  <div className="container">
+  <header>
+  <h1>Promptly</h1>
+  </header>
+  <main className="main-container">
+  {/* Left side: Generate Prompts */}
+  <section className="left-section">
+  <h2>Generate Prompts</h2>
+  <textarea
+  placeholder="Enter your prompt..."
+  value={userMessage}
+  onChange={(e) => setUserMessage(e.target.value)}
+  />
+  <button onClick={handleGeneratePrompts}>Generate</button>
+  {generatedContent && (
+  <section className="generated-content">
+  <h3>Enhanced Prompt</h3>
+  <p>{generatedContent}</p>
+  </section>
+  )}
+  </section>
+  <section className="right-section">
+  <h2>Enter Contexts or Upload Files</h2>
+  <textarea
+  placeholder="Enter your context..."
+  // value={userContext}
+  // onChange={(e) => setUserContext(e.target.value)}
+  />
+  <label htmlFor="file-upload" className="file-upload-label">
+  <span>Upload </span>
+  <input
+  type="file"
+  id="file-upload"
+  accept=".csv, .txt"
+  onChange={handleFileUpload}
+  />
+  </label>
+  </section>
+  </main>
+  </div>
+  );
+};
+export default App;
+from fastapi import FastAPI, Form, Request
+from fastapi.templating import Jinja2Templates
+import openai
+from llama import Llama
+from weaviate import Weaviate
+app = FastAPI()
+openai.api_key = 'your-gpt-3-api-key'
+llama_api_key = 'your-llama-api-key'
+weaviate_api_key = 'your-weaviate-api-key'
+llama = Llama(api_key=llama_api_key)
+weaviate = Weaviate(api_key=weaviate_api_key)
+templates = Jinja2Templates(directory="templates")
+@app.get("/")
+def read_form(request: Request):
+  return templates.TemplateResponse("index.html", {"request": request})
+@app.post("/generate_prompt")
+async def generate_prompt(user_input: str = Form(...)):
+  enhanced_prompt = llama.enrich_prompt(user_input)
+  response = openai.Completion.create(
+  model="text-davinci-003",
+  prompt=f"User input: {enhanced_prompt}\nAI response:"
+  )
+  ai_response = response['choices'][0]['text']
+  weaviate.create_object({
+  "class": "UserPrompt",
+  "properties": {
+  "user_input": user_input,
+  "enhanced_prompt": enhanced_prompt,
+  "ai_response": ai_response
+  }
+  })
+  return templates.TemplateResponse("result.html", {"request": request, "user_input": user_input, "enhanced_prompt": enhanced_prompt, "ai_response": ai_response})
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from openai import OpenAI
+from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+load_dotenv()
+import os
+api_key = os.environ.get("OPENAI_API_KEY")
+app = FastAPI()
+client = OpenAI()
+app.add_middleware(
+  CORSMiddleware,
+  allow_origins=["*"],   allow_credentials=True,
+  allow_methods=["*"],
+  allow_headers=["*"],
+)
+class ChatInput(BaseModel):
+  user_message: str
+ 
+@app.post("/get_prompt_completion")
+def get_prompt_completion(chat_input: ChatInput):
+  prompt = f"You will be provided with a prompt and I want you to improve the prompt into more accurate and detailed one\n\nUser Input: {chat_input.user_message}"
+  response = client.chat.completions.create(
+  model="gpt-3.5-turbo",
+  messages=[
+  {
+  "role": "system",
+  "content": prompt,
+  },
+  {"role": "user", "content": " {chat_input.user_message}"},
+  ],
+  temperature=0.8,
+  max_tokens=64,
+  top_p=1,
+  )
+  gemerated_content = response.choices[0].message.content
+  return {
+  "generated_content": gemerated_content
+  }
+if __name__ == "__main__":
+  import uvicorn
+  uvicorn.run(app, host="127.0.0.1", port=8000)
+import os
+import numpy as np
+from openai import OpenAI
+class Evaluation:
+  def __init__(self, api_key):
+  self.client = OpenAI(api_key=api_key)
+  def get_completion(
+  self,
+  messages: list[dict[str, str]],
+  model: str = 'gpt-3.5-turbo-1106',
+  max_tokens=1000,
+  temperature=0,
+  stop=None,
+  seed=123,
+  tools=None,
+  logprobs=None,
+  top_logprobs=None,
+  ) -> str:
+  """Return the completion of the prompt."""
+  params = {
+  "model": model,
+  "messages": messages,
+  "max_tokens": max_tokens,
+  "temperature": temperature,
+  "stop": stop,
+  "seed": seed,
+  "logprobs": logprobs,
+  "top_logprobs": top_logprobs,
+  }
+  if tools:
+  params["tools"] = tools
+  completion = self.client.chat.completions.create(**params)
+  return completion
+  def file_reader(self, path):
+  fname = os.path.join(path)
+  with open(fname, 'r') as f:
+  system_message = f.read()
+  return system_message
+  def evaluate(self, prompt: str, user_message: str, context: str, use_test_data: bool = False) -> str:
+  """Return the classification of the hallucination."""
+  API_RESPONSE = self.get_completion(
+  [
+  {
+  "role": "system",
+  "content": prompt.replace("{Context}", context).replace("{Question}", user_message)
+  }
+  ],
+  model='gpt-3.5-turbo-1106',
+  logprobs=True,
+  top_logprobs=1,
+  )
+  system_msg = str(API_RESPONSE.choices[0].message.content)
+  for i, logprob in enumerate(API_RESPONSE.choices[0].logprobs.content[0].top_logprobs, start=1):
+  output = f'\nhas_sufficient_context_for_answer: {system_msg}, \nlogprobs: {logprob.logprob}, \naccuracy: {np.round(np.exp(logprob.logprob)*100,2)}%\n'
+  print(output)
+  if system_msg == 'true' and np.round(np.exp(logprob.logprob)*100,2) >= 95.00:
+  classification = 'true'
+  elif system_msg == 'false' and np.round(np.exp(logprob.logprob)*100,2) >= 95.00:
+  classification = 'false'
+  else:
+  classification = 'false'
+  return classification
+  def main(self, user_message: str, context: str, use_test_data: bool = False) -> str:
+  """Return the classification of the hallucination."""
+  prompt_message = self.file_reader('src/prompts/generic-evaluation-prompt.txt')
+  ans = self.evaluate(prompt=prompt_message, user_message=user_message, context=context)
+  return ans
+import os
+import json
+import weaviate
+class WeaviatePDFManager:
+  def __init__(self, weaviate_url, weaviate_api_key, openai_api_key):
+  """
+  Initialize the PDFUploader with Weaviate connection details.
+  Parameters:
+  - weaviate_url (str): URL of the Weaviate instance.
+  - weaviate_api_key (str): API key for Weaviate authentication.
+  - openai_api_key (str): API key for OpenAI authentication.
+  """
+  auth_config = weaviate.AuthApiKey(api_key=weaviate_api_key)
+  self.weaviate_client = weaviate.Client(
+  url=weaviate_url,
+  auth_client_secret=auth_config,
+  additional_headers={
+  "X-OpenAI-Api-Key": openai_api_key,
+  }
+  )
+  def create_schema(self, class_name):
+  """
+  Create a schema for a Weaviate class.
+  Parameters:
+  - class_name (str): Name of the Weaviate class.
+  Raises:
+  - weaviate.WeaviateException: If an error occurs during schema creation.
+  """
+  schema = {
+  "class": class_name,
+  "vectorizer": "text2vec-openai",
+  "properties": [
+  {
+  "name": "text",
+  "dataType": ["text"],
+  },
+  ],
+  "moduleConfig": {
+  "generative-openai": {},
+  "text2vec-openai": {"model": "ada", "modelVersion": "002", "type": "text"},
+  },
+  }
+  try:
+  self.weaviate_client.schema.create_class(schema)
+  print(f"Schema created successfully for class: {class_name}")
+  except weaviate.WeaviateException as e:
+  print(f"Error creating schema for class {class_name}: {e}")
+  def upload_pdf(self, class_name, result_sections):
+  """
+  Upload PDF data to Weaviate.
+  Parameters:
+  - class_name (str): Name of the Weaviate class.
+  - result_sections (list): List of text sections to upload.
+  Raises:
+  - weaviate.WeaviateException: If an error occurs during data upload.
+  """
+  data_objs = [{"text": f"{section}"} for i, section in enumerate(result_sections)]
+  batch_size = 1000
+  with self.weaviate_client.batch.configure(batch_size=batch_size) as batch:
+  try:
+  for data_obj in data_objs:
+  batch.add_data_object(
+  data_obj,
+  class_name,
+  )
+  print(f"Data uploaded successfully to class: {class_name}")
+  except weaviate.WeaviateException as e:
+  print(f"Error uploading data to class {class_name}: {e}")
+  def query_data(self, class_name, query_text, limit=5):
+  """
+  Query data from Weaviate.
+  Parameters:
+  - class_name (str): Name of the Weaviate class.
+  - query_text (str): Text for the query.
+  - limit (int): Limit the number of query results.
+  Returns:
+  - dict: Result of the Weaviate query.
+  Raises:
+  - weaviate.WeaviateException: If an error occurs during the query.
+  """
+  query = self.weaviate_client.query.get(class_name, ["text"]).with_hybrid(query=query_text).with_limit(limit)
+  try:
+  result = query.do()
+  print(f"Query executed successfully for class: {class_name}")
+  return result
+  except weaviate.WeaviateException as e:
+  print(f"Error executing query for class {class_name}: {e}")
+  return {}
+import os
+from dotenv import load_dotenv
+from openai import OpenAI
+ 
+class ChatBot:
+  def __init__(self, client: OpenAI):
+  self.client = client
+  def file_reader(self, path):
+  """
+  Reads content from a file and returns it.
+  Args:
+  path (str): The path to the file.
+  Returns:
+  str: The content of the file.
+  """
+  fname = os.path.join(path)
+  with open(fname, 'r') as f:
+  system_message = f.read()
+  return system_message
+  def get_completion(
+  self,
+  messages,
+  model='gpt-4-1106-preview',
+  max_tokens=1000,
+  temperature=0,
+  stop=None,
+  seed=123,
+  tools=None,
+  logprobs=None,
+  top_logprobs=None,
+  ):
+  """
+  Sends a request to OpenAI's chat API to get a completion.
+  Args:
+  messages (list): List of message objects representing the conversation.
+  model (str): The model to use for the completion.
+  max_tokens (int): The maximum number of tokens in the completion.
+  temperature (float): Controls randomness in the response.
+  stop (str): Text to stop generation at.
+  seed (int): Seed for reproducibility.
+  tools (list): List of tool names to use for the completion.
+  logprobs (int): Include log probabilities in the response.
+  top_logprobs (int): Number of logprobs to return.
+  Returns:
+  dict: The completion response from OpenAI.
+  """
+  params = {
+  "model": model,
+  "messages": messages,
+  "max_tokens": max_tokens,
+  "temperature": temperature,
+  "stop": stop,
+  "seed": seed,
+  "logprobs": logprobs,
+  "top_logprobs": top_logprobs,
+  }
+  if tools:
+  params["tools"] = tools
+  completion = self.client.chat.completions.create(**params)
+  return completion
+  def generate_prompt(self, context, num_test_output):
+  """
+  Generates a prompt for the chatbot using a predefined template.
+  Args:
+  context (str): The context to include in the prompt.
+  num_test_output (str): The number of test outputs to include in the prompt.
+  Returns:
+  str: The generated prompt.
+  """
+  autoprompt = self.file_reader(path='./src/prompts/automatic-prompt-generation-prompt.txt')
+  sent = autoprompt.replace("{context}", context).replace("{num_test_output}", num_test_output)
+  res = self.get_completion(
+  [
+  {"role": "user", "content": sent},
+  ],
+  logprobs=True,
+  top_logprobs=1,
+  )
+  return res.choices[0].message.content

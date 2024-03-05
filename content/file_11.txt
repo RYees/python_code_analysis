@@ -1,0 +1,381 @@
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+
+from scipy.stats import zscore
+from sklearn.preprocessing import StandardScaler
+
+from sklearn.cluster import KMeans
+from sklearn.decomposition import PCA
+import pandas as pd
+
+from sqlalchemy import create_engine
+
+user = 'postgres'
+
+password = '368545'
+
+host = 'localhost'
+
+port = '5432'
+
+database = 'telecom'
+
+connection_str = f'postgresql+psycopg2://{user}:{password}@{host}:{port}/{database}'
+
+engine = create_engine(connection_str)
+
+sql_query = 'SELECT * FROM xdr_data'
+
+df = pd.read_sql(sql_query, con= engine)
+
+df
+df['Dur. (ms)']
+
+df['Dur. (ms).1']
+df['Handset Type'].value_counts().nlargest(10)
+df['Handset Manufacturer'].value_counts().head(3)
+top_manufacturers = df['Handset Manufacturer'].value_counts().head(3).index
+
+top_handsets_by_manufacturer = pd.DataFrame(columns=['Manufacturer', 'Handset Type', 'Count'])
+
+for manufacturer in top_manufacturers:
+  top_handsets = df[df['Handset Manufacturer'] == manufacturer]['Handset Type'].value_counts().head(5)
+  top_handsets_df = pd.DataFrame({'Manufacturer': [manufacturer] * len(top_handsets.index),
+  'Handset Type': top_handsets.index,
+  'Count': top_handsets.values})
+  top_handsets_by_manufacturer = pd.concat([top_handsets_by_manufacturer, top_handsets_df])
+
+top_handsets_by_manufacturer
+application_columns = [
+  'Social Media DL (Bytes)', 'Social Media UL (Bytes)',
+  'Youtube DL (Bytes)', 'Youtube UL (Bytes)',
+  'Netflix DL (Bytes)', 'Netflix UL (Bytes)',
+  'Google DL (Bytes)', 'Google UL (Bytes)',
+  'Email DL (Bytes)', 'Email UL (Bytes)',
+  'Gaming DL (Bytes)', 'Gaming UL (Bytes)',
+  'Other DL (Bytes)', 'Other UL (Bytes)'
+
+]
+ 
+application_columns.append('Bearer Id')
+ 
+filtered_df = df[['MSISDN/Number'] + application_columns]
+
+filtered_df
+ 
+user_behavior_aggregated = filtered_df.groupby('MSISDN/Number').agg({
+  'Bearer Id': 'count',   'Social Media DL (Bytes)': 'sum',
+  'Social Media UL (Bytes)': 'sum',
+  'Youtube DL (Bytes)': 'sum',
+  'Youtube UL (Bytes)': 'sum',
+  'Netflix DL (Bytes)': 'sum',
+  'Netflix UL (Bytes)': 'sum',
+  'Google DL (Bytes)': 'sum',
+  'Google UL (Bytes)': 'sum',
+  'Email DL (Bytes)': 'sum',
+  'Email UL (Bytes)': 'sum',
+  'Gaming DL (Bytes)': 'sum',
+  'Gaming UL (Bytes)': 'sum',
+  'Other DL (Bytes)': 'sum',
+  'Other UL (Bytes)': 'sum'
+
+}).reset_index()
+ 
+print("Aggregated User Behavior:")
+
+user_behavior_aggregated
+user_behavior_aggregated.describe()
+
+numerical_columns = user_behavior_aggregated.select_dtypes(include='number').columns
+
+non_numerical_columns = user_behavior_aggregated.select_dtypes(exclude='number').columns
+ 
+user_behavior_aggregated[numerical_columns] = user_behavior_aggregated[numerical_columns].fillna(user_behavior_aggregated[numerical_columns].median())
+ 
+z_scores = zscore(df.select_dtypes(include='number'))
+
+abs_z_scores = abs(z_scores)
+
+filtered_entries = (abs_z_scores < 3).all(axis=1)
+ 
+df.loc[~filtered_entries, numerical_columns] = df[numerical_columns].mean()
+ 
+summary_statistics = user_behavior_aggregated
+ 
+correlation_matrix = user_behavior_aggregated[numerical_columns].corr()
+
+plt.figure(figsize=(12, 10))
+
+sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', fmt=".2f")
+
+plt.title('Correlation Heatmap')
+
+plt.show()
+ 
+print("Summary Statistics:")
+
+variable_info = pd.DataFrame(columns=['Variable', 'Data Type'])
+ 
+variable_info['Variable'] = summary_statistics.columns
+
+variable_info['Data Type'] = summary_statistics.dtypes.values
+ 
+print("Relevant Variables and Data Types:")
+
+print(variable_info)
+basic_metrics = summary_statistics.describe().transpose()[['mean', '50%', 'std', 'min', 'max']]
+
+basic_metrics['IQR'] = summary_statistics.quantile(0.75) - summary_statistics.quantile(0.25)
+ 
+print("Basic Metrics for Each Variable:")
+
+print(basic_metrics)
+quantitative_variables = df.select_dtypes(include='number')
+ 
+dispersion_parameters = pd.DataFrame(index=quantitative_variables.columns)
+
+dispersion_parameters['Mean'] = quantitative_variables.mean()
+
+dispersion_parameters['Median'] = quantitative_variables.median()
+
+dispersion_parameters['Standard Deviation'] = quantitative_variables.std()
+
+dispersion_parameters['Variance'] = quantitative_variables.var()
+
+dispersion_parameters['Range'] = quantitative_variables.max() - quantitative_variables.min()
+ 
+print("Dispersion Parameters for Each Quantitative Variable:")
+
+print(dispersion_parameters)
+numerical_variables = summary_statistics.select_dtypes(include='number')
+ 
+numerical_variables.hist(bins=20, figsize=(15, 10))
+
+plt.suptitle('Histograms for Numerical Variables', y=1.02)
+
+plt.show()
+plt.figure(figsize=(15, 10))
+
+sns.boxplot(data=numerical_variables)
+
+plt.title('Boxplots for Numerical Variables')
+
+plt.show()
+categorical_variables = summary_statistics.select_dtypes(include='number')
+ 
+for column in categorical_variables.columns:
+  plt.figure(figsize=(2, 1))
+  categorical_variables[column].value_counts().plot(kind='bar')
+  plt.title(f'Bar Chart for {column}')
+  plt.xlabel(column)
+  plt.ylabel('Frequency')
+  plt.show()
+applications_columns = ['Social Media DL (Bytes)', 'Social Media UL (Bytes)',
+  'Youtube DL (Bytes)', 'Youtube UL (Bytes)',
+  'Netflix DL (Bytes)', 'Netflix UL (Bytes)',
+  'Google DL (Bytes)', 'Google UL (Bytes)',
+  'Email DL (Bytes)', 'Email UL (Bytes)',
+  'Gaming DL (Bytes)', 'Gaming UL (Bytes)',
+  'Other DL (Bytes)', 'Other UL (Bytes)']
+ 
+total_data_columns = ['Total DL (Bytes)', 'Total UL (Bytes)']
+
+user['Total DL (Bytes)'] = summary_statistics['Social Media DL (Bytes)'] + summary_statistics['Youtube DL (Bytes)'] + summary_statistics['Netflix DL (Bytes)'] + summary_statistics['Google DL (Bytes)'] + summary_statistics['Email DL (Bytes)'] + summary_statistics['Gaming DL (Bytes)'] + summary_statistics['Other DL (Bytes)']
+
+summary_statistics['Total UL (Bytes)'] = summary_statistics['Social Media UL (Bytes)'] + summary_statistics['Youtube UL (Bytes)'] + summary_statistics['Netflix UL (Bytes)'] + summary_statistics['Google UL (Bytes)'] + summary_statistics['Email UL (Bytes)'] + summary_statistics['Gaming UL (Bytes)'] + summary_statistics['Other UL (Bytes)']
+ 
+selected_columns = applications_columns + total_data_columns
+
+selected_data = summary_statistics[selected_columns]
+ 
+correlation_matrix = selected_data.corr()
+ 
+plt.figure(figsize=(12, 10))
+
+sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', fmt=".2f")
+
+plt.title('Correlation Heatmap: Applications vs. Total Data')
+
+plt.show()
+summary_statistics
+
+total_duration_per_msisdn = df.groupby('MSISDN/Number')[['Dur. (ms)', 'Dur. (ms).1']].sum().sum(axis=1).reset_index()
+
+total_duration_per_msisdn.columns = ['MSISDN/Number', 'Total Duration (ms)']
+ 
+summary_statistics = pd.merge(summary_statistics, total_duration_per_msisdn, on='MSISDN/Number', how='left')
+ 
+summary_statistics['Total Data (DL+UL)'] = summary_statistics['Total DL (Bytes)'] + summary_statistics['Total UL (Bytes)']
+ 
+summary_statistics['Decile Class'] = pd.qcut(summary_statistics['Total Duration (ms)'], q=[0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0], labels=False, duplicates='drop')
+ 
+total_data_per_decile = summary_statistics.groupby('Decile Class')['Total Data (DL+UL)'].sum().reset_index()
+ 
+print("Total Data (DL+UL) per Decile Class:")
+
+print(total_data_per_decile)
+selected_columns = ['Social Media DL (Bytes)', 'Social Media UL (Bytes)',
+  'Youtube DL (Bytes)', 'Youtube UL (Bytes)',
+  'Netflix DL (Bytes)', 'Netflix UL (Bytes)',
+  'Google DL (Bytes)', 'Google UL (Bytes)',
+  'Email DL (Bytes)', 'Email UL (Bytes)',
+  'Gaming DL (Bytes)', 'Gaming UL (Bytes)',
+  'Other DL (Bytes)', 'Other UL (Bytes)']
+ 
+selected_data = summary_statistics[selected_columns]
+ 
+correlation_matrix = selected_data.corr()
+ 
+plt.figure(figsize=(12, 10))
+
+sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', fmt=".2f")
+
+plt.title('Correlation Heatmap: Data Usage by Application')
+
+plt.show()
+selected_columns = ['Social Media DL (Bytes)', 'Social Media UL (Bytes)',
+  'Youtube DL (Bytes)', 'Youtube UL (Bytes)',
+  'Netflix DL (Bytes)', 'Netflix UL (Bytes)',
+  'Google DL (Bytes)', 'Google UL (Bytes)',
+  'Email DL (Bytes)', 'Email UL (Bytes)',
+  'Gaming DL (Bytes)', 'Gaming UL (Bytes)',
+  'Other DL (Bytes)', 'Other UL (Bytes)']
+ 
+selected_data = df[selected_columns]
+ 
+numerical_columns = selected_data.select_dtypes(include=['float64']).columns
+
+categorical_columns = selected_data.select_dtypes(include=['object']).columns
+ 
+selected_data[numerical_columns] = selected_data[numerical_columns].fillna(selected_data[numerical_columns].median())
+ 
+selected_data[categorical_columns] = selected_data[categorical_columns].fillna(selected_data[categorical_columns].mode().iloc[0])
+ 
+selected_data_transposed = selected_data.T
+ 
+standardized_data_transposed = (selected_data_transposed - selected_data_transposed.mean()) / selected_data_transposed.std()
+ 
+pca = PCA()
+
+principal_components = pca.fit_transform(standardized_data_transposed)
+ 
+pc_df = pd.DataFrame(data=principal_components, columns=[f'PC{i+1}' for i in range(len(selected_columns))])
+ 
+explained_variance_ratio = pca.explained_variance_ratio_
+
+print("Explained Variance Ratio:")
+
+print(explained_variance_ratio)
+sessions_frequency = df.groupby('MSISDN/Number')['Dur. (ms).1'].count().reset_index()
+
+sessions_frequency.columns = ['MSISDN/Number', 'Sessions Frequency']
+duration_of_session = df.groupby('MSISDN/Number')['Dur. (ms).1'].sum().reset_index()
+
+duration_of_session.columns = ['MSISDN/Number', 'Total Session Duration (ms)']
+total_traffic = df.groupby('MSISDN/Number')[['Total DL (Bytes)', 'Total UL (Bytes)']].sum().reset_index()
+
+total_traffic['Total Session Traffic (Bytes)'] = total_traffic['Total DL (Bytes)'] + total_traffic['Total UL (Bytes)']
+
+total_traffic = total_traffic[['MSISDN/Number', 'Total Session Traffic (Bytes)']]
+user_engagement = pd.merge(sessions_frequency, duration_of_session, on='MSISDN/Number')
+
+user_engagement = pd.merge(user_engagement, total_traffic, on='MSISDN/Number')
+user_engagement
+
+user_engagement = pd.merge(sessions_frequency, duration_of_session, on='MSISDN/Number')
+
+user_engagement = pd.merge(user_engagement, total_traffic, on='MSISDN/Number')
+ 
+top_10_duration = user_engagement.nlargest(10, 'Total Session Duration (ms)')
+
+top_10_frequency = user_engagement.nlargest(10, 'Sessions Frequency')
+
+top_10_traffic = user_engagement.nlargest(10, 'Total Session Traffic (Bytes)')
+top_10_traffic
+
+engagement_metrics = user_engagement[['Sessions Frequency', 'Total Session Duration (ms)', 'Total Session Traffic (Bytes)']]
+ 
+scaler = StandardScaler()
+
+normalized_metrics = scaler.fit_transform(engagement_metrics)
+ 
+kmeans = KMeans(n_clusters=3, random_state=42)
+
+user_engagement['Cluster'] = kmeans.fit_predict(normalized_metrics)
+ 
+cluster_metrics = user_engagement.groupby('Cluster').agg({
+  'Sessions Frequency': ['min', 'max', 'mean', 'sum'],
+  'Total Session Duration (ms)': ['min', 'max', 'mean', 'sum'],
+  'Total Session Traffic (Bytes)': ['min', 'max', 'mean', 'sum']
+
+}).reset_index()
+
+cluster_metrics
+sns.pairplot(user_engagement, hue='Cluster', vars=['Sessions Frequency', 'Total Session Duration (ms)', 'Total Session Traffic (Bytes)'])
+
+plt.show()
+ 
+plt.figure(figsize=(15, 8))
+
+sns.boxplot(x='Cluster', y='Sessions Frequency', data=user_engagement)
+
+plt.title('Sessions Frequency')
+
+plt.show()
+ 
+plt.figure(figsize=(15, 8))
+
+sns.boxplot(x='Cluster', y='Total Session Duration (ms)', data=user_engagement)
+
+plt.title('Total Session Duration (ms)')
+
+plt.show()
+ 
+plt.figure(figsize=(15, 8))
+
+sns.boxplot(x='Cluster', y='Total Session Traffic (Bytes)', data=user_engagement)
+
+plt.title('Total Session Traffic (Bytes)')
+
+plt.show()
+application_columns = ['Social Media DL (Bytes)', 'Social Media UL (Bytes)',
+  'Youtube DL (Bytes)', 'Youtube UL (Bytes)',
+  'Netflix DL (Bytes)', 'Netflix UL (Bytes)',
+  'Google DL (Bytes)', 'Google UL (Bytes)',
+  'Email DL (Bytes)', 'Email UL (Bytes)',
+  'Gaming DL (Bytes)', 'Gaming UL (Bytes)',
+  'Other DL (Bytes)', 'Other UL (Bytes)']
+ 
+user_application_traffic = df.groupby('MSISDN/Number')[application_columns].sum().reset_index()
+ 
+top_10_users_per_application = {}
+
+for column in application_columns:
+  top_10_users = user_application_traffic.nlargest(10, column)
+  top_10_users_per_application[column] = top_10_users
+print(user_application_traffic)
+user_application_traffic.columns
+for column in user_application_traffic:
+  plt.figure(figsize=(10, 6))
+  plt.bar(user_application_traffic['MSISDN/Number'], user_application_traffic[column])
+  plt.title(f'Top 10 Users for {column}')
+  plt.xlabel('MSISDN/Number')
+  plt.ylabel(f'Total Traffic ({column})')
+  plt.show()
+inertia = []
+
+for k in range(1, 11):
+  kmeans = KMeans(n_clusters=k, random_state=42)
+  kmeans.fit(normalized_metrics)
+  inertia.append(kmeans.inertia_)
+ 
+plt.plot(range(1, 11), inertia, marker='o')
+
+plt.title('Elbow Method for Optimal k')
+
+plt.xlabel('Number of Clusters (k)')
+
+plt.ylabel('Inertia')
+
+plt.show() 

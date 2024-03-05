@@ -1,0 +1,4767 @@
+! pip install transformers bitsandbytes peft trl accelerate
+import os
+import torch
+from datasets import load_dataset
+from transformers import (
+  AutoModelForCausalLM,
+  AutoTokenizer,
+  BitsAndBytesConfig,
+  TrainingArguments,
+  pipeline,
+  logging,
+)
+ 
+import peft
+ 
+from peft import LoraConfig
+from trl import SFTTrainer
+base_model = "NousResearch/Llama-2-7b-chat-hf"
+guanaco_dataset = "mlabonne/guanaco-llama2-1k"
+new_model = "LLama-2-7b-chat-prac"
+print(peft.__version__)
+dataset = load_dataset(guanaco_dataset, split="train")
+compute_dtype = getattr(torch, "float16")
+quant_config = BitsAndBytesConfig(
+  load_in_4bit=True,
+  bnb_4bit_quant_type="nf4",
+  bnb_4bit_compute_dtype=compute_dtype,
+  bnb_4bit_use_double_quant=False,
+)
+model = AutoModelForCausalLM.from_pretrained(
+  base_model,
+  quantization_config=quant_config,
+  device_map={"": 0}
+)
+ 
+model.config.use_cache = False
+model.config.pretraining_tp = 1
+tokenizer = AutoTokenizer.from_pretrained(base_model, trust_remote_code=True)
+tokenizer.pad_token = tokenizer.eos_token
+tokenizer.padding_size= "right"
+peft_params = LoraConfig(
+  lora_alpha = 16,
+  lora_dropout = 0.1,
+  r=64,
+  bias="none",
+  task_type= "CAUSAL_LM"
+)
+training_params = TrainingArguments(
+  output_dir = "./results",
+  num_train_epochs=1,
+  per_device_train_batch_size=4,
+  gradient_accumulation_steps=1,
+  optim="paged_adamw_32bit",
+  save_steps=25,
+  logging_steps=25,
+  learning_rate=2e-4,
+  weight_decay=0.001,
+  fp16=False,
+  bf16=False,
+  max_grad_norm=0.3,
+  max_steps=-1,
+  warmup_ratio=0.03,
+  group_by_length=True,
+  lr_scheduler_type="constant",
+  report_to="tensorboard"
+)
+!pip install --upgrade peft
+from trl import SFTTrainer
+trainer = SFTTrainer(
+  model=model,
+  train_dataset=dataset,
+  peft_config=peft_params,
+  dataset_text_field="text",
+  max_seq_length=512,
+  tokenizer=tokenizer,
+  args=training_params,
+  packing=False,
+)
+trainer.train()
+import pandas as pd
+import numpy as np
+import sys, os
+sys.path.append(os.path.abspath(os.path.join('../scripts')))
+from util import Util
+from concurrent.futures import ThreadPoolExecutor
+util = Util()
+cleaned_dir = "../cleaned"
+json_file_path = '../raw/dilela_page.json'
+ 
+df = pd.read_json(json_file_path)
+df.head()
+df.shape
+columns = ["id", "channel_name", "type", "message_id", "message_type","text", "label", "created_at", "updated_at", ]
+new_df = pd.DataFrame(columns=columns)
+new_df
+telegeram_channel_id  = df["id"][0]
+telegram_channel_name = df["name"][0]
+telegeram_channel_type = df["type"][0]
+message_df = df["messages"]
+data = [{
+  'telegeram_channel_id': telegeram_channel_id,
+  'telegram_channel_name': telegram_channel_name,
+  'telegeram_channel_type': telegeram_channel_type,
+  'message_id': message.get('id', np.nan),
+  'message_type': message.get('type', np.nan),
+  'text': message['text_entities'][0]['text'] if message.get('text_entities') and message['text_entities'] else np.nan,
+  'created_at': message.get('date', np.nan),
+  'update_at': message.get('edited', np.nan),
+  }for message in message_df]
+message_df = pd.DataFrame(data)
+message_df = message_df.sort_values(by='message_id')
+message_df.head(20)
+message_df.shape
+nan_rows_count = message_df.isna().any(axis=1).sum()
+nan_rows_count
+message_df = message_df.dropna()
+message_df.head()
+message_df.shape
+message_df = message_df.replace('\n', ' ', regex=True)
+message_df.head()
+message_df["hashtags"] = message_df['text'].apply(lambda text: util.extract_hashtags(text))
+message_df.head()
+message_df["text"] = message_df["text"].str.replace(r'\
+message_df.head()
+message_df["emojis"] = message_df["text"].apply(util.extract_emojis)
+message_df.head()
+message_df['text'] = message_df['text'].apply(util.remove_emojis_using_emoji_pattern)
+message_df.tail()
+def remove_emojis_parallel(text):
+  return util.remove_emojis(text)
+ 
+with ThreadPoolExecutor() as executor:
+  message_df['text'] = list(executor.map(remove_emojis_parallel, message_df['text']))
+message_df.head()
+message_df.replace('', pd.NA, inplace=True)
+nan_rows_count = message_df.isna().any(axis=1).sum()
+ 
+message_df = message_df.dropna()
+message_df.head()
+ 
+letters = [
+  [['ሐ', 'ሑ', 'ሒ', 'ሓ', 'ሔ', 'ሖ'], ['ሀ', 'ሁ', 'ሂ', 'ሃ', 'ሄ', 'ህ', 'ሆ']],
+  [['ኀ', 'ኁ', 'ኂ', 'ኃ', 'ኄ', 'ኅ', 'ኆ'], ['ሀ', 'ሁ', 'ሂ', 'ሃ', 'ሄ', 'ህ', 'ሆ']],
+  [['ሠ', 'ሡ', 'ሢ', 'ሣ', 'ሤ', 'ሦ', 'ሦ', 'ሧ'], ['ሰ', 'ሱ', 'ሲ', 'ሳ', 'ሴ', 'ስ', 'ሶ', 'ሷ']],
+  [['ዐ', 'ዑ', 'ዒ', 'ዓ', 'ዔ', 'ዕ', 'ዖ'], ['አ', 'ኡ', 'ኢ', 'ኣ', 'ኤ', 'እ', 'ኦ']],
+  [['ጸ', 'ጹ', 'ጺ', 'ጻ', 'ጼ', 'ጽ', 'ጾ'], ['ፀ', 'ፁ', 'ፂ', 'ፃ', 'ፄ', 'ፅ', 'ፆ']]
+]
+for letter in letters:
+  for i in range(len(letter[0])):
+  message_df['text'] = message_df['text'].str.replace(letter[0][i], letter[1][i])
+message_df['symbols'] = message_df['text'].apply(util.extract_symbols)
+message_df.head()
+message_df['text'] = message_df['text'].apply(util.remove_symbols)
+message_df.tail()
+message_df['links'] = message_df['text'].apply(util.extract_urls)
+message_df.head()
+message_df['text'] = message_df['text'].str.replace(util.url_pattern, '', regex=True).str.strip()
+message_df.head()
+message_df['mentions'] = message_df['text'].apply(util.extract_mentions)
+message_df.head()
+message_df['text'] = message_df['text'].str.replace(util.mention_pattern, '', regex=True).str.strip()
+message_df.tail()
+message_df['text'] = message_df['text'].str.replace('\s+', ' ', regex=True).str.strip()
+message_df['text'] = message_df['text'].replace(r'!+', '!', regex=True)
+message_df['text'] = message_df['text'].replace(r'\.+', '', regex=True)
+message_df.head()
+nan_rows_count = message_df['text'].isna().sum()
+nan_rows_count
+ 
+message_df = message_df.dropna(subset='text')
+message_df.tail()
+ 
+message_df = message_df[message_df['text'].str.len() >= 20]
+message_df.to_csv(f"{cleaned_dir}/dilela_page.csv")
+message_df['text'].to_csv(f"{cleaned_dir}/dilela_page.txt", index=False, header=False)
+df = pd.read_csv(f"{cleaned_dir}/dilela_page.csv")
+df.head()
+df['word_count'] = df['text'].str.split().str.len()
+df.columns
+ 
+df_labeled = df.drop(['Unnamed: 0','telegram_channel_name','telegeram_channel_type','message_id','message_type','hashtags', 'emojis', 'created_at','symbols', 'links','mentions'],axis=1)
+df_labeled.rename(columns={'update_at':'date','telegeram_channel_id':'channel_id'},inplace=True)
+df_labeled.to_csv(f"{cleaned_dir}/dilela_page_labeled.csv")
+len = df_labeled['word_count'].sum()
+len
+from fastapi import FastAPI, HTTPException, Depends
+from typing import Annotated, List
+from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
+from utils import simple_rag
+from utils import hugging_face_hub
+app = FastAPI()
+origins = ["http://localhost:5173"]
+app.add_middleware(
+  CORSMiddleware,
+  allow_origins=origins,
+)
+ 
+class RagResponseBase(BaseModel):
+  question: str
+  answer: str
+ 
+class HugResponseBase(BaseModel):
+  question: str
+  answer: str
+ 
+class AmharicModelWithRAGBase(BaseModel):
+  question: str
+  answer: str
+ 
+@app.get("/getanswer", response_model=RagResponseBase)
+async def return_answer(question: str):
+  result = simple_rag.test_RAG(question)
+  return result
+ 
+@app.get("/getHuggingFaceAnswer", response_model=HugResponseBase)
+async def return_answer(model: str, prompt: str):
+  result = hugging_face_hub.invoke_current_hugging_face_model(model, prompt)
+  return result
+ 
+@app.get("/getAmharicModelWithRAGAnswer", response_model=AmharicModelWithRAGBase)
+async def return_answer(model: str, prompt: str):
+  result = hugging_face_hub.use_amharic_model(model, prompt)
+  return result
+from langchain import OpenAI
+from langchain.document_loaders import TextLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.embeddings.openai import OpenAIEmbeddings
+from langchain.vectorstores import Chroma
+from langchain.chains import RetrievalQA
+from models import simple_rag_response
+import os
+from dotenv import load_dotenv
+load_dotenv()
+ 
+def load_data():
+  loader = TextLoader("/week_6_challenge_doc.txt")
+  documents = loader.load()
+  return documents
+ 
+def return_chunks(documents):
+  text_splitter = RecursiveCharacterTextSplitter(chunk_size=150, chunk_overlap=30)
+  texts = text_splitter.split_documents(documents)
+  return texts
+ 
+def return_chain(texts):
+  embeddings = OpenAIEmbeddings()
+  store = Chroma.from_documents(
+  texts, embeddings, collection_name="challenge_document"
+  )
+  llm = OpenAI(temperature=0)
+  return RetrievalQA.from_chain_type(llm, retriever=store.as_retriever())
+ 
+def test_RAG(question):
+  documents = load_data()
+  chunks = return_chunks(documents)
+  chain = return_chain(chunks)
+  response = chain.run(question)
+  return simple_rag_response.RagResponse(question, response)
+import React, { useState , useRef} from 'react'
+import 'bootstrap/dist/css/bootstrap.css'
+import FileInput from  './components/FileInput'
+import TextInputWithLable from  './components/TextInputWithLable'
+import Dropdown from './components/Dropdown'
+import NavBarComp from './components/Navbar'
+import SpinnerWithText from './components/SpinnerWithText'
+// import './App.css'
+import api from './api/api'
+function App() {
+  const [answer,setAnswer] = useState([]);
+  const [isShow,setShow] = useState(false);
+  const fetchResponse = async () =>{
+  console.log(ref.current.value);
+  const question = ref.current.value;
+  setShow(true)
+  const response = await api.get('/getanswer?question='+question);
+  console.log(response.data);
+  setAnswer(response.data)
+  setShow(false)
+  }
+  const ref = useRef(null);
+  return (
+  <React.Fragment>
+  <NavBarComp />
+  <main className='container'>
+  <form className="row g-3" >
+  <div>
+  <label htmlFor="inputLable" className="form-label">Input Ad description to be generated</label>
+  <textarea className="form-control" id="inputTextarea" rows="7" ref={ref}/>
+  </div>
+  {isShow && <SpinnerWithText />}
+  <button type="button" className="btn btn-primary mb-4" onClick={fetchResponse}>Get Ad</button>   <div>
+  <TextInputWithLable value= {answer}/>
+  </div>
+  </form>
+  </main>
+  </React.Fragment>
+  )
+}
+export default App
+import pandas as pd
+import json
+df = pd.read_json('sheger.json')
+df.head()
+df.info()
+df.messages.iloc[0]
+df.columns
+message_df = pd.json_normalize(df.messages)
+message_df.head()
+def extract_text_from_data(data):
+  extracted_text = []
+  for item in data:
+  if isinstance(item, dict) and 'text' in item:
+  extracted_text.append(item['text'])
+  elif isinstance(item, str):
+  extracted_text.append(item)
+  return ''.join(extracted_text)
+ 
+message_df['extracted_text'] = message_df['text'].apply(extract_text_from_data)
+message_df = message_df[['id','type','date','extracted_text']]
+message_df.head()
+def extract_text_from_data(data):
+  extracted_text = []
+  for item in data:
+  if isinstance(item, dict) and 'text' in item:
+  extracted_text.append(item['text'])
+  elif isinstance(item, str):
+  extracted_text.append(item)
+  full_text = ''.join(extracted_text)
+  substrings_to_remove = ['\n\n', '@sheger_press\n@sheger_press', '❗️❗️❗️']
+  for substring in substrings_to_remove:
+  full_text = full_text.replace(substring, '')
+  full_text = ''.join(char for char in full_text if char.isalnum() or char.isspace())
+  return full_text.strip()
+ 
+message_df['cleaned_text'] = message_df['extracted_text'].apply(extract_text_from_data)
+message_df.head()
+df = df[['name','type','id']]
+df.rename(columns={'name':'channel_name',
+  'type':'channel_type',
+  'id':'channel_id'}, inplace=True)
+df.head()
+message_df=message_df[['id','type','date','cleaned_text']]
+message_df.rename(columns = {'id':'message_id',
+  'type':'message_type',
+  'date':'message_date',
+  'cleaned_text':'text'}, inplace = True)
+message_df.head()
+sheger_df= pd.concat([df,message_df], axis =1)
+sheger_df.head()
+press_df = press_df[press_df.text != '']
+press_df.head()
+sheger_df.to_csv('sheger_press.csv', index = None)
+import pandas as pd
+import json
+import os
+from pprint import pprint
+import bitsandbytes as bnb
+import torch
+import torch.nn as nn
+import transformers
+from datasets import load_dataset, Dataset
+from huggingface_hub import notebook_login
+ 
+from peft import LoraConfig, PeftConfig, PeftModel, get_peft_model, prepare_model_for_kbit_training
+from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, TrainingArguments, pipelines, logging
+from datasets import load_dataset
+dataset_name = 'Henok/amharic-qa' 
+dataset = load_dataset(dataset_name, split="train")
+MODEL_NAME = "mistralai/Mistral-7B-v0.1"
+new_model = "amharic-mistral-7b"
+config = AutoConfig.from_pretrained(MODEL_NAME, trust_remote_code=True, load_in_4bit=True)
+ 
+bnb_config = BitsAndBytesConfig(
+  load_in_4bit=True,
+  bnb_4bit_use_double_quant=True,
+  bnb_4bit_quant_type="nf4",
+  bnb_4bit_compute_dtype=torch.bfloat16
+)
+ 
+model = AutoModelForCausalLM.from_pretrained(
+  MODEL_NAME,
+  device_map="auto",
+  trust_remote_code=True,
+  quantization_config=bnb_config,
+)
+ 
+tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+tokenizer.pad_token = tokenizer.eos_token
+model = prepare_model_for_kbit_training(model)
+use_4bit = True
+ 
+bnb_4bit_compute_dtype = "float16"
+ 
+bnb_4bit_quant_type = "nf4"
+ 
+use_nested_quant = False
+compute_dtype = getattr(torch, bnb_4bit_compute_dtype)
+if compute_dtype == torch.float16 and use_4bit:
+  major, _ = torch.cuda.get_device_capability()
+  if major >= 8:
+  print("=" * 80)
+  print("Your GPU supports bfloat16: accelerate training with bf16=True")
+  print("=" * 80)
+import re
+def get_num_layers(model):
+  numbers = set()
+  for name, _ in model.named_parameters():
+  for number in re.findall(r'\d+', name):
+  numbers.add(int(number))
+  return max(numbers)
+ 
+def get_last_layer_linears(model):
+  names = []
+  num_layers = get_num_layers(model)
+  for name, module in model.named_modules():
+  if str(num_layers) in name and not "encoder" in name:
+  if isinstance(module, torch.nn.Linear):
+  names.append(name)
+  return names
+config = LoraConfig(
+  r=2,
+  lora_alpha=32,
+  target_modules=get_last_layer_linears(model),
+  lora_dropout=0.05,
+  bias="none",
+  task_type="CAUSAL_LM"
+)
+ 
+model = get_peft_model(model, config)
+ 
+output_dir = "./results"
+ 
+num_train_epochs = 1
+ 
+fp16 = False
+bf16 = False
+ 
+per_device_train_batch_size = 4
+ 
+per_device_eval_batch_size = 4
+ 
+gradient_accumulation_steps = 1
+ 
+max_grad_norm = 0.3
+ 
+learning_rate = 2e-4
+ 
+weight_decay = 0.001
+ 
+optim = "paged_adamw_32bit"
+ 
+lr_scheduler_type = "constant"
+ 
+warmup_ratio = 0.03
+ 
+group_by_length = True
+ 
+save_steps = 25
+ 
+logging_steps = 25
+ 
+base_model = AutoModelForCausalLM.from_pretrained(
+  MODEL_NAME,
+  low_cpu_mem_usage=True,
+  return_dict=True,
+  torch_dtype=torch.float16,
+  device_map={"": 0},
+)
+model = PeftModel.from_pretrained(base_model, new_model)
+model = model.merge_and_unload()
+training_arguments = TrainingArguments(
+  output_dir=output_dir,
+  num_train_epochs=num_train_epochs,
+  per_device_train_batch_size=per_device_train_batch_size,
+  gradient_accumulation_steps=gradient_accumulation_steps,
+  optim=optim,
+  save_steps=save_steps,
+  logging_steps=logging_steps,
+  learning_rate=learning_rate,
+  weight_decay=weight_decay,
+  fp16=fp16,
+  bf16=bf16,
+  max_grad_norm=max_grad_norm,
+  max_steps=25,
+  warmup_ratio=warmup_ratio,
+  group_by_length=group_by_length,
+  lr_scheduler_type=lr_scheduler_type,
+  report_to="tensorboard"
+)
+from trl import SFTTrainer
+trainer = SFTTrainer(
+  model=model,
+  train_dataset=dataset,
+  peft_config=peft_params,
+  dataset_text_field="text",
+  max_seq_length=512,
+  tokenizer=tokenizer,
+  args=training_params,
+  packing=False,
+)
+trainer.train()
+class RagResponse:
+  def __init__(self, question, answer) -> None:
+  self.question = question
+  self.answer = answer
+  pass
+ 
+class HugResponse:
+  def __init__(self, question, answer) -> None:
+  self.question = question
+  self.answer = answer
+  pass
+ 
+class AmharicModelResponse:
+  def __init__(self, question, answer) -> None:
+  self.question = question
+  self.answer = answer
+  pass
+from dotenv import load_dotenv
+from models import simple_rag_response
+load_dotenv()
+from langchain import HuggingFaceHub
+ 
+def invoke_current_hugging_face_model(model, prompt):
+  llm = HuggingFaceHub(
+  repo_id=model, model_kwargs={"temperature": 0, "max_length": 64}
+  )
+  response = llm(prompt)
+  return simple_rag_response.HugResponse(prompt, response)
+ 
+def use_amharic_model(model, prompt):
+  llm = HuggingFaceHub(
+  repo_id=model, model_kwargs={"temperature": 0, "max_length": 64}
+  )
+  response = llm(prompt)
+  return simple_rag_response.AmharicModelResponse(prompt, response)
+import time
+import sentencepiece as spm
+import sentencepiece as spm
+ 
+spm.SentencePieceTrainer.train('--input=merged_text.txt --model_prefix=m --vocab_size=100000')
+sp = spm.SentencePieceProcessor()
+sp.load('m.model')
+ 
+print(sp.encode_as_pieces('የኢትዮጽያ ጂዲፒ ምን ያህል ነበር?'))
+print(sp.encode_as_ids('የኢትዮጽያ ጂዲፒ ምን ያህል ነበር?'))
+ 
+print(sp.encode_as_pieces('ሃይ ሰላም ናችሁ?'))
+ 
+spm.SentencePieceTrainer.train('--input=merged_text.txt --model_prefix=am-word --model_type=word  --vocab_size=100000')
+ 
+sp = spm.SentencePieceProcessor()
+sp.load('am-word.model')
+ 
+print(sp.encode_as_pieces('የኢትዮጽያ  ጂዲፒ ምን ያህል ነበር?'))
+print(sp.encode_as_ids('የኢትዮጽያ ጂዲፒ ምን ያህል ነበር?'))
+sp = spm.SentencePieceProcessor()
+sp.load('am-word.model')
+ 
+print(sp.encode_as_pieces('በአዲስ አበባ የአሜሪካ ኤምባሲ'))
+print(sp.encode_as_ids('በአዲስ አበባ የአሜሪካ ኤምባሲ'))
+sp = spm.SentencePieceProcessor()
+sp.load('am-word.model')
+ 
+print(sp.encode_as_pieces('የፒዛ ምግብ ቤት ለመክፈት የሚጠቅሙ ምክሮች'))
+print(sp.encode_as_ids('ፒዛ ምግብ ቤት ለመክፈት የሚጠቅሙ ምክሮች'))
+print(sp.decode_ids([47914, 1024, 33, 7716, 29922, 26700]))
+import json
+import re
+ 
+class Util():
+  def __init__(self) -> None:
+  self.emoji_pattern = re.compile("["
+  u"\U0001F600-\U0001F64F"   u"\U0001F300-\U0001F5FF"   u"\U0001F680-\U0001F6FF"   u"\U0001F700-\U0001F77F"   u"\U0001F780-\U0001F7FF"   u"\U0001F800-\U0001F8FF"   u"\U0001F900-\U0001F9FF"   u"\U0001FA00-\U0001FA6F"   u"\U0001FA70-\U0001FAFF"   u"\u2600-\u26FF"   u"\u2700-\u27BF"   u"\u2B50"   u"\U00002049 \U0000FE0F"   u"\U0000203C"   u"\U0001F1E6-\U0001F1FF"   "]+", flags=re.UNICODE)
+  self.symbols = re.compile("["
+  "\""
+  "\“"
+  "\""
+  "\'"
+  "\-"
+  "\*"
+  "\•"
+  "\ℹ"
+  "\﻿"
+  "\_"
+  "]+")
+  self.url_pattern = r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+'
+  self.mention_pattern = r'@(\w+)'
+  print(self.emoji_pattern.pattern)
+  def read_file(self, file_path: str) -> dict:
+  with open(file_path, 'r') as file:
+  data = json.load(file)
+  return data
+  def write_file(self, file_path: str, data: dict) -> None:
+  with open(file_path, 'w') as file:
+  json.dump(data, file, indent=2)
+  def parse_text(self, text: any) -> str:
+  if isinstance(text, str):
+  return text
+  elif isinstance(text, list):
+  contents = []
+  for item in text:
+  if isinstance(item, str):
+  contents.append(item)
+  elif isinstance(item, dict):
+  contents.append(item['text'])
+  return "".join(contents)
+  else:
+  return ""
+  def parse_messages(self, messages: list) -> dict:
+  parsed_messages = {
+  'id': [],
+  'text': [],
+  'date': []
+  }
+  for message in messages:
+  if message['type'] != 'message' or len(message['text']) == 0:
+  continue
+  parsed_messages['id'].append(message['id'])
+  message_content = self.parse_text(message['text'])
+  parsed_messages['text'].append(message_content)
+  parsed_messages['date'].append(message['date'])
+  return parsed_messages
+  def extract_hashtags(self, text: str) -> list:
+  return [word for word in text.split() if word.startswith('
+  def extract_emojis(self, text):
+  return ''.join(self.emoji_pattern.findall(text))
+  def remove_emojis(self, text):
+  return self.emoji_pattern.sub(' ', text)
+  def extract_symbols(self, text):
+  return ''.join(self.symbols.findall(text))
+  def remove_symbols(self, text):
+  return self.symbols.sub(' ', text)
+  def extract_urls(self, text):
+  return re.findall(self.url_pattern, text)
+  def extract_mentions(self, text):
+  return re.findall(self.mention_pattern, text)
+import pandas as pd
+import csv, os, sys
+from transformers import AutoTokenizer, AutoModelForCausalLM
+from trl import
+"""
+Convert .txt to csv
+"""
+import csv
+from sklearn.model_selection import train_test_split
+def convert_txt_to_csv(input_txt, output_csv):
+  with open(input_txt, 'r', encoding='utf-8') as infile, open(output_csv, 'w', encoding='utf-8', newline='') as outfile:
+  reader = infile.readlines()
+  data = [line.strip().split() for line in reader]
+  csv_writer = csv.writer(outfile)
+  csv_writer.writerows(data)
+def split_data(input_csv, output_train_csv, output_test_csv, output_val_csv, test_size=0.2, val_size=0.1, random_seed=42):
+  with open(input_csv, 'r', encoding='utf-8') as file:
+  csv_reader = csv.reader(file)
+  data = list(csv_reader)
+  train_data, test_val_data = train_test_split(data, test_size=(test_size + val_size), random_state=random_seed)
+  test_data, val_data = train_test_split(test_val_data, test_size=(val_size / (test_size + val_size)), random_state=random_seed)
+  with open(output_train_csv, 'w', encoding='utf-8', newline='') as train_file:
+  csv_writer = csv.writer(train_file)
+  csv_writer.writerows(train_data)
+  with open(output_test_csv, 'w', encoding='utf-8', newline='') as test_file:
+  csv_writer = csv.writer(test_file)
+  csv_writer.writerows(test_data)
+  with open(output_val_csv, 'w', encoding='utf-8', newline='') as val_file:
+  csv_writer = csv.writer(val_file)
+  csv_writer.writerows(val_data)
+if __name__ == "__main__":
+  input_txt_file = '/home/biniyam_ajaw/finetuning/data/dataset.txt'
+  output_csv_file = '/home/biniyam_ajaw/finetuning/data/output_data.csv'
+  output_train_csv = '/home/biniyam_ajaw/finetuning/data/train_data.csv'
+  output_test_csv = '/home/biniyam_ajaw/finetuning/data/test_data.csv'
+  output_val_csv = '/home/biniyam_ajaw/finetuning/data/val_data.csv'
+  convert_txt_to_csv(input_txt_file, output_csv_file)
+  split_data(output_csv_file, output_train_csv, output_test_csv, output_val_csv)
+  print("Conversion to CSV and data split completed.")
+from tokenizers import Tokenizer
+from tokenizers.models import BPE
+tokenizer = Tokenizer(BPE(unk_token="[UNK]"))
+from tokenizers.trainers import BpeTrainer
+trainer = BpeTrainer(special_tokens=["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]"], vocab_size=100000)
+import tokenizers
+from tokenizers.pre_tokenizers import Whitespace
+tokenizer.pre_tokenizer = Whitespace()
+folder = 'data'
+files = [f"/home/biniyam_ajaw/finetuning/{folder}/{split}.csv" for split in ["test_data", "train_data", "valid_data"]]
+tokenizer.train(files, trainer)
+from tokenizers.processors import TemplateProcessing
+tokenizer.post_processor = TemplateProcessing(
+  single="[CLS] $A [SEP]",
+  pair="[CLS] $A [SEP] $B:1 [SEP]:1",
+  special_tokens=[
+  ("[CLS]", tokenizer.token_to_id("[CLS]")),
+  ("[SEP]", tokenizer.token_to_id("[SEP]")),
+  ],
+)
+tokenizer.enable_padding(pad_id=3, pad_token="[PAD]")
+from transformers import PreTrainedTokenizerFast
+custom_tokenizer = PreTrainedTokenizerFast(tokenizer_object=tokenizer)
+custom_tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+custom_tokenizer.save_pretrained("amharic_tokenizer")
+custom_tokenizer.push_to_hub("amharic_tokenizer")
+max-width: 100%;
+  width: 100%;
+  height: 100%;
+  margin: 5 auto;
+  padding: 2rem;
+  text-align: start;
+  color-scheme: light dark;
+  color: rgba(255, 255, 255, 0.87);
+  background-color:   font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+.container {
+  width: 100%;
+  padding-right: 15px;
+  padding-left: 15px;
+  margin-right: auto;
+  margin-left: auto;
+}
+.logo {
+  height: 6em;
+  padding: 1.5em;
+  will-change: filter;
+  transition: filter 300ms;
+}
+.logo:hover {
+  filter: drop-shadow(0 0 2em }
+.logo.react:hover {
+  filter: drop-shadow(0 0 2em }
+@keyframes logo-spin {
+  from {
+  transform: rotate(0deg);
+  }
+  to {
+  transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  a:nth-of-type(2) .logo {
+  animation: logo-spin infinite 20s linear;
+  }
+}
+.card {
+  padding: 2em;
+}
+.read-the-docs {
+  color: }
+import React from 'react';
+import 'bootstrap/dist/css/bootstrap.css'
+function FileInput (){
+  return(
+  <div>
+  <div className="input-group mb-3">
+  <input type="file" className="form-control" id="inputGroupFile02"/>
+  <label clclassNameass="input-group-text" for="inputGroupFile02">Upload</label>
+  </div>
+  </div>
+  );
+}
+ 
+export default FileInput;
+/* :root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  width: 100%;
+  color-scheme: light dark;
+  color: rgba(255, 255, 255, 0.87);
+  background-color:   font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+.container {
+  width: 100%;
+  padding-right: 15px;
+  padding-left: 15px;
+  margin-right: auto;
+  margin-left: auto;
+}
+a {
+  font-weight: 500;
+  color:   text-decoration: inherit;
+}
+a:hover {
+  color: }
+body {
+  margin: 0;
+  display: flex;
+  place-items: center;
+  min-width: 320px;
+  min-height: 100vh;
+}
+h1 {
+  font-size: 3.2em;
+  line-height: 1.1;
+}
+button {
+  border-radius: 8px;
+  border: 1px solid transparent;
+  padding: 0.6em 1.2em;
+  font-size: 1em;
+  font-weight: 500;
+  font-family: inherit;
+  background-color:   cursor: pointer;
+  transition: border-color 0.25s;
+}
+button:hover {
+  border-color: }
+button:focus,
+button:focus-visible {
+  outline: 4px auto -webkit-focus-ring-color;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+  color:   background-color:   }
+  a:hover {
+  color:   }
+  button {
+  background-color:   }
+} */
+import Container from 'react-bootstrap/Container';
+import Nav from 'react-bootstrap/Nav';
+import Navbar from 'react-bootstrap/Navbar';
+import NavDropdown from 'react-bootstrap/NavDropdown';
+function NavBarComp() {
+  return (
+  <Navbar expand="lg" className="bg-body-tertiary container-fluid">
+  <Container >
+  <Navbar.Brand href="   <Navbar.Toggle aria-controls="basic-navbar-nav" />
+  <Navbar.Collapse id="basic-navbar-nav">
+  <Nav className="me-auto">
+  <NavDropdown title="Select Model" id="basic-nav-dropdown">
+  <NavDropdown.Item href="   <NavDropdown.Item href="   <NavDropdown.Item href="   </NavDropdown>
+  </Nav>
+  </Navbar.Collapse>
+  </Container>
+  </Navbar>
+  );
+}
+export default NavBarComp;
+import React from 'react';
+import 'bootstrap/dist/css/bootstrap.css'
+function TextInputWithLabel (props) {
+  return(
+  <div>
+  <div className="mb-3">
+  <label htmlFor="exampleFormControlTextarea1" className="form-label">Generated Ad</label>
+  <textarea className="form-control" id="exampleFormControlTextarea1" rows="7"  value={props.value.answer}/>
+  </div>
+  </div>
+  );
+}
+ 
+export default TextInputWithLabel;
+import torch
+from transformers import AutoModelForCausalLM, AutoConfig, AutoTokenizer, BitsAndBytesConfig, TrainingArguments, pipeline, logging
+from datasets import load_dataset
+import os, sys
+from huggingface_hub import notebook_login
+import torch.nn as nn
+import getpass
+from trl import SFTTrainer
+from peft import PeftConfig, LoraConfig
+os.environ["HUGGING_FACE_HUB_TOKEN"] = getpass.getpass("Token:")
+assert os.environ["HUGGING_FACE_HUB_TOKEN"]
+quantization_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16)
+nf4_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4")
+double_quant_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_use_double_quant=True)
+model_id = "microsoft/phi-2"
+new_model = 'amharic-phi'
+model = AutoModelForCausalLM.from_pretrained(model_id, device_map='cuda:0', quantization_config=nf4_config)
+tokenizer = AutoTokenizer.from_pretrained("dagim/amharic_tokenizer")
+ 
+tokenizer.tokenize("ከአሜሪካ ወደ አዲስ አበባለመጓዝምንያህልጊዜይወስዳል??")
+from datasets import load_dataset
+dataset_name = 'Henok/amharic-qa'
+dataset = load_dataset(dataset_name, split="train")
+import re
+def get_num_layers(model):
+  numbers = set()
+  for name, _ in model.named_parameters():
+  for number in re.findall(r'\d+', name):
+  numbers.add(int(number))
+  return max(numbers)
+ 
+def get_last_layer_linears(model):
+  names = []
+  num_layers = get_num_layers(model)
+  for name, module in model.named_modules():
+  if str(num_layers) in name and not "encoder" in name:
+  if isinstance(module, torch.nn.Linear):
+  names.append(name)
+  return names
+config = LoraConfig(
+  r=4,
+  lora_alpha=32,
+  lora_dropout=0.03,
+  bias='none',
+  task_type="CAUSAL_LM"
+)
+training_arguments = TrainingArguments(
+  output_dir="./results",
+  num_train_epochs=2,
+  per_device_train_batch_size=4,
+  gradient_accumulation_steps=1,
+  optim='paged_adamw_32bit',
+  save_steps=25,
+  logging_steps=25,
+  learning_rate=2e-8,
+  weight_decay=0.001,
+  fp16=False,
+  bf16=False,
+  max_grad_norm=0.3,
+  max_steps=25,
+  warmup_ratio=0.03,
+  group_by_length=True,
+  lr_scheduler_type='constant',
+  report_to="tensorboard",
+  gradient_checkpointing=True
+)
+trainer = SFTTrainer(
+  model=model,
+  train_dataset=dataset,
+  peft_config=config,
+  dataset_text_field='inputs',
+  max_seq_length=None,
+  tokenizer=tokenizer,
+  args=training_arguments,
+  packing=False
+)
+trainer.train()
+trainer.model.save_pretrained(new_model)
+logging.set_verbosity(logging.CRITICAL)
+ 
+prompt = "የኢትዮጵያ ጂዲፒ ምን ያህል ነበር?"
+pipe = pipeline(task="text-generation", model=model, tokenizer=tokenizer, max_length=200)
+result = pipe(f"<s>[INST] {prompt} [/INST]")
+print(result[0]['generated_text'])
+from transformers import PreTrainedTokenizerFast
+fast_tokenizer = PreTrainedTokenizerFast(tokenizer_file="/home/biniyam_ajaw/llama-2-amharic-3784m/tokenizer.json")
+print(len(tokenizer.encode('የኢትዮጵያ ጂዲፒ ምን ያህል ነበር?')))
+import logging
+import numpy as np
+import math
+import os, sys
+import torch
+from dataclasses import dataclass, field
+from itertools import chain
+from typing import Optional, List, Tuple, Dict, Any, Mapping
+from pathlib import Path
+import datasets
+from datasets import Dataset, DatasetDict, load_dataset, load_metric, concatenate_datasets
+from transformers import (
+  CONFIG_MAPPING,
+  MODEL_FOR_CAUSAL_LM_MAPPING,
+  AutoConfig,
+  AutoModelForCausalLM,
+  AutoTokenizer,   LlamaForCausalLM,
+  LlamaTokenizer,
+  AutoTokenizer,
+  DataCollatorForLanguageModeling,
+  HfArgumentParser,
+  Trainer,
+  TrainingArguments,
+  set_seed,
+  is_torch_gpu_available,
+)
+from transformers.trainer_utils import get_last_checkpoint, is_main_process
+from transformers.testing_utils import CaptureLogger
+from transformers.utils import send_example_telemetry
+from transformers.utils.versions import require_version_core
+from sklearn.metrics import accuracy_score, precision_recall_fscore_support
+from sklearn.metrics import classification_report
+from peft import LoraConfig, TaskType, get_peft_model, PeftModel, get_peft_model_state_dict
+from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR
+ 
+class SavePeftModelCallback(transformers.TrainerCallback):
+  def save_model(self, args, state, kwargs):
+  if state.best_model_checkpoint is not None:
+  checkpoint_folder = os.path.join(state.best_model_checkpoint, "pt_lora-Model")
+  else:
+  checkpoint_folder = os.path.join(args.output_dir, f"{PREFIX_CHECKPOINT_DIR}-{state.global_step}")
+  peft_model_path = os.path.join(checkpoint_folder, "pt_lora_model")
+  kwargs["model"].save_pretrained(peft_model_path)
+  kwargs["tokenizer"].save_pretrained(peft_model_path)
+  def on_save(self, args, state, control, **kwargs):
+  self.save_model(args, state, kwargs)
+  return control
+  def on_train_end(self, args, state, control, **kwargs):
+  peft_model_path = os.path.join(args.output_dir, "pt_lora_model")
+  kwargs["model"].save_pretrained(peft_model_path)
+  kwargs["tokenizer"].save_pretrained(peft_model_path)
+def accuracy(predictions, references, normalize=True, sample_weight=None):
+  return {
+  "accuracy": float(
+  accuracy_score(references, predictions, normalize=normalize, sample_weight=sample_weight)
+  )
+  }
+def compute_metrics(eval_preds):
+  preds, labels = eval_preds
+  labels = labels[:, 1:].reshape(-1)
+  preds = preds[:, :-1].reshape(-1)
+  return accuracy(predictions=preds, references=labels)
+def preprocess_logits_for_metrics(logits, labels):
+  if isinstance(logits, tuple):
+  logits = logits[0]
+  return logits.argmax(dim=-1)
+def fault_tolerance_data_collator(features: List) -> Dict[str, Any]:
+  if not isinstance(features[0], Mapping):
+  features = [vars(f) for f in features]
+  first = features[0]
+  batch = {}
+  if "label" in first and first["label"] is not None:
+  label = first["label"].item() if isinstance(first["label"], torch.Tensor) else first["label"]
+  dtype = torch.long if isinstance(label, int) else torch.float
+  batch["label"] = torch.tensor([f["label"] for f in features], dtype=dtype)
+  elif "label_ids" in first and first["label_ids"] is not None:
+  if isinstance(first["label_ids"], torch.Tensor):
+  batch["labels"] = torch.stack([f["label_ids"] for f in features])
+  else:
+  dtype = torch.long if isinstance(first["label_ids"][0], int) else torch.float
+  batch["labels"] = torch.tensor([f["label_ids"] for f in features], dtype=dtype)
+  try:
+  for k, v in first.items():
+  if k not in ("label", "label_ids") and v is not None and not isinstance(v, str):
+  if isinstance(v, torch.Tensor):
+  batch[k] = torch.stack([f[k] for f in features])
+  elif isinstance(v, np.ndarray):
+  batch[k] = torch.tensor(np.stack([f[k] for f in features]))
+  else: batch[k] = torch.tensor([f[k] for f in features])
+  except ValueError:
+  for k, v in first.items():
+  if k not in ("label", "label_ids") and v is not None and not isinstance(v, str):
+  if isinstance(v, torch.Tensor):
+  batch[k] = torch.stack([features[0][k]] * len(features))
+  elif isinstance(v, np.ndarray):
+  batch[k] = torch.tensor(np.stack([features[0][k]] * len(features)))
+  else:   batch[k] = torch.tensor([features[0][k]] * len(features))
+  return batch
+MODEL_CONFIG_CLASSES = list(MODEL_FOR_CAUSAL_MAPPING.keys())
+MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
+@dataclass
+class ModelArguments:
+  model_name_or_path: Optional[str] = field(
+  default=None,
+  metadata={
+  "help": (
+  "The model checkpoint for weights initialization.Don't set if you want to train a model from scratch."
+  )
+  },
+  )
+  tokenizer_name_or_path: Optional[str] = field(
+  default=None,
+  metadata={"help": ("The tokenizer for weights initialization.")},
+  )
+  model_type: Optional[str] = field(
+  default=None,
+  metadata={"help": "If training from scratch, pass a model type from the list: " + ", ".join(MODEL_TYPES)},
+  )
+  config_overrides: Optional[str] = field(
+  default=None,
+  metadata={
+  "help": (
+  "Override some existing default config settings when a model is trained from scratch. Example: "
+  "n_embd=10,resid_pdrop=0.2,scale_attn_weights=false,summary_type=cls_index"
+  )
+  },
+  )
+  config_name: Optional[str] = field(
+  default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
+  )
+  tokenizer_name: Optional[str] = field(
+  default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
+  )
+  cache_dir: Optional[str] = field(
+  default=None,
+  metadata={"help": "Where do you want to store the pretrained models downloaded from huggingface.co"},
+  )
+  use_fast_tokenizer: bool = field(
+  default=True,
+  metadata={"help": "Whether to use one of the fast tokenizer (backed by the tokenizers library) or not."},
+  )
+  model_revision: str = field(
+  default="main",
+  metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
+  )
+  use_auth_token: bool = field(
+  default=False,
+  metadata={
+  "help": (
+  "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
+  "with private models)."
+  )
+  },
+  )
+  torch_dtype: Optional[str] = field(
+  default=None,
+  metadata={
+  "help": (
+  "Override the default `torch.dtype` and load the model under this dtype. If `auto` is passed, the "
+  "dtype will be automatically derived from the model's weights."
+  ),
+  "choices": ["auto", "bfloat16", "float16", "float32"],
+  },
+  )
+  def __post_init__(self):
+  if self.config_overrides is not None and (self.config_name is not None or self.model_name_or_path is not None):
+  raise ValueError(
+  "--config_overrides cannot be used with --config_name or --model_name_or_path. To override some of "
+  )
+ 
+@dataclass
+class DataTrainingArguments:
+  '''
+  Arguments pertaining to what data we are going to input our model for training and eval.
+  '''
+  dataset_dir: Optional[str] = field(
+  default=None, metadata={"the name of the dataset to use"}
+  )
+  dataset_config_name: Optional[str] = field(
+  default=None, metadata={"help": "The configuration name opf the dataset to use"}
+  )
+  train_file: Optional[str] = field(
+  default=None, metadata={"help": "The input training file"}
+  )
+  validation_file: Optional[str] = field(
+  default=None, metadata={"help": "This is optional but recommended if you want to use early stopping"}
+  )
+  max_training_sample: Optional[int] = field(
+  default=None,
+  metadata={
+  "help": "Debugging purposes"
+  },
+  )
+  max_eval_samples: Optional[int] = field(
+  default=None,
+  metadata={
+  "help": "For debugging"
+  },
+  )
+  streaming: bool = field(default=False, metadata={"help": "Enable streaming mode"})
+  block_size: Optional[int] = field(
+  default=None,
+  metadata={
+  "help": (
+  "Optional"
+  "Training dataset will be truncated into a block of this size for training"
+  "Default to the model max input sequence"
+  )
+  }
+  )
+  cache_dir: bool = field(
+  default=None,
+  metadata={"help": "Where do you want to store the pretrained models downloaded from huggingface.co"},
+  )
+  validation_strategy: Optional[float] = field(
+  default=0.01,
+  metadata={
+  "help": "Percentage of the validation set used at the end of each epoch"
+  }
+  )
+  preprocessing_num_workers: Optional[int] = field(
+  default=None,
+  metadata={"help": "Number of processes to use for preprocessing"}
+  )
+  keep_linebreaks: bool = field(
+  default=True, metadata={"help": "Whether to keep the linebreaks when using txt files or not"}
+  )
+  data_cache_dir: Optional[str] = field(default="./", metadata={"help": "The datasets processed store"})
+  def __post_init__(self):
+  if self.streaming:
+  require_version("datasets>=2.0.0", "The streaming feature requires `datasets >= 2.0.0`")
+ 
+@dataclass
+class MyTrainingArguments(TrainingArguments):
+  trainable : Optional[str] = field(default="q_proj, v_proj")
+  lora_rank : Optional[str] = field(default=8)
+  lora_dropout : Optional[float] = field(default=0.03)
+  lora_alpha : Optional[float] = field(default=32.)
+  modules_to_save : Optional[str] = field(default=None)
+  debug_mode : Optional[str] = field(default=False)
+  peft_path : Optional[str] = field(default=None)
+ 
+logger = logging.getLogger(__name__)
+def main():
+  parser = HfArgumentParser(ModelArguments, DataTrainingArguments, MyTrainingArguments)
+  if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
+  model_args, data_args, training_args = parser.parse_parse_json_file(json_file=os.path.abspath(sys.argv[1]))
+  else:
+  model_args, data_args, training_args = parser.parse_args_to_dataclasses()
+  send-example_telemetry("run_clm", model_args, data_args)
+  logging.basicConfig(format="%(asctime)s - %(levelname)s - %(name)s - %(message)s", datefmt="%m/%d/%Y %H:%M:%S",
+  level=logging.INFO,   handlers=[logging.StreamHandler(sys.stdout)],)
+  if training_args.should_log:
+  transformers.utils.logging.set_verbosity_info()
+  log_level = training_args.get_process_log_level()
+  logger.setLevel(log_level)
+  datasets.utils.logging.set_verbosity(log_level)
+  transformers.utils.logging.enable_default_handler()
+  transformers.utils.logging.enable_explicit_format()
+  logger.warning(
+  f"Process rank: {training_args.output_dir}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
+  + f"Distributed training: {bool(training_args.local_rank != -1)}, 16-bits-training: {training_args.fp16}"
+  )
+  last_checkpoint = None
+  if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
+  last_checkpoint = get_last_checkpoint(training_args.output_dir)
+  if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
+  raise ValueError (
+  f"Outpur dir {training_args.output_dir} already exists and is not mt"
+  "Use --overwrite_output_dir to overcome"
+  )
+  elif last_checkpoint is not None and training_args.resume_from_checkpoint is not None:
+  logger.info(
+  f"Checkpoint detected, resuming training at {last_checkpoint}. To avoid this, change "
+  "the --output-dir or --overwrite_output_dir to train from scratch"
+  )
+  set_seed(training_args.seed)
+  config_kwargs = {
+  "cache_dir": model.cache_dir,
+  "revision": model_args.model_revision,
+  "use_auth_token": True if model-args.use_auth_token else None
+  }
+  if model_args.config_name:
+  config = AutoConfig.from_pretrained(model_args.config_name, **config_kwargs)
+  elif model_args.model_name_or_path:
+  config = AutoConfig.from_pretrained(model_args.model_name_or_path, **config_kwargs)
+  else:   config = CONFIG_MAPPING[model_args.model_type]()
+  logger.warning("This is a new config from scratch")
+  if model_args.config_overrides is not None:
+  logger.info(f"Overriding config: {model_args.config_overrides}")
+  config.update_from_string(model_args.config_overrides)
+  logger.info(f"New config: {config}")
+  tokenizer_kwargs = {
+  "cache_dir": model_args.cache_dir,
+  "use_fast": model_args.use_fast_tokenizer,
+  "revision": model_args.model_revision,
+  "use_auth_token": True if model_args.use_auth_token else None
+  }
+  if model_args.tokenizer_name:
+  tokenizer = AutoTokenizer.from_pretrained(model_args.tokenizer_name, **tokenizer_kwargs)
+  elif model_args.tokenizer_name_or_path:
+  tokenizer = LlamaTokenizer.from_pretrained(model_args.tokenizer_name_or_path, **tokenizer_kwargs)
+  else:
+  raise ValueError(
+  "Instantiating a tokenizer from scratch"
+  )
+  def tokenize_function(examples):
+  with CaptureLogger(tok_logger) as cl:
+  return tokenizer(examples[text])
+  if "Token indices sequence length is longer than the" in cl.out:
+  tok_logger.warning(
+  "^^^^^^^ PLease ignore the warning above ^^^^^^^"
+  )
+  return output
+  if data_args.block_size is None:
+  block_size = tokenizer.model_max_length
+  if block_size > 1024:
+  logger.warning(
+  "The chosen tokenizer supports a `model_max_length` that is longer than the default `block_size` value"
+  " of 1024. If you would like to use a longer `block_size` up to `tokenizer.model_max_length` you can"
+  " override this default with `--block_size xxx`."
+  )
+  block_size = 1024   else:
+  if data_args.block_size > tokenizer.model_max_length:
+  logger.warning(
+  f"The block_size passed ({data_args.block_size}) is larger than the maximum length for the model"
+  "Override with `--block_size xxx`"
+  )
+  block_size = min(data_args.block_size, tokenizer.model_max_length)
+  def group_texts(examples):
+  concatenated_examples = {k: list(chain(*examples[k])) for k in examples.keys()}
+  total_length = len(concatenated_examples[list(examples.keys())[0]])
+  if total_length >= block_size:
+  total_length = {total_length // block_size} *  block_size
+  result = {
+  k: [t[i: i + block_size] for i in range(0, total_length, block_size)]
+  for k, t in concatenated_examples.items()
+  }
+  result["labels"] = result["input_ids"].copy()
+  return result
+  with training_args.main_process_first(desc="dataset map tokenizer"):
+  lm_datasets = []
+  path = Path(data_args.dataset_dir)
+  filename = [file.name for file in path.glob("*.txt")]
+  if training_args.debug_mode:
+  files = [files[0]]
+  for idx, file in enumerate(files):
+  data_file = os.path.join(path, file)
+  filename = ''.join(file.split('.')[:-1])
+  cache_path = os.path.join(data_args.data_cache_dir, filename)
+  os.makedirs(cache_path, exist_ok=True)
+  try:
+  processed_dataset = datasets.load_from_disk(cache_path, keep_in_memory=True)
+  logger.info(f'Training datasets-{filename} has been loaded from disk')
+  except Exception:
+  cache_dir = os.path.join(data_args.data_cache_dir, filename+"_text")
+  os.makedirs(cache_dir, exist_ok=True)
+  raw_dataset = load_dataset("text", data_files=data_file, cache_dir=cache_dir, keep_in_memory=False)
+  logger.info(f"{file} has been loaded")
+  tokenized_dataset = raw_dataset.map(
+  tokenize_function,
+  batched=True,
+  num_proc=data_args.preprocessing_num_workers,
+  remove_columns="text",
+  load_from_cache_file=True,
+  keep_in_memory=False,
+  cache_file_names = {k: os.path.join(cache_dir, "tokenized.arrow") for k in raw_dataset},
+  desc="Running tokenizer on the dataset",
+  )
+  grouped_datasets = tokenized_dataset.map(
+  group_texts,
+  batched=True,
+  num_proc=data_args.preprocessing_num_workers,
+  load_from_cache_file=True,
+  keep_in_memory=False,
+  cache_file_names = {k: os.path.join(cache_dir, "grouped.arrow") for k in tokenized_dataset},
+  desc=f'Grouping texts in chunks of {block_size}',
+  )
+  processed_dataset = grouped_datasets
+  processed_dataset.save_to_disk(cache_path)
+  if idx == 0:
+  lm_datasets = processed_dataset['train']
+  else:
+  assert lm_datasets.features.type == processed_dataset['train'].features.type
+  lm_dataset = concatenate_datasets([lm_datasets, processed_dataset['train']])
+  lm_datasets = lm_datasets.train_test_split(test_size= data_args.validation_split_percentage())
+  if training_args.do_train:
+  train_dataset = lm_datasets["train"]
+  if data_args.max_train_samples is not None:
+  max_train_samples = min(len(train_dataset), data_args.max_train_samples)
+  train_dataset = train_dataset.select(range(max_train_samples))
+  logger.info(f"Num train samples {len(train_dataset)}")
+  logger.info("Training example: ")
+  logger.info(tokenizer.decode(train_dataset[0]["input_ids"]))
+  if model_args.model_name_or_path:
+  torch_dtype = (
+  model_args.torch_dtype
+  if model_args.torch_dtype in ["auto", None]
+  else getattr(torch, model_args.torch_dtype)
+  )
+  model = LlamaForCausalLM.from_pretrained(
+  model_args.model_name_or_path,
+  from_tf=bool(".cpkt" in model_args.model_name_or_path),
+  config=config,
+  cache_dir=model_args.cache_dir,
+  revision=model_args.model_revision,
+  use_auth_token=True if model_args.use_auth_token else None,
+  torch_dtype=torch_dtype,
+  low_cpu_mem_usage=True,
+  )
+  else:
+  model = AutoModelForCausalLM.from_config(config)
+  n_params = sum({p.data_ptr(): p.numel() for p in model.parameters()}.values())
+  logger.info(f"Training new model from scratch - Total size={n_params/2**20:.2f}M parameters")
+  model_vocab_size = model.get_output_embeddings().weight.size(0)
+  if not (
+  (model_vocab_size==32000 and len(tokenizer)==51008) or \
+  (model_vocab_size==32000 and len(tokenizer)==32000) or \
+  (model_vocab_size==51008 and len(tokenizer)==51008) or \
+  (model_vocab_size==49954 and len(tokenizer)==49954)
+  ):
+  raise ValueError(
+  f"The combination of base model (size: {model_vocab_size}) and tokenizer (size: {len(tokenizer)}) is not a valid configuration. Please check our project wiki for further information. \n"
+  "Valid configurations (base model / tokenizer):\n"
+  "- Continue pre-training original LLaMA: 32000 / 32000 \n"
+  "- Pre-training (Chinese) Amharic LLaMA based on original LLaMA: 32000 / 51008 \n"
+  "- Continue pre-training (Chinese) Amharic LLaMA: 51008 / 51008 \n"
+  "- Continue pre-training Chinese Alpaca: 49954 / 49954 \n"
+  )
+  model.resize_token_embeddings(len(tokenizer))
+  if training_args.peft_path is not None:
+  logger.info("PEFT from pretrained model")
+  model = PeftModel.from_pretrained(model, training_args.peft_path)
+  else:
+  logger.info("Init new peft model")
+  target_modules = training_args.trainable.split(",")
+  modules_to_save = training_args.modules_to_save
+  if modules_to_save is not None:
+  modules_to_save = modules_to_save.split(",")
+  lora_rank = training_args.lora_rank
+  lora_dropout = training_args.lora_dropout
+  lora_alpha = training_args.lora_alpha
+  logger.info(f"Target modules: {target_modules}")
+  logger.info(f"LoRA Rank: {lora_rank}")
+  peft_config = LoraConfig(
+  task_type = TaskType.CAUSAL_LM,
+  targert_modules = target_modules,
+  inference_mode=False,
+  r = lora_rank, lora_alpha=lora_alpha, lora_dropout=lora_dropout,
+  modules_to_save=modules_to_save,
+  )   model= get_peft_model(model, peft_config)
+  model.print_trainable_parameters()
+!pip install -q -U transformers datasets accelerate peft trl bitsandbytes wandb
+import os
+from dotenv import load_dotenv
+ 
+load_dotenv()
+ 
+hf_token = os.getenv("hf_token")
+ 
+import torch
+from datasets import load_dataset
+from transformers import (
+  AutoModelForCausalLM,
+  AutoTokenizer,
+  BitsAndBytesConfig,
+  TrainingArguments,
+  pipeline,
+  logging,
+)
+ 
+import peft
+ 
+from peft import LoraConfig
+from trl import SFTTrainer
+import pandas as pd
+file_path = '../../merged.csv'
+ 
+df = pd.read_csv(file_path)
+df
+dataset=df[['Text']]
+dataset
+dataset_2=dataset.copy()
+ 
+dataset_2
+!pip install scikit-learn
+ 
+from sklearn.model_selection import train_test_split
+ 
+train_val_data, test_data = train_test_split(dataset_2, test_size=0.20, random_state=42)
+train_data, evaluation_data = train_test_split(train_val_data, test_size=0.10, random_state=42)
+ 
+print('Training dataset shape:', len(train_data))
+print('evaluation dataset shape:', len(evaluation_data))
+print('Testing dataset shape:', len(test_data))
+evaluation_data
+import numpy as np
+ 
+msk = np.random.rand(len(dataset_2)) < 0.8
+train_dataset = dataset_2[msk]
+test_dataset = dataset_2[~msk]
+from datasets import Dataset
+ 
+test_dataset=Dataset.from_pandas(test_dataset)
+ 
+train_dataset=Dataset.from_pandas(train_dataset)
+ 
+evaluation_dataset=Dataset.from_pandas(evaluation_data)
+test_dataset
+ 
+test_dataset=test_dataset.remove_columns("__index_level_0__")
+train_dataset=train_dataset.remove_columns("__index_level_0__")
+evaluation_dataset=evaluation_dataset.remove_columns("__index_level_0__")
+ 
+import datasets
+ 
+main_dataset= datasets.DatasetDict({
+  'train': train_dataset,
+  'test': test_dataset,
+  'evaluate': evaluation_dataset
+})
+main_dataset
+import os
+import torch
+from datasets import load_dataset
+from transformers import (
+  AutoModelForCausalLM,
+  AutoTokenizer,
+  BitsAndBytesConfig,
+  AutoTokenizer,
+  TrainingArguments,
+  pipeline,
+)
+from peft import LoraConfig, PeftModel, prepare_model_for_kbit_training
+from trl import SFTTrainer
+base_model = "NousResearch/Llama-2-7b-hf"
+new_model = "llama-2-7b-Amh"
+ 
+tokenizer = AutoTokenizer.from_pretrained(base_model, use_fast=True)
+tokenizer.pad_token = tokenizer.unk_token
+tokenizer.padding_side = "right"
+bnb_config = BitsAndBytesConfig(
+  load_in_4bit=True,
+  bnb_4bit_quant_type="nf4",
+  bnb_4bit_compute_dtype=torch.float16,
+  bnb_4bit_use_double_quant=True,
+)
+ 
+peft_config = LoraConfig(
+  r=16,
+  lora_alpha=32,
+  lora_dropout=0.05,
+  bias="none",
+  task_type="CAUSAL_LM",
+  target_modules=['up_proj', 'down_proj', 'gate_proj', 'k_proj', 'q_proj', 'v_proj', 'o_proj']
+)
+def load_model(model_name, bnb_config):
+  n_gpus = torch.cuda.device_count()
+  max_memory = f'{23000}MB'
+ 
+load_model(base_model,bnb_config)
+import torch
+torch.cuda.empty_cache()
+ 
+model = AutoModelForCausalLM.from_pretrained(
+  base_model,
+  quantization_config=bnb_config,
+  device_map={"": 0}
+)
+ 
+model = prepare_model_for_kbit_training(model)
+training_dataset=main_dataset
+model
+import torch
+ 
+device = torch.device("cuda:0")
+ 
+torch.cuda.empty_cache()
+ 
+print(torch.cuda.memory_summary(device))
+import torch
+torch.cuda.empty_cache()
+import torch
+ 
+n_gpus = torch.cuda.device_count()
+print(f"Number of available GPUs: {n_gpus}")
+ 
+for i in range(n_gpus):
+  gpu_memory = torch.cuda.get_device_properties(i).total_memory
+  print(f"GPU {i}: Total memory: {gpu_memory / (1024**3)} GB")
+from transformers import Trainer, TrainingArguments, BitsAndBytesConfig
+ 
+training_arguments = TrainingArguments(
+  output_dir="../results",
+  num_train_epochs=1,
+  per_device_train_batch_size=10,
+  per_device_eval_batch_size=1,
+  gradient_accumulation_steps=1,
+  gradient_checkpointing=True,
+  fp16=True,
+  evaluation_strategy="steps",
+  eval_steps=1000,
+  logging_steps=1,
+  optim="paged_adamw_8bit",
+  learning_rate=2e-4,
+  lr_scheduler_type="linear",
+  warmup_steps=10,
+  max_steps=10, 
+)
+ 
+trainer = SFTTrainer(
+  model=model,
+  train_dataset=main_dataset["train"],
+  eval_dataset=main_dataset["evaluate"],
+  peft_config=peft_config,
+  dataset_text_field="Text",
+  max_seq_length=512,
+  tokenizer=tokenizer,
+  args=training_arguments,
+)
+ 
+model.config.use_cache = False  
+trainer.train()
+ 
+trainer.model.save_pretrained(new_model)
+ 
+prompt = "የኢትዮጽያ  ጂዲፒ ምን ያህል ነበር"
+instruction = f"
+pipe = pipeline(task="text-generation", model=model, tokenizer=tokenizer, max_length=128)
+result = pipe(instruction)
+print(result[0]['generated_text'][len(instruction):])
+prompt = "how can i treat flu, give the response in amharic language"
+instruction = f"
+pipe = pipeline(task="text-generation", model=model, tokenizer=tokenizer, max_length=128)
+result = pipe(instruction)
+print(result[0]['generated_text'][len(instruction):])
+prompt = "tell me about ethiopian politics, give the response in amharic language"
+instruction = f"
+pipe = pipeline(task="text-generation", model=model, tokenizer=tokenizer, max_length=128)
+result = pipe(instruction)
+print(result[0]['generated_text'][len(instruction):])
+prompt = "who the prime minister of ethiopia, give the response in amharic language"
+instruction = f"
+pipe = pipeline(task="text-generation", model=model, tokenizer=tokenizer, max_length=128)
+result = pipe(instruction)
+print(result[0]['generated_text'][len(instruction):])
+prompt = "3 Ethiopian premier league club, give the response in amharic language"
+instruction = f"
+pipe = pipeline(task="text-generation", model=model, tokenizer=tokenizer, max_length=128)
+result = pipe(instruction)
+print(result[0]['generated_text'][len(instruction):])
+del model
+del pipe
+del trainer
+import gc
+gc.collect()
+gc.collect()
+import torch
+torch.cuda.empty_cache()
+model = AutoModelForCausalLM.from_pretrained(
+  base_model,
+  low_cpu_mem_usage=True,
+  return_dict=True,
+  torch_dtype=torch.float16,
+  device_map={"": 0},
+)
+model = PeftModel.from_pretrained(model, new_model)
+model = model.merge_and_unload()
+ 
+tokenizer = AutoTokenizer.from_pretrained(base_model, trust_remote_code=True)
+tokenizer.pad_token = tokenizer.eos_token
+tokenizer.padding_side = "right"
+! pip install transformers bitsandbytes peft trl accelerate
+import os
+import torch
+from datasets import load_dataset
+from transformers import (
+  AutoModelForCausalLM,
+  AutoTokenizer,
+  BitsAndBytesConfig,
+  TrainingArguments,
+  pipeline,
+  logging,
+)
+ 
+import peft
+ 
+from peft import LoraConfig
+from trl import SFTTrainer
+base_model = "NousResearch/Llama-2-7b-chat-hf"
+guanaco_dataset = "mlabonne/guanaco-llama2-1k"
+new_model = "LLama-2-7b-chat-prac"
+print(peft.__version__)
+dataset = load_dataset(guanaco_dataset, split="train")
+compute_dtype = getattr(torch, "float16")
+quant_config = BitsAndBytesConfig(
+  load_in_4bit=True,
+  bnb_4bit_quant_type="nf4",
+  bnb_4bit_compute_dtype=compute_dtype,
+  bnb_4bit_use_double_quant=False,
+)
+model = AutoModelForCausalLM.from_pretrained(
+  base_model,
+  quantization_config=quant_config,
+  device_map={"": 0}
+)
+ 
+model.config.use_cache = False
+model.config.pretraining_tp = 1
+tokenizer = AutoTokenizer.from_pretrained(base_model, trust_remote_code=True)
+tokenizer.pad_token = tokenizer.eos_token
+tokenizer.padding_size= "right"
+peft_params = LoraConfig(
+  lora_alpha = 16,
+  lora_dropout = 0.1,
+  r=64,
+  bias="none",
+  task_type= "CAUSAL_LM"
+)
+training_params = TrainingArguments(
+  output_dir = "./results",
+  num_train_epochs=1,
+  per_device_train_batch_size=4,
+  gradient_accumulation_steps=1,
+  optim="paged_adamw_32bit",
+  save_steps=25,
+  logging_steps=25,
+  learning_rate=2e-4,
+  weight_decay=0.001,
+  fp16=False,
+  bf16=False,
+  max_grad_norm=0.3,
+  max_steps=-1,
+  warmup_ratio=0.03,
+  group_by_length=True,
+  lr_scheduler_type="constant",
+  report_to="tensorboard"
+)
+!pip install --upgrade peft
+from trl import SFTTrainer
+trainer = SFTTrainer(
+  model=model,
+  train_dataset=dataset,
+  peft_config=peft_params,
+  dataset_text_field="text",
+  max_seq_length=512,
+  tokenizer=tokenizer,
+  args=training_params,
+  packing=False,
+)
+trainer.train()
+import pandas as pd
+import numpy as np
+import sys, os
+sys.path.append(os.path.abspath(os.path.join('../scripts')))
+from util import Util
+from concurrent.futures import ThreadPoolExecutor
+util = Util()
+cleaned_dir = "../cleaned"
+json_file_path = '../raw/dilela_page.json'
+ 
+df = pd.read_json(json_file_path)
+df.head()
+df.shape
+columns = ["id", "channel_name", "type", "message_id", "message_type","text", "label", "created_at", "updated_at", ]
+new_df = pd.DataFrame(columns=columns)
+new_df
+telegeram_channel_id  = df["id"][0]
+telegram_channel_name = df["name"][0]
+telegeram_channel_type = df["type"][0]
+message_df = df["messages"]
+data = [{
+  'telegeram_channel_id': telegeram_channel_id,
+  'telegram_channel_name': telegram_channel_name,
+  'telegeram_channel_type': telegeram_channel_type,
+  'message_id': message.get('id', np.nan),
+  'message_type': message.get('type', np.nan),
+  'text': message['text_entities'][0]['text'] if message.get('text_entities') and message['text_entities'] else np.nan,
+  'created_at': message.get('date', np.nan),
+  'update_at': message.get('edited', np.nan),
+  }for message in message_df]
+message_df = pd.DataFrame(data)
+message_df = message_df.sort_values(by='message_id')
+message_df.head(20)
+message_df.shape
+nan_rows_count = message_df.isna().any(axis=1).sum()
+nan_rows_count
+message_df = message_df.dropna()
+message_df.head()
+message_df.shape
+message_df = message_df.replace('\n', ' ', regex=True)
+message_df.head()
+message_df["hashtags"] = message_df['text'].apply(lambda text: util.extract_hashtags(text))
+message_df.head()
+message_df["text"] = message_df["text"].str.replace(r'\
+message_df.head()
+message_df["emojis"] = message_df["text"].apply(util.extract_emojis)
+message_df.head()
+message_df['text'] = message_df['text'].apply(util.remove_emojis_using_emoji_pattern)
+message_df.tail()
+def remove_emojis_parallel(text):
+  return util.remove_emojis(text)
+ 
+with ThreadPoolExecutor() as executor:
+  message_df['text'] = list(executor.map(remove_emojis_parallel, message_df['text']))
+message_df.head()
+message_df.replace('', pd.NA, inplace=True)
+nan_rows_count = message_df.isna().any(axis=1).sum()
+ 
+message_df = message_df.dropna()
+message_df.head()
+ 
+letters = [
+  [['ሐ', 'ሑ', 'ሒ', 'ሓ', 'ሔ', 'ሖ'], ['ሀ', 'ሁ', 'ሂ', 'ሃ', 'ሄ', 'ህ', 'ሆ']],
+  [['ኀ', 'ኁ', 'ኂ', 'ኃ', 'ኄ', 'ኅ', 'ኆ'], ['ሀ', 'ሁ', 'ሂ', 'ሃ', 'ሄ', 'ህ', 'ሆ']],
+  [['ሠ', 'ሡ', 'ሢ', 'ሣ', 'ሤ', 'ሦ', 'ሦ', 'ሧ'], ['ሰ', 'ሱ', 'ሲ', 'ሳ', 'ሴ', 'ስ', 'ሶ', 'ሷ']],
+  [['ዐ', 'ዑ', 'ዒ', 'ዓ', 'ዔ', 'ዕ', 'ዖ'], ['አ', 'ኡ', 'ኢ', 'ኣ', 'ኤ', 'እ', 'ኦ']],
+  [['ጸ', 'ጹ', 'ጺ', 'ጻ', 'ጼ', 'ጽ', 'ጾ'], ['ፀ', 'ፁ', 'ፂ', 'ፃ', 'ፄ', 'ፅ', 'ፆ']]
+]
+for letter in letters:
+  for i in range(len(letter[0])):
+  message_df['text'] = message_df['text'].str.replace(letter[0][i], letter[1][i])
+message_df['symbols'] = message_df['text'].apply(util.extract_symbols)
+message_df.head()
+message_df['text'] = message_df['text'].apply(util.remove_symbols)
+message_df.tail()
+message_df['links'] = message_df['text'].apply(util.extract_urls)
+message_df.head()
+message_df['text'] = message_df['text'].str.replace(util.url_pattern, '', regex=True).str.strip()
+message_df.head()
+message_df['mentions'] = message_df['text'].apply(util.extract_mentions)
+message_df.head()
+message_df['text'] = message_df['text'].str.replace(util.mention_pattern, '', regex=True).str.strip()
+message_df.tail()
+message_df['text'] = message_df['text'].str.replace('\s+', ' ', regex=True).str.strip()
+message_df['text'] = message_df['text'].replace(r'!+', '!', regex=True)
+message_df['text'] = message_df['text'].replace(r'\.+', '', regex=True)
+message_df.head()
+nan_rows_count = message_df['text'].isna().sum()
+nan_rows_count
+ 
+message_df = message_df.dropna(subset='text')
+message_df.tail()
+ 
+message_df = message_df[message_df['text'].str.len() >= 20]
+message_df.to_csv(f"{cleaned_dir}/dilela_page.csv")
+message_df['text'].to_csv(f"{cleaned_dir}/dilela_page.txt", index=False, header=False)
+df = pd.read_csv(f"{cleaned_dir}/dilela_page.csv")
+df.head()
+df['word_count'] = df['text'].str.split().str.len()
+df.columns
+ 
+df_labeled = df.drop(['Unnamed: 0','telegram_channel_name','telegeram_channel_type','message_id','message_type','hashtags', 'emojis', 'created_at','symbols', 'links','mentions'],axis=1)
+df_labeled.rename(columns={'update_at':'date','telegeram_channel_id':'channel_id'},inplace=True)
+df_labeled.to_csv(f"{cleaned_dir}/dilela_page_labeled.csv")
+len = df_labeled['word_count'].sum()
+len
+from fastapi import FastAPI, HTTPException, Depends
+from typing import Annotated, List
+from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
+from utils import simple_rag
+from utils import hugging_face_hub
+app = FastAPI()
+origins = ["http://localhost:5173"]
+app.add_middleware(
+  CORSMiddleware,
+  allow_origins=origins,
+)
+ 
+class RagResponseBase(BaseModel):
+  question: str
+  answer: str
+ 
+class HugResponseBase(BaseModel):
+  question: str
+  answer: str
+ 
+class AmharicModelWithRAGBase(BaseModel):
+  question: str
+  answer: str
+ 
+@app.get("/getanswer", response_model=RagResponseBase)
+async def return_answer(question: str):
+  result = simple_rag.test_RAG(question)
+  return result
+ 
+@app.get("/getHuggingFaceAnswer", response_model=HugResponseBase)
+async def return_answer(model: str, prompt: str):
+  result = hugging_face_hub.invoke_current_hugging_face_model(model, prompt)
+  return result
+ 
+@app.get("/getAmharicModelWithRAGAnswer", response_model=AmharicModelWithRAGBase)
+async def return_answer(model: str, prompt: str):
+  result = hugging_face_hub.use_amharic_model(model, prompt)
+  return result
+from langchain import OpenAI
+from langchain.document_loaders import TextLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.embeddings.openai import OpenAIEmbeddings
+from langchain.vectorstores import Chroma
+from langchain.chains import RetrievalQA
+from models import simple_rag_response
+import os
+from dotenv import load_dotenv
+load_dotenv()
+ 
+def load_data():
+  loader = TextLoader("/week_6_challenge_doc.txt")
+  documents = loader.load()
+  return documents
+ 
+def return_chunks(documents):
+  text_splitter = RecursiveCharacterTextSplitter(chunk_size=150, chunk_overlap=30)
+  texts = text_splitter.split_documents(documents)
+  return texts
+ 
+def return_chain(texts):
+  embeddings = OpenAIEmbeddings()
+  store = Chroma.from_documents(
+  texts, embeddings, collection_name="challenge_document"
+  )
+  llm = OpenAI(temperature=0)
+  return RetrievalQA.from_chain_type(llm, retriever=store.as_retriever())
+ 
+def test_RAG(question):
+  documents = load_data()
+  chunks = return_chunks(documents)
+  chain = return_chain(chunks)
+  response = chain.run(question)
+  return simple_rag_response.RagResponse(question, response)
+import React, { useState , useRef} from 'react'
+import 'bootstrap/dist/css/bootstrap.css'
+import FileInput from  './components/FileInput'
+import TextInputWithLable from  './components/TextInputWithLable'
+import Dropdown from './components/Dropdown'
+import NavBarComp from './components/Navbar'
+import SpinnerWithText from './components/SpinnerWithText'
+// import './App.css'
+import api from './api/api'
+function App() {
+  const [answer,setAnswer] = useState([]);
+  const [isShow,setShow] = useState(false);
+  const fetchResponse = async () =>{
+  console.log(ref.current.value);
+  const question = ref.current.value;
+  setShow(true)
+  const response = await api.get('/getanswer?question='+question);
+  console.log(response.data);
+  setAnswer(response.data)
+  setShow(false)
+  }
+  const ref = useRef(null);
+  return (
+  <React.Fragment>
+  <NavBarComp />
+  <main className='container'>
+  <form className="row g-3" >
+  <div>
+  <label htmlFor="inputLable" className="form-label">Input Ad description to be generated</label>
+  <textarea className="form-control" id="inputTextarea" rows="7" ref={ref}/>
+  </div>
+  {isShow && <SpinnerWithText />}
+  <button type="button" className="btn btn-primary mb-4" onClick={fetchResponse}>Get Ad</button>   <div>
+  <TextInputWithLable value= {answer}/>
+  </div>
+  </form>
+  </main>
+  </React.Fragment>
+  )
+}
+export default App
+import pandas as pd
+import json
+df = pd.read_json('sheger.json')
+df.head()
+df.info()
+df.messages.iloc[0]
+df.columns
+message_df = pd.json_normalize(df.messages)
+message_df.head()
+def extract_text_from_data(data):
+  extracted_text = []
+  for item in data:
+  if isinstance(item, dict) and 'text' in item:
+  extracted_text.append(item['text'])
+  elif isinstance(item, str):
+  extracted_text.append(item)
+  return ''.join(extracted_text)
+ 
+message_df['extracted_text'] = message_df['text'].apply(extract_text_from_data)
+message_df = message_df[['id','type','date','extracted_text']]
+message_df.head()
+def extract_text_from_data(data):
+  extracted_text = []
+  for item in data:
+  if isinstance(item, dict) and 'text' in item:
+  extracted_text.append(item['text'])
+  elif isinstance(item, str):
+  extracted_text.append(item)
+  full_text = ''.join(extracted_text)
+  substrings_to_remove = ['\n\n', '@sheger_press\n@sheger_press', '❗️❗️❗️']
+  for substring in substrings_to_remove:
+  full_text = full_text.replace(substring, '')
+  full_text = ''.join(char for char in full_text if char.isalnum() or char.isspace())
+  return full_text.strip()
+ 
+message_df['cleaned_text'] = message_df['extracted_text'].apply(extract_text_from_data)
+message_df.head()
+df = df[['name','type','id']]
+df.rename(columns={'name':'channel_name',
+  'type':'channel_type',
+  'id':'channel_id'}, inplace=True)
+df.head()
+message_df=message_df[['id','type','date','cleaned_text']]
+message_df.rename(columns = {'id':'message_id',
+  'type':'message_type',
+  'date':'message_date',
+  'cleaned_text':'text'}, inplace = True)
+message_df.head()
+sheger_df= pd.concat([df,message_df], axis =1)
+sheger_df.head()
+press_df = press_df[press_df.text != '']
+press_df.head()
+sheger_df.to_csv('sheger_press.csv', index = None)
+import pandas as pd
+import json
+import os
+from pprint import pprint
+import bitsandbytes as bnb
+import torch
+import torch.nn as nn
+import transformers
+from datasets import load_dataset, Dataset
+from huggingface_hub import notebook_login
+ 
+from peft import LoraConfig, PeftConfig, PeftModel, get_peft_model, prepare_model_for_kbit_training
+from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, TrainingArguments, pipelines, logging
+from datasets import load_dataset
+dataset_name = 'Henok/amharic-qa' 
+dataset = load_dataset(dataset_name, split="train")
+MODEL_NAME = "mistralai/Mistral-7B-v0.1"
+new_model = "amharic-mistral-7b"
+config = AutoConfig.from_pretrained(MODEL_NAME, trust_remote_code=True, load_in_4bit=True)
+ 
+bnb_config = BitsAndBytesConfig(
+  load_in_4bit=True,
+  bnb_4bit_use_double_quant=True,
+  bnb_4bit_quant_type="nf4",
+  bnb_4bit_compute_dtype=torch.bfloat16
+)
+ 
+model = AutoModelForCausalLM.from_pretrained(
+  MODEL_NAME,
+  device_map="auto",
+  trust_remote_code=True,
+  quantization_config=bnb_config,
+)
+ 
+tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+tokenizer.pad_token = tokenizer.eos_token
+model = prepare_model_for_kbit_training(model)
+use_4bit = True
+ 
+bnb_4bit_compute_dtype = "float16"
+ 
+bnb_4bit_quant_type = "nf4"
+ 
+use_nested_quant = False
+compute_dtype = getattr(torch, bnb_4bit_compute_dtype)
+if compute_dtype == torch.float16 and use_4bit:
+  major, _ = torch.cuda.get_device_capability()
+  if major >= 8:
+  print("=" * 80)
+  print("Your GPU supports bfloat16: accelerate training with bf16=True")
+  print("=" * 80)
+import re
+def get_num_layers(model):
+  numbers = set()
+  for name, _ in model.named_parameters():
+  for number in re.findall(r'\d+', name):
+  numbers.add(int(number))
+  return max(numbers)
+ 
+def get_last_layer_linears(model):
+  names = []
+  num_layers = get_num_layers(model)
+  for name, module in model.named_modules():
+  if str(num_layers) in name and not "encoder" in name:
+  if isinstance(module, torch.nn.Linear):
+  names.append(name)
+  return names
+config = LoraConfig(
+  r=2,
+  lora_alpha=32,
+  target_modules=get_last_layer_linears(model),
+  lora_dropout=0.05,
+  bias="none",
+  task_type="CAUSAL_LM"
+)
+ 
+model = get_peft_model(model, config)
+ 
+output_dir = "./results"
+ 
+num_train_epochs = 1
+ 
+fp16 = False
+bf16 = False
+ 
+per_device_train_batch_size = 4
+ 
+per_device_eval_batch_size = 4
+ 
+gradient_accumulation_steps = 1
+ 
+max_grad_norm = 0.3
+ 
+learning_rate = 2e-4
+ 
+weight_decay = 0.001
+ 
+optim = "paged_adamw_32bit"
+ 
+lr_scheduler_type = "constant"
+ 
+warmup_ratio = 0.03
+ 
+group_by_length = True
+ 
+save_steps = 25
+ 
+logging_steps = 25
+ 
+base_model = AutoModelForCausalLM.from_pretrained(
+  MODEL_NAME,
+  low_cpu_mem_usage=True,
+  return_dict=True,
+  torch_dtype=torch.float16,
+  device_map={"": 0},
+)
+model = PeftModel.from_pretrained(base_model, new_model)
+model = model.merge_and_unload()
+training_arguments = TrainingArguments(
+  output_dir=output_dir,
+  num_train_epochs=num_train_epochs,
+  per_device_train_batch_size=per_device_train_batch_size,
+  gradient_accumulation_steps=gradient_accumulation_steps,
+  optim=optim,
+  save_steps=save_steps,
+  logging_steps=logging_steps,
+  learning_rate=learning_rate,
+  weight_decay=weight_decay,
+  fp16=fp16,
+  bf16=bf16,
+  max_grad_norm=max_grad_norm,
+  max_steps=25,
+  warmup_ratio=warmup_ratio,
+  group_by_length=group_by_length,
+  lr_scheduler_type=lr_scheduler_type,
+  report_to="tensorboard"
+)
+from trl import SFTTrainer
+trainer = SFTTrainer(
+  model=model,
+  train_dataset=dataset,
+  peft_config=peft_params,
+  dataset_text_field="text",
+  max_seq_length=512,
+  tokenizer=tokenizer,
+  args=training_params,
+  packing=False,
+)
+trainer.train()
+class RagResponse:
+  def __init__(self, question, answer) -> None:
+  self.question = question
+  self.answer = answer
+  pass
+ 
+class HugResponse:
+  def __init__(self, question, answer) -> None:
+  self.question = question
+  self.answer = answer
+  pass
+ 
+class AmharicModelResponse:
+  def __init__(self, question, answer) -> None:
+  self.question = question
+  self.answer = answer
+  pass
+from dotenv import load_dotenv
+from models import simple_rag_response
+load_dotenv()
+from langchain import HuggingFaceHub
+ 
+def invoke_current_hugging_face_model(model, prompt):
+  llm = HuggingFaceHub(
+  repo_id=model, model_kwargs={"temperature": 0, "max_length": 64}
+  )
+  response = llm(prompt)
+  return simple_rag_response.HugResponse(prompt, response)
+ 
+def use_amharic_model(model, prompt):
+  llm = HuggingFaceHub(
+  repo_id=model, model_kwargs={"temperature": 0, "max_length": 64}
+  )
+  response = llm(prompt)
+  return simple_rag_response.AmharicModelResponse(prompt, response)
+import time
+import sentencepiece as spm
+import sentencepiece as spm
+ 
+spm.SentencePieceTrainer.train('--input=merged_text.txt --model_prefix=m --vocab_size=100000')
+sp = spm.SentencePieceProcessor()
+sp.load('m.model')
+ 
+print(sp.encode_as_pieces('የኢትዮጽያ ጂዲፒ ምን ያህል ነበር?'))
+print(sp.encode_as_ids('የኢትዮጽያ ጂዲፒ ምን ያህል ነበር?'))
+ 
+print(sp.encode_as_pieces('ሃይ ሰላም ናችሁ?'))
+ 
+spm.SentencePieceTrainer.train('--input=merged_text.txt --model_prefix=am-word --model_type=word  --vocab_size=100000')
+ 
+sp = spm.SentencePieceProcessor()
+sp.load('am-word.model')
+ 
+print(sp.encode_as_pieces('የኢትዮጽያ  ጂዲፒ ምን ያህል ነበር?'))
+print(sp.encode_as_ids('የኢትዮጽያ ጂዲፒ ምን ያህል ነበር?'))
+sp = spm.SentencePieceProcessor()
+sp.load('am-word.model')
+ 
+print(sp.encode_as_pieces('በአዲስ አበባ የአሜሪካ ኤምባሲ'))
+print(sp.encode_as_ids('በአዲስ አበባ የአሜሪካ ኤምባሲ'))
+sp = spm.SentencePieceProcessor()
+sp.load('am-word.model')
+ 
+print(sp.encode_as_pieces('የፒዛ ምግብ ቤት ለመክፈት የሚጠቅሙ ምክሮች'))
+print(sp.encode_as_ids('ፒዛ ምግብ ቤት ለመክፈት የሚጠቅሙ ምክሮች'))
+print(sp.decode_ids([47914, 1024, 33, 7716, 29922, 26700]))
+import json
+import re
+ 
+class Util():
+  def __init__(self) -> None:
+  self.emoji_pattern = re.compile("["
+  u"\U0001F600-\U0001F64F"   u"\U0001F300-\U0001F5FF"   u"\U0001F680-\U0001F6FF"   u"\U0001F700-\U0001F77F"   u"\U0001F780-\U0001F7FF"   u"\U0001F800-\U0001F8FF"   u"\U0001F900-\U0001F9FF"   u"\U0001FA00-\U0001FA6F"   u"\U0001FA70-\U0001FAFF"   u"\u2600-\u26FF"   u"\u2700-\u27BF"   u"\u2B50"   u"\U00002049 \U0000FE0F"   u"\U0000203C"   u"\U0001F1E6-\U0001F1FF"   "]+", flags=re.UNICODE)
+  self.symbols = re.compile("["
+  "\""
+  "\“"
+  "\""
+  "\'"
+  "\-"
+  "\*"
+  "\•"
+  "\ℹ"
+  "\﻿"
+  "\_"
+  "]+")
+  self.url_pattern = r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+'
+  self.mention_pattern = r'@(\w+)'
+  print(self.emoji_pattern.pattern)
+  def read_file(self, file_path: str) -> dict:
+  with open(file_path, 'r') as file:
+  data = json.load(file)
+  return data
+  def write_file(self, file_path: str, data: dict) -> None:
+  with open(file_path, 'w') as file:
+  json.dump(data, file, indent=2)
+  def parse_text(self, text: any) -> str:
+  if isinstance(text, str):
+  return text
+  elif isinstance(text, list):
+  contents = []
+  for item in text:
+  if isinstance(item, str):
+  contents.append(item)
+  elif isinstance(item, dict):
+  contents.append(item['text'])
+  return "".join(contents)
+  else:
+  return ""
+  def parse_messages(self, messages: list) -> dict:
+  parsed_messages = {
+  'id': [],
+  'text': [],
+  'date': []
+  }
+  for message in messages:
+  if message['type'] != 'message' or len(message['text']) == 0:
+  continue
+  parsed_messages['id'].append(message['id'])
+  message_content = self.parse_text(message['text'])
+  parsed_messages['text'].append(message_content)
+  parsed_messages['date'].append(message['date'])
+  return parsed_messages
+  def extract_hashtags(self, text: str) -> list:
+  return [word for word in text.split() if word.startswith('
+  def extract_emojis(self, text):
+  return ''.join(self.emoji_pattern.findall(text))
+  def remove_emojis(self, text):
+  return self.emoji_pattern.sub(' ', text)
+  def extract_symbols(self, text):
+  return ''.join(self.symbols.findall(text))
+  def remove_symbols(self, text):
+  return self.symbols.sub(' ', text)
+  def extract_urls(self, text):
+  return re.findall(self.url_pattern, text)
+  def extract_mentions(self, text):
+  return re.findall(self.mention_pattern, text)
+import pandas as pd
+import csv, os, sys
+from transformers import AutoTokenizer, AutoModelForCausalLM
+from trl import
+"""
+Convert .txt to csv
+"""
+import csv
+from sklearn.model_selection import train_test_split
+def convert_txt_to_csv(input_txt, output_csv):
+  with open(input_txt, 'r', encoding='utf-8') as infile, open(output_csv, 'w', encoding='utf-8', newline='') as outfile:
+  reader = infile.readlines()
+  data = [line.strip().split() for line in reader]
+  csv_writer = csv.writer(outfile)
+  csv_writer.writerows(data)
+def split_data(input_csv, output_train_csv, output_test_csv, output_val_csv, test_size=0.2, val_size=0.1, random_seed=42):
+  with open(input_csv, 'r', encoding='utf-8') as file:
+  csv_reader = csv.reader(file)
+  data = list(csv_reader)
+  train_data, test_val_data = train_test_split(data, test_size=(test_size + val_size), random_state=random_seed)
+  test_data, val_data = train_test_split(test_val_data, test_size=(val_size / (test_size + val_size)), random_state=random_seed)
+  with open(output_train_csv, 'w', encoding='utf-8', newline='') as train_file:
+  csv_writer = csv.writer(train_file)
+  csv_writer.writerows(train_data)
+  with open(output_test_csv, 'w', encoding='utf-8', newline='') as test_file:
+  csv_writer = csv.writer(test_file)
+  csv_writer.writerows(test_data)
+  with open(output_val_csv, 'w', encoding='utf-8', newline='') as val_file:
+  csv_writer = csv.writer(val_file)
+  csv_writer.writerows(val_data)
+if __name__ == "__main__":
+  input_txt_file = '/home/biniyam_ajaw/finetuning/data/dataset.txt'
+  output_csv_file = '/home/biniyam_ajaw/finetuning/data/output_data.csv'
+  output_train_csv = '/home/biniyam_ajaw/finetuning/data/train_data.csv'
+  output_test_csv = '/home/biniyam_ajaw/finetuning/data/test_data.csv'
+  output_val_csv = '/home/biniyam_ajaw/finetuning/data/val_data.csv'
+  convert_txt_to_csv(input_txt_file, output_csv_file)
+  split_data(output_csv_file, output_train_csv, output_test_csv, output_val_csv)
+  print("Conversion to CSV and data split completed.")
+from tokenizers import Tokenizer
+from tokenizers.models import BPE
+tokenizer = Tokenizer(BPE(unk_token="[UNK]"))
+from tokenizers.trainers import BpeTrainer
+trainer = BpeTrainer(special_tokens=["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]"], vocab_size=100000)
+import tokenizers
+from tokenizers.pre_tokenizers import Whitespace
+tokenizer.pre_tokenizer = Whitespace()
+folder = 'data'
+files = [f"/home/biniyam_ajaw/finetuning/{folder}/{split}.csv" for split in ["test_data", "train_data", "valid_data"]]
+tokenizer.train(files, trainer)
+from tokenizers.processors import TemplateProcessing
+tokenizer.post_processor = TemplateProcessing(
+  single="[CLS] $A [SEP]",
+  pair="[CLS] $A [SEP] $B:1 [SEP]:1",
+  special_tokens=[
+  ("[CLS]", tokenizer.token_to_id("[CLS]")),
+  ("[SEP]", tokenizer.token_to_id("[SEP]")),
+  ],
+)
+tokenizer.enable_padding(pad_id=3, pad_token="[PAD]")
+from transformers import PreTrainedTokenizerFast
+custom_tokenizer = PreTrainedTokenizerFast(tokenizer_object=tokenizer)
+custom_tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+custom_tokenizer.save_pretrained("amharic_tokenizer")
+custom_tokenizer.push_to_hub("amharic_tokenizer")
+max-width: 100%;
+  width: 100%;
+  height: 100%;
+  margin: 5 auto;
+  padding: 2rem;
+  text-align: start;
+  color-scheme: light dark;
+  color: rgba(255, 255, 255, 0.87);
+  background-color:   font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+.container {
+  width: 100%;
+  padding-right: 15px;
+  padding-left: 15px;
+  margin-right: auto;
+  margin-left: auto;
+}
+.logo {
+  height: 6em;
+  padding: 1.5em;
+  will-change: filter;
+  transition: filter 300ms;
+}
+.logo:hover {
+  filter: drop-shadow(0 0 2em }
+.logo.react:hover {
+  filter: drop-shadow(0 0 2em }
+@keyframes logo-spin {
+  from {
+  transform: rotate(0deg);
+  }
+  to {
+  transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  a:nth-of-type(2) .logo {
+  animation: logo-spin infinite 20s linear;
+  }
+}
+.card {
+  padding: 2em;
+}
+.read-the-docs {
+  color: }
+import React from 'react';
+import 'bootstrap/dist/css/bootstrap.css'
+function FileInput (){
+  return(
+  <div>
+  <div className="input-group mb-3">
+  <input type="file" className="form-control" id="inputGroupFile02"/>
+  <label clclassNameass="input-group-text" for="inputGroupFile02">Upload</label>
+  </div>
+  </div>
+  );
+}
+ 
+export default FileInput;
+/* :root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  width: 100%;
+  color-scheme: light dark;
+  color: rgba(255, 255, 255, 0.87);
+  background-color:   font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+.container {
+  width: 100%;
+  padding-right: 15px;
+  padding-left: 15px;
+  margin-right: auto;
+  margin-left: auto;
+}
+a {
+  font-weight: 500;
+  color:   text-decoration: inherit;
+}
+a:hover {
+  color: }
+body {
+  margin: 0;
+  display: flex;
+  place-items: center;
+  min-width: 320px;
+  min-height: 100vh;
+}
+h1 {
+  font-size: 3.2em;
+  line-height: 1.1;
+}
+button {
+  border-radius: 8px;
+  border: 1px solid transparent;
+  padding: 0.6em 1.2em;
+  font-size: 1em;
+  font-weight: 500;
+  font-family: inherit;
+  background-color:   cursor: pointer;
+  transition: border-color 0.25s;
+}
+button:hover {
+  border-color: }
+button:focus,
+button:focus-visible {
+  outline: 4px auto -webkit-focus-ring-color;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+  color:   background-color:   }
+  a:hover {
+  color:   }
+  button {
+  background-color:   }
+} */
+import Container from 'react-bootstrap/Container';
+import Nav from 'react-bootstrap/Nav';
+import Navbar from 'react-bootstrap/Navbar';
+import NavDropdown from 'react-bootstrap/NavDropdown';
+function NavBarComp() {
+  return (
+  <Navbar expand="lg" className="bg-body-tertiary container-fluid">
+  <Container >
+  <Navbar.Brand href="   <Navbar.Toggle aria-controls="basic-navbar-nav" />
+  <Navbar.Collapse id="basic-navbar-nav">
+  <Nav className="me-auto">
+  <NavDropdown title="Select Model" id="basic-nav-dropdown">
+  <NavDropdown.Item href="   <NavDropdown.Item href="   <NavDropdown.Item href="   </NavDropdown>
+  </Nav>
+  </Navbar.Collapse>
+  </Container>
+  </Navbar>
+  );
+}
+export default NavBarComp;
+import React from 'react';
+import 'bootstrap/dist/css/bootstrap.css'
+function TextInputWithLabel (props) {
+  return(
+  <div>
+  <div className="mb-3">
+  <label htmlFor="exampleFormControlTextarea1" className="form-label">Generated Ad</label>
+  <textarea className="form-control" id="exampleFormControlTextarea1" rows="7"  value={props.value.answer}/>
+  </div>
+  </div>
+  );
+}
+ 
+export default TextInputWithLabel;
+import torch
+from transformers import AutoModelForCausalLM, AutoConfig, AutoTokenizer, BitsAndBytesConfig, TrainingArguments, pipeline, logging
+from datasets import load_dataset
+import os, sys
+from huggingface_hub import notebook_login
+import torch.nn as nn
+import getpass
+from trl import SFTTrainer
+from peft import PeftConfig, LoraConfig
+os.environ["HUGGING_FACE_HUB_TOKEN"] = getpass.getpass("Token:")
+assert os.environ["HUGGING_FACE_HUB_TOKEN"]
+quantization_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16)
+nf4_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4")
+double_quant_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_use_double_quant=True)
+model_id = "microsoft/phi-2"
+new_model = 'amharic-phi'
+model = AutoModelForCausalLM.from_pretrained(model_id, device_map='cuda:0', quantization_config=nf4_config)
+tokenizer = AutoTokenizer.from_pretrained("dagim/amharic_tokenizer")
+ 
+tokenizer.tokenize("ከአሜሪካ ወደ አዲስ አበባለመጓዝምንያህልጊዜይወስዳል??")
+from datasets import load_dataset
+dataset_name = 'Henok/amharic-qa'
+dataset = load_dataset(dataset_name, split="train")
+import re
+def get_num_layers(model):
+  numbers = set()
+  for name, _ in model.named_parameters():
+  for number in re.findall(r'\d+', name):
+  numbers.add(int(number))
+  return max(numbers)
+ 
+def get_last_layer_linears(model):
+  names = []
+  num_layers = get_num_layers(model)
+  for name, module in model.named_modules():
+  if str(num_layers) in name and not "encoder" in name:
+  if isinstance(module, torch.nn.Linear):
+  names.append(name)
+  return names
+config = LoraConfig(
+  r=4,
+  lora_alpha=32,
+  lora_dropout=0.03,
+  bias='none',
+  task_type="CAUSAL_LM"
+)
+training_arguments = TrainingArguments(
+  output_dir="./results",
+  num_train_epochs=2,
+  per_device_train_batch_size=4,
+  gradient_accumulation_steps=1,
+  optim='paged_adamw_32bit',
+  save_steps=25,
+  logging_steps=25,
+  learning_rate=2e-8,
+  weight_decay=0.001,
+  fp16=False,
+  bf16=False,
+  max_grad_norm=0.3,
+  max_steps=25,
+  warmup_ratio=0.03,
+  group_by_length=True,
+  lr_scheduler_type='constant',
+  report_to="tensorboard",
+  gradient_checkpointing=True
+)
+trainer = SFTTrainer(
+  model=model,
+  train_dataset=dataset,
+  peft_config=config,
+  dataset_text_field='inputs',
+  max_seq_length=None,
+  tokenizer=tokenizer,
+  args=training_arguments,
+  packing=False
+)
+trainer.train()
+trainer.model.save_pretrained(new_model)
+logging.set_verbosity(logging.CRITICAL)
+ 
+prompt = "የኢትዮጵያ ጂዲፒ ምን ያህል ነበር?"
+pipe = pipeline(task="text-generation", model=model, tokenizer=tokenizer, max_length=200)
+result = pipe(f"<s>[INST] {prompt} [/INST]")
+print(result[0]['generated_text'])
+from transformers import PreTrainedTokenizerFast
+fast_tokenizer = PreTrainedTokenizerFast(tokenizer_file="/home/biniyam_ajaw/llama-2-amharic-3784m/tokenizer.json")
+print(len(tokenizer.encode('የኢትዮጵያ ጂዲፒ ምን ያህል ነበር?')))
+import logging
+import numpy as np
+import math
+import os, sys
+import torch
+from dataclasses import dataclass, field
+from itertools import chain
+from typing import Optional, List, Tuple, Dict, Any, Mapping
+from pathlib import Path
+import datasets
+from datasets import Dataset, DatasetDict, load_dataset, load_metric, concatenate_datasets
+from transformers import (
+  CONFIG_MAPPING,
+  MODEL_FOR_CAUSAL_LM_MAPPING,
+  AutoConfig,
+  AutoModelForCausalLM,
+  AutoTokenizer,   LlamaForCausalLM,
+  LlamaTokenizer,
+  AutoTokenizer,
+  DataCollatorForLanguageModeling,
+  HfArgumentParser,
+  Trainer,
+  TrainingArguments,
+  set_seed,
+  is_torch_gpu_available,
+)
+from transformers.trainer_utils import get_last_checkpoint, is_main_process
+from transformers.testing_utils import CaptureLogger
+from transformers.utils import send_example_telemetry
+from transformers.utils.versions import require_version_core
+from sklearn.metrics import accuracy_score, precision_recall_fscore_support
+from sklearn.metrics import classification_report
+from peft import LoraConfig, TaskType, get_peft_model, PeftModel, get_peft_model_state_dict
+from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR
+ 
+class SavePeftModelCallback(transformers.TrainerCallback):
+  def save_model(self, args, state, kwargs):
+  if state.best_model_checkpoint is not None:
+  checkpoint_folder = os.path.join(state.best_model_checkpoint, "pt_lora-Model")
+  else:
+  checkpoint_folder = os.path.join(args.output_dir, f"{PREFIX_CHECKPOINT_DIR}-{state.global_step}")
+  peft_model_path = os.path.join(checkpoint_folder, "pt_lora_model")
+  kwargs["model"].save_pretrained(peft_model_path)
+  kwargs["tokenizer"].save_pretrained(peft_model_path)
+  def on_save(self, args, state, control, **kwargs):
+  self.save_model(args, state, kwargs)
+  return control
+  def on_train_end(self, args, state, control, **kwargs):
+  peft_model_path = os.path.join(args.output_dir, "pt_lora_model")
+  kwargs["model"].save_pretrained(peft_model_path)
+  kwargs["tokenizer"].save_pretrained(peft_model_path)
+def accuracy(predictions, references, normalize=True, sample_weight=None):
+  return {
+  "accuracy": float(
+  accuracy_score(references, predictions, normalize=normalize, sample_weight=sample_weight)
+  )
+  }
+def compute_metrics(eval_preds):
+  preds, labels = eval_preds
+  labels = labels[:, 1:].reshape(-1)
+  preds = preds[:, :-1].reshape(-1)
+  return accuracy(predictions=preds, references=labels)
+def preprocess_logits_for_metrics(logits, labels):
+  if isinstance(logits, tuple):
+  logits = logits[0]
+  return logits.argmax(dim=-1)
+def fault_tolerance_data_collator(features: List) -> Dict[str, Any]:
+  if not isinstance(features[0], Mapping):
+  features = [vars(f) for f in features]
+  first = features[0]
+  batch = {}
+  if "label" in first and first["label"] is not None:
+  label = first["label"].item() if isinstance(first["label"], torch.Tensor) else first["label"]
+  dtype = torch.long if isinstance(label, int) else torch.float
+  batch["label"] = torch.tensor([f["label"] for f in features], dtype=dtype)
+  elif "label_ids" in first and first["label_ids"] is not None:
+  if isinstance(first["label_ids"], torch.Tensor):
+  batch["labels"] = torch.stack([f["label_ids"] for f in features])
+  else:
+  dtype = torch.long if isinstance(first["label_ids"][0], int) else torch.float
+  batch["labels"] = torch.tensor([f["label_ids"] for f in features], dtype=dtype)
+  try:
+  for k, v in first.items():
+  if k not in ("label", "label_ids") and v is not None and not isinstance(v, str):
+  if isinstance(v, torch.Tensor):
+  batch[k] = torch.stack([f[k] for f in features])
+  elif isinstance(v, np.ndarray):
+  batch[k] = torch.tensor(np.stack([f[k] for f in features]))
+  else: batch[k] = torch.tensor([f[k] for f in features])
+  except ValueError:
+  for k, v in first.items():
+  if k not in ("label", "label_ids") and v is not None and not isinstance(v, str):
+  if isinstance(v, torch.Tensor):
+  batch[k] = torch.stack([features[0][k]] * len(features))
+  elif isinstance(v, np.ndarray):
+  batch[k] = torch.tensor(np.stack([features[0][k]] * len(features)))
+  else:   batch[k] = torch.tensor([features[0][k]] * len(features))
+  return batch
+MODEL_CONFIG_CLASSES = list(MODEL_FOR_CAUSAL_MAPPING.keys())
+MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
+@dataclass
+class ModelArguments:
+  model_name_or_path: Optional[str] = field(
+  default=None,
+  metadata={
+  "help": (
+  "The model checkpoint for weights initialization.Don't set if you want to train a model from scratch."
+  )
+  },
+  )
+  tokenizer_name_or_path: Optional[str] = field(
+  default=None,
+  metadata={"help": ("The tokenizer for weights initialization.")},
+  )
+  model_type: Optional[str] = field(
+  default=None,
+  metadata={"help": "If training from scratch, pass a model type from the list: " + ", ".join(MODEL_TYPES)},
+  )
+  config_overrides: Optional[str] = field(
+  default=None,
+  metadata={
+  "help": (
+  "Override some existing default config settings when a model is trained from scratch. Example: "
+  "n_embd=10,resid_pdrop=0.2,scale_attn_weights=false,summary_type=cls_index"
+  )
+  },
+  )
+  config_name: Optional[str] = field(
+  default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
+  )
+  tokenizer_name: Optional[str] = field(
+  default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
+  )
+  cache_dir: Optional[str] = field(
+  default=None,
+  metadata={"help": "Where do you want to store the pretrained models downloaded from huggingface.co"},
+  )
+  use_fast_tokenizer: bool = field(
+  default=True,
+  metadata={"help": "Whether to use one of the fast tokenizer (backed by the tokenizers library) or not."},
+  )
+  model_revision: str = field(
+  default="main",
+  metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
+  )
+  use_auth_token: bool = field(
+  default=False,
+  metadata={
+  "help": (
+  "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
+  "with private models)."
+  )
+  },
+  )
+  torch_dtype: Optional[str] = field(
+  default=None,
+  metadata={
+  "help": (
+  "Override the default `torch.dtype` and load the model under this dtype. If `auto` is passed, the "
+  "dtype will be automatically derived from the model's weights."
+  ),
+  "choices": ["auto", "bfloat16", "float16", "float32"],
+  },
+  )
+  def __post_init__(self):
+  if self.config_overrides is not None and (self.config_name is not None or self.model_name_or_path is not None):
+  raise ValueError(
+  "--config_overrides cannot be used with --config_name or --model_name_or_path. To override some of "
+  )
+ 
+@dataclass
+class DataTrainingArguments:
+  '''
+  Arguments pertaining to what data we are going to input our model for training and eval.
+  '''
+  dataset_dir: Optional[str] = field(
+  default=None, metadata={"the name of the dataset to use"}
+  )
+  dataset_config_name: Optional[str] = field(
+  default=None, metadata={"help": "The configuration name opf the dataset to use"}
+  )
+  train_file: Optional[str] = field(
+  default=None, metadata={"help": "The input training file"}
+  )
+  validation_file: Optional[str] = field(
+  default=None, metadata={"help": "This is optional but recommended if you want to use early stopping"}
+  )
+  max_training_sample: Optional[int] = field(
+  default=None,
+  metadata={
+  "help": "Debugging purposes"
+  },
+  )
+  max_eval_samples: Optional[int] = field(
+  default=None,
+  metadata={
+  "help": "For debugging"
+  },
+  )
+  streaming: bool = field(default=False, metadata={"help": "Enable streaming mode"})
+  block_size: Optional[int] = field(
+  default=None,
+  metadata={
+  "help": (
+  "Optional"
+  "Training dataset will be truncated into a block of this size for training"
+  "Default to the model max input sequence"
+  )
+  }
+  )
+  cache_dir: bool = field(
+  default=None,
+  metadata={"help": "Where do you want to store the pretrained models downloaded from huggingface.co"},
+  )
+  validation_strategy: Optional[float] = field(
+  default=0.01,
+  metadata={
+  "help": "Percentage of the validation set used at the end of each epoch"
+  }
+  )
+  preprocessing_num_workers: Optional[int] = field(
+  default=None,
+  metadata={"help": "Number of processes to use for preprocessing"}
+  )
+  keep_linebreaks: bool = field(
+  default=True, metadata={"help": "Whether to keep the linebreaks when using txt files or not"}
+  )
+  data_cache_dir: Optional[str] = field(default="./", metadata={"help": "The datasets processed store"})
+  def __post_init__(self):
+  if self.streaming:
+  require_version("datasets>=2.0.0", "The streaming feature requires `datasets >= 2.0.0`")
+ 
+@dataclass
+class MyTrainingArguments(TrainingArguments):
+  trainable : Optional[str] = field(default="q_proj, v_proj")
+  lora_rank : Optional[str] = field(default=8)
+  lora_dropout : Optional[float] = field(default=0.03)
+  lora_alpha : Optional[float] = field(default=32.)
+  modules_to_save : Optional[str] = field(default=None)
+  debug_mode : Optional[str] = field(default=False)
+  peft_path : Optional[str] = field(default=None)
+ 
+logger = logging.getLogger(__name__)
+def main():
+  parser = HfArgumentParser(ModelArguments, DataTrainingArguments, MyTrainingArguments)
+  if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
+  model_args, data_args, training_args = parser.parse_parse_json_file(json_file=os.path.abspath(sys.argv[1]))
+  else:
+  model_args, data_args, training_args = parser.parse_args_to_dataclasses()
+  send-example_telemetry("run_clm", model_args, data_args)
+  logging.basicConfig(format="%(asctime)s - %(levelname)s - %(name)s - %(message)s", datefmt="%m/%d/%Y %H:%M:%S",
+  level=logging.INFO,   handlers=[logging.StreamHandler(sys.stdout)],)
+  if training_args.should_log:
+  transformers.utils.logging.set_verbosity_info()
+  log_level = training_args.get_process_log_level()
+  logger.setLevel(log_level)
+  datasets.utils.logging.set_verbosity(log_level)
+  transformers.utils.logging.enable_default_handler()
+  transformers.utils.logging.enable_explicit_format()
+  logger.warning(
+  f"Process rank: {training_args.output_dir}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
+  + f"Distributed training: {bool(training_args.local_rank != -1)}, 16-bits-training: {training_args.fp16}"
+  )
+  last_checkpoint = None
+  if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
+  last_checkpoint = get_last_checkpoint(training_args.output_dir)
+  if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
+  raise ValueError (
+  f"Outpur dir {training_args.output_dir} already exists and is not mt"
+  "Use --overwrite_output_dir to overcome"
+  )
+  elif last_checkpoint is not None and training_args.resume_from_checkpoint is not None:
+  logger.info(
+  f"Checkpoint detected, resuming training at {last_checkpoint}. To avoid this, change "
+  "the --output-dir or --overwrite_output_dir to train from scratch"
+  )
+  set_seed(training_args.seed)
+  config_kwargs = {
+  "cache_dir": model.cache_dir,
+  "revision": model_args.model_revision,
+  "use_auth_token": True if model-args.use_auth_token else None
+  }
+  if model_args.config_name:
+  config = AutoConfig.from_pretrained(model_args.config_name, **config_kwargs)
+  elif model_args.model_name_or_path:
+  config = AutoConfig.from_pretrained(model_args.model_name_or_path, **config_kwargs)
+  else:   config = CONFIG_MAPPING[model_args.model_type]()
+  logger.warning("This is a new config from scratch")
+  if model_args.config_overrides is not None:
+  logger.info(f"Overriding config: {model_args.config_overrides}")
+  config.update_from_string(model_args.config_overrides)
+  logger.info(f"New config: {config}")
+  tokenizer_kwargs = {
+  "cache_dir": model_args.cache_dir,
+  "use_fast": model_args.use_fast_tokenizer,
+  "revision": model_args.model_revision,
+  "use_auth_token": True if model_args.use_auth_token else None
+  }
+  if model_args.tokenizer_name:
+  tokenizer = AutoTokenizer.from_pretrained(model_args.tokenizer_name, **tokenizer_kwargs)
+  elif model_args.tokenizer_name_or_path:
+  tokenizer = LlamaTokenizer.from_pretrained(model_args.tokenizer_name_or_path, **tokenizer_kwargs)
+  else:
+  raise ValueError(
+  "Instantiating a tokenizer from scratch"
+  )
+  def tokenize_function(examples):
+  with CaptureLogger(tok_logger) as cl:
+  return tokenizer(examples[text])
+  if "Token indices sequence length is longer than the" in cl.out:
+  tok_logger.warning(
+  "^^^^^^^ PLease ignore the warning above ^^^^^^^"
+  )
+  return output
+  if data_args.block_size is None:
+  block_size = tokenizer.model_max_length
+  if block_size > 1024:
+  logger.warning(
+  "The chosen tokenizer supports a `model_max_length` that is longer than the default `block_size` value"
+  " of 1024. If you would like to use a longer `block_size` up to `tokenizer.model_max_length` you can"
+  " override this default with `--block_size xxx`."
+  )
+  block_size = 1024   else:
+  if data_args.block_size > tokenizer.model_max_length:
+  logger.warning(
+  f"The block_size passed ({data_args.block_size}) is larger than the maximum length for the model"
+  "Override with `--block_size xxx`"
+  )
+  block_size = min(data_args.block_size, tokenizer.model_max_length)
+  def group_texts(examples):
+  concatenated_examples = {k: list(chain(*examples[k])) for k in examples.keys()}
+  total_length = len(concatenated_examples[list(examples.keys())[0]])
+  if total_length >= block_size:
+  total_length = {total_length // block_size} *  block_size
+  result = {
+  k: [t[i: i + block_size] for i in range(0, total_length, block_size)]
+  for k, t in concatenated_examples.items()
+  }
+  result["labels"] = result["input_ids"].copy()
+  return result
+  with training_args.main_process_first(desc="dataset map tokenizer"):
+  lm_datasets = []
+  path = Path(data_args.dataset_dir)
+  filename = [file.name for file in path.glob("*.txt")]
+  if training_args.debug_mode:
+  files = [files[0]]
+  for idx, file in enumerate(files):
+  data_file = os.path.join(path, file)
+  filename = ''.join(file.split('.')[:-1])
+  cache_path = os.path.join(data_args.data_cache_dir, filename)
+  os.makedirs(cache_path, exist_ok=True)
+  try:
+  processed_dataset = datasets.load_from_disk(cache_path, keep_in_memory=True)
+  logger.info(f'Training datasets-{filename} has been loaded from disk')
+  except Exception:
+  cache_dir = os.path.join(data_args.data_cache_dir, filename+"_text")
+  os.makedirs(cache_dir, exist_ok=True)
+  raw_dataset = load_dataset("text", data_files=data_file, cache_dir=cache_dir, keep_in_memory=False)
+  logger.info(f"{file} has been loaded")
+  tokenized_dataset = raw_dataset.map(
+  tokenize_function,
+  batched=True,
+  num_proc=data_args.preprocessing_num_workers,
+  remove_columns="text",
+  load_from_cache_file=True,
+  keep_in_memory=False,
+  cache_file_names = {k: os.path.join(cache_dir, "tokenized.arrow") for k in raw_dataset},
+  desc="Running tokenizer on the dataset",
+  )
+  grouped_datasets = tokenized_dataset.map(
+  group_texts,
+  batched=True,
+  num_proc=data_args.preprocessing_num_workers,
+  load_from_cache_file=True,
+  keep_in_memory=False,
+  cache_file_names = {k: os.path.join(cache_dir, "grouped.arrow") for k in tokenized_dataset},
+  desc=f'Grouping texts in chunks of {block_size}',
+  )
+  processed_dataset = grouped_datasets
+  processed_dataset.save_to_disk(cache_path)
+  if idx == 0:
+  lm_datasets = processed_dataset['train']
+  else:
+  assert lm_datasets.features.type == processed_dataset['train'].features.type
+  lm_dataset = concatenate_datasets([lm_datasets, processed_dataset['train']])
+  lm_datasets = lm_datasets.train_test_split(test_size= data_args.validation_split_percentage())
+  if training_args.do_train:
+  train_dataset = lm_datasets["train"]
+  if data_args.max_train_samples is not None:
+  max_train_samples = min(len(train_dataset), data_args.max_train_samples)
+  train_dataset = train_dataset.select(range(max_train_samples))
+  logger.info(f"Num train samples {len(train_dataset)}")
+  logger.info("Training example: ")
+  logger.info(tokenizer.decode(train_dataset[0]["input_ids"]))
+  if model_args.model_name_or_path:
+  torch_dtype = (
+  model_args.torch_dtype
+  if model_args.torch_dtype in ["auto", None]
+  else getattr(torch, model_args.torch_dtype)
+  )
+  model = LlamaForCausalLM.from_pretrained(
+  model_args.model_name_or_path,
+  from_tf=bool(".cpkt" in model_args.model_name_or_path),
+  config=config,
+  cache_dir=model_args.cache_dir,
+  revision=model_args.model_revision,
+  use_auth_token=True if model_args.use_auth_token else None,
+  torch_dtype=torch_dtype,
+  low_cpu_mem_usage=True,
+  )
+  else:
+  model = AutoModelForCausalLM.from_config(config)
+  n_params = sum({p.data_ptr(): p.numel() for p in model.parameters()}.values())
+  logger.info(f"Training new model from scratch - Total size={n_params/2**20:.2f}M parameters")
+  model_vocab_size = model.get_output_embeddings().weight.size(0)
+  if not (
+  (model_vocab_size==32000 and len(tokenizer)==51008) or \
+  (model_vocab_size==32000 and len(tokenizer)==32000) or \
+  (model_vocab_size==51008 and len(tokenizer)==51008) or \
+  (model_vocab_size==49954 and len(tokenizer)==49954)
+  ):
+  raise ValueError(
+  f"The combination of base model (size: {model_vocab_size}) and tokenizer (size: {len(tokenizer)}) is not a valid configuration. Please check our project wiki for further information. \n"
+  "Valid configurations (base model / tokenizer):\n"
+  "- Continue pre-training original LLaMA: 32000 / 32000 \n"
+  "- Pre-training (Chinese) Amharic LLaMA based on original LLaMA: 32000 / 51008 \n"
+  "- Continue pre-training (Chinese) Amharic LLaMA: 51008 / 51008 \n"
+  "- Continue pre-training Chinese Alpaca: 49954 / 49954 \n"
+  )
+  model.resize_token_embeddings(len(tokenizer))
+  if training_args.peft_path is not None:
+  logger.info("PEFT from pretrained model")
+  model = PeftModel.from_pretrained(model, training_args.peft_path)
+  else:
+  logger.info("Init new peft model")
+  target_modules = training_args.trainable.split(",")
+  modules_to_save = training_args.modules_to_save
+  if modules_to_save is not None:
+  modules_to_save = modules_to_save.split(",")
+  lora_rank = training_args.lora_rank
+  lora_dropout = training_args.lora_dropout
+  lora_alpha = training_args.lora_alpha
+  logger.info(f"Target modules: {target_modules}")
+  logger.info(f"LoRA Rank: {lora_rank}")
+  peft_config = LoraConfig(
+  task_type = TaskType.CAUSAL_LM,
+  targert_modules = target_modules,
+  inference_mode=False,
+  r = lora_rank, lora_alpha=lora_alpha, lora_dropout=lora_dropout,
+  modules_to_save=modules_to_save,
+  )   model= get_peft_model(model, peft_config)
+  model.print_trainable_parameters()
+!pip install -q -U transformers datasets accelerate peft trl bitsandbytes wandb
+import os
+from dotenv import load_dotenv
+ 
+load_dotenv()
+ 
+hf_token = os.getenv("hf_token")
+ 
+import torch
+from datasets import load_dataset
+from transformers import (
+  AutoModelForCausalLM,
+  AutoTokenizer,
+  BitsAndBytesConfig,
+  TrainingArguments,
+  pipeline,
+  logging,
+)
+ 
+import peft
+ 
+from peft import LoraConfig
+from trl import SFTTrainer
+import pandas as pd
+file_path = '../../merged.csv'
+ 
+df = pd.read_csv(file_path)
+df
+dataset=df[['Text']]
+dataset
+dataset_2=dataset.copy()
+ 
+dataset_2
+!pip install scikit-learn
+ 
+from sklearn.model_selection import train_test_split
+ 
+train_val_data, test_data = train_test_split(dataset_2, test_size=0.20, random_state=42)
+train_data, evaluation_data = train_test_split(train_val_data, test_size=0.10, random_state=42)
+ 
+print('Training dataset shape:', len(train_data))
+print('evaluation dataset shape:', len(evaluation_data))
+print('Testing dataset shape:', len(test_data))
+evaluation_data
+import numpy as np
+ 
+msk = np.random.rand(len(dataset_2)) < 0.8
+train_dataset = dataset_2[msk]
+test_dataset = dataset_2[~msk]
+from datasets import Dataset
+ 
+test_dataset=Dataset.from_pandas(test_dataset)
+ 
+train_dataset=Dataset.from_pandas(train_dataset)
+ 
+evaluation_dataset=Dataset.from_pandas(evaluation_data)
+test_dataset
+ 
+test_dataset=test_dataset.remove_columns("__index_level_0__")
+train_dataset=train_dataset.remove_columns("__index_level_0__")
+evaluation_dataset=evaluation_dataset.remove_columns("__index_level_0__")
+ 
+import datasets
+ 
+main_dataset= datasets.DatasetDict({
+  'train': train_dataset,
+  'test': test_dataset,
+  'evaluate': evaluation_dataset
+})
+main_dataset
+import os
+import torch
+from datasets import load_dataset
+from transformers import (
+  AutoModelForCausalLM,
+  AutoTokenizer,
+  BitsAndBytesConfig,
+  AutoTokenizer,
+  TrainingArguments,
+  pipeline,
+)
+from peft import LoraConfig, PeftModel, prepare_model_for_kbit_training
+from trl import SFTTrainer
+base_model = "NousResearch/Llama-2-7b-hf"
+new_model = "llama-2-7b-Amh"
+ 
+tokenizer = AutoTokenizer.from_pretrained(base_model, use_fast=True)
+tokenizer.pad_token = tokenizer.unk_token
+tokenizer.padding_side = "right"
+bnb_config = BitsAndBytesConfig(
+  load_in_4bit=True,
+  bnb_4bit_quant_type="nf4",
+  bnb_4bit_compute_dtype=torch.float16,
+  bnb_4bit_use_double_quant=True,
+)
+ 
+peft_config = LoraConfig(
+  r=16,
+  lora_alpha=32,
+  lora_dropout=0.05,
+  bias="none",
+  task_type="CAUSAL_LM",
+  target_modules=['up_proj', 'down_proj', 'gate_proj', 'k_proj', 'q_proj', 'v_proj', 'o_proj']
+)
+def load_model(model_name, bnb_config):
+  n_gpus = torch.cuda.device_count()
+  max_memory = f'{23000}MB'
+ 
+load_model(base_model,bnb_config)
+import torch
+torch.cuda.empty_cache()
+ 
+model = AutoModelForCausalLM.from_pretrained(
+  base_model,
+  quantization_config=bnb_config,
+  device_map={"": 0}
+)
+ 
+model = prepare_model_for_kbit_training(model)
+training_dataset=main_dataset
+model
+import torch
+ 
+device = torch.device("cuda:0")
+ 
+torch.cuda.empty_cache()
+ 
+print(torch.cuda.memory_summary(device))
+import torch
+torch.cuda.empty_cache()
+import torch
+ 
+n_gpus = torch.cuda.device_count()
+print(f"Number of available GPUs: {n_gpus}")
+ 
+for i in range(n_gpus):
+  gpu_memory = torch.cuda.get_device_properties(i).total_memory
+  print(f"GPU {i}: Total memory: {gpu_memory / (1024**3)} GB")
+from transformers import Trainer, TrainingArguments, BitsAndBytesConfig
+ 
+training_arguments = TrainingArguments(
+  output_dir="../results",
+  num_train_epochs=1,
+  per_device_train_batch_size=10,
+  per_device_eval_batch_size=1,
+  gradient_accumulation_steps=1,
+  gradient_checkpointing=True,
+  fp16=True,
+  evaluation_strategy="steps",
+  eval_steps=1000,
+  logging_steps=1,
+  optim="paged_adamw_8bit",
+  learning_rate=2e-4,
+  lr_scheduler_type="linear",
+  warmup_steps=10,
+  max_steps=10, 
+)
+ 
+trainer = SFTTrainer(
+  model=model,
+  train_dataset=main_dataset["train"],
+  eval_dataset=main_dataset["evaluate"],
+  peft_config=peft_config,
+  dataset_text_field="Text",
+  max_seq_length=512,
+  tokenizer=tokenizer,
+  args=training_arguments,
+)
+ 
+model.config.use_cache = False  
+trainer.train()
+ 
+trainer.model.save_pretrained(new_model)
+ 
+prompt = "የኢትዮጽያ  ጂዲፒ ምን ያህል ነበር"
+instruction = f"
+pipe = pipeline(task="text-generation", model=model, tokenizer=tokenizer, max_length=128)
+result = pipe(instruction)
+print(result[0]['generated_text'][len(instruction):])
+prompt = "how can i treat flu, give the response in amharic language"
+instruction = f"
+pipe = pipeline(task="text-generation", model=model, tokenizer=tokenizer, max_length=128)
+result = pipe(instruction)
+print(result[0]['generated_text'][len(instruction):])
+prompt = "tell me about ethiopian politics, give the response in amharic language"
+instruction = f"
+pipe = pipeline(task="text-generation", model=model, tokenizer=tokenizer, max_length=128)
+result = pipe(instruction)
+print(result[0]['generated_text'][len(instruction):])
+prompt = "who the prime minister of ethiopia, give the response in amharic language"
+instruction = f"
+pipe = pipeline(task="text-generation", model=model, tokenizer=tokenizer, max_length=128)
+result = pipe(instruction)
+print(result[0]['generated_text'][len(instruction):])
+prompt = "3 Ethiopian premier league club, give the response in amharic language"
+instruction = f"
+pipe = pipeline(task="text-generation", model=model, tokenizer=tokenizer, max_length=128)
+result = pipe(instruction)
+print(result[0]['generated_text'][len(instruction):])
+del model
+del pipe
+del trainer
+import gc
+gc.collect()
+gc.collect()
+import torch
+torch.cuda.empty_cache()
+model = AutoModelForCausalLM.from_pretrained(
+  base_model,
+  low_cpu_mem_usage=True,
+  return_dict=True,
+  torch_dtype=torch.float16,
+  device_map={"": 0},
+)
+model = PeftModel.from_pretrained(model, new_model)
+model = model.merge_and_unload()
+ 
+tokenizer = AutoTokenizer.from_pretrained(base_model, trust_remote_code=True)
+tokenizer.pad_token = tokenizer.eos_token
+tokenizer.padding_side = "right"
+! pip install transformers bitsandbytes peft trl accelerate
+import os
+import torch
+from datasets import load_dataset
+from transformers import (
+  AutoModelForCausalLM,
+  AutoTokenizer,
+  BitsAndBytesConfig,
+  TrainingArguments,
+  pipeline,
+  logging,
+)
+ 
+import peft
+ 
+from peft import LoraConfig
+from trl import SFTTrainer
+base_model = "NousResearch/Llama-2-7b-chat-hf"
+guanaco_dataset = "mlabonne/guanaco-llama2-1k"
+new_model = "LLama-2-7b-chat-prac"
+print(peft.__version__)
+dataset = load_dataset(guanaco_dataset, split="train")
+compute_dtype = getattr(torch, "float16")
+quant_config = BitsAndBytesConfig(
+  load_in_4bit=True,
+  bnb_4bit_quant_type="nf4",
+  bnb_4bit_compute_dtype=compute_dtype,
+  bnb_4bit_use_double_quant=False,
+)
+model = AutoModelForCausalLM.from_pretrained(
+  base_model,
+  quantization_config=quant_config,
+  device_map={"": 0}
+)
+ 
+model.config.use_cache = False
+model.config.pretraining_tp = 1
+tokenizer = AutoTokenizer.from_pretrained(base_model, trust_remote_code=True)
+tokenizer.pad_token = tokenizer.eos_token
+tokenizer.padding_size= "right"
+peft_params = LoraConfig(
+  lora_alpha = 16,
+  lora_dropout = 0.1,
+  r=64,
+  bias="none",
+  task_type= "CAUSAL_LM"
+)
+training_params = TrainingArguments(
+  output_dir = "./results",
+  num_train_epochs=1,
+  per_device_train_batch_size=4,
+  gradient_accumulation_steps=1,
+  optim="paged_adamw_32bit",
+  save_steps=25,
+  logging_steps=25,
+  learning_rate=2e-4,
+  weight_decay=0.001,
+  fp16=False,
+  bf16=False,
+  max_grad_norm=0.3,
+  max_steps=-1,
+  warmup_ratio=0.03,
+  group_by_length=True,
+  lr_scheduler_type="constant",
+  report_to="tensorboard"
+)
+!pip install --upgrade peft
+from trl import SFTTrainer
+trainer = SFTTrainer(
+  model=model,
+  train_dataset=dataset,
+  peft_config=peft_params,
+  dataset_text_field="text",
+  max_seq_length=512,
+  tokenizer=tokenizer,
+  args=training_params,
+  packing=False,
+)
+trainer.train()
+import pandas as pd
+import numpy as np
+import sys, os
+sys.path.append(os.path.abspath(os.path.join('../scripts')))
+from util import Util
+from concurrent.futures import ThreadPoolExecutor
+util = Util()
+cleaned_dir = "../cleaned"
+json_file_path = '../raw/dilela_page.json'
+ 
+df = pd.read_json(json_file_path)
+df.head()
+df.shape
+columns = ["id", "channel_name", "type", "message_id", "message_type","text", "label", "created_at", "updated_at", ]
+new_df = pd.DataFrame(columns=columns)
+new_df
+telegeram_channel_id  = df["id"][0]
+telegram_channel_name = df["name"][0]
+telegeram_channel_type = df["type"][0]
+message_df = df["messages"]
+data = [{
+  'telegeram_channel_id': telegeram_channel_id,
+  'telegram_channel_name': telegram_channel_name,
+  'telegeram_channel_type': telegeram_channel_type,
+  'message_id': message.get('id', np.nan),
+  'message_type': message.get('type', np.nan),
+  'text': message['text_entities'][0]['text'] if message.get('text_entities') and message['text_entities'] else np.nan,
+  'created_at': message.get('date', np.nan),
+  'update_at': message.get('edited', np.nan),
+  }for message in message_df]
+message_df = pd.DataFrame(data)
+message_df = message_df.sort_values(by='message_id')
+message_df.head(20)
+message_df.shape
+nan_rows_count = message_df.isna().any(axis=1).sum()
+nan_rows_count
+message_df = message_df.dropna()
+message_df.head()
+message_df.shape
+message_df = message_df.replace('\n', ' ', regex=True)
+message_df.head()
+message_df["hashtags"] = message_df['text'].apply(lambda text: util.extract_hashtags(text))
+message_df.head()
+message_df["text"] = message_df["text"].str.replace(r'\
+message_df.head()
+message_df["emojis"] = message_df["text"].apply(util.extract_emojis)
+message_df.head()
+message_df['text'] = message_df['text'].apply(util.remove_emojis_using_emoji_pattern)
+message_df.tail()
+def remove_emojis_parallel(text):
+  return util.remove_emojis(text)
+ 
+with ThreadPoolExecutor() as executor:
+  message_df['text'] = list(executor.map(remove_emojis_parallel, message_df['text']))
+message_df.head()
+message_df.replace('', pd.NA, inplace=True)
+nan_rows_count = message_df.isna().any(axis=1).sum()
+ 
+message_df = message_df.dropna()
+message_df.head()
+ 
+letters = [
+  [['ሐ', 'ሑ', 'ሒ', 'ሓ', 'ሔ', 'ሖ'], ['ሀ', 'ሁ', 'ሂ', 'ሃ', 'ሄ', 'ህ', 'ሆ']],
+  [['ኀ', 'ኁ', 'ኂ', 'ኃ', 'ኄ', 'ኅ', 'ኆ'], ['ሀ', 'ሁ', 'ሂ', 'ሃ', 'ሄ', 'ህ', 'ሆ']],
+  [['ሠ', 'ሡ', 'ሢ', 'ሣ', 'ሤ', 'ሦ', 'ሦ', 'ሧ'], ['ሰ', 'ሱ', 'ሲ', 'ሳ', 'ሴ', 'ስ', 'ሶ', 'ሷ']],
+  [['ዐ', 'ዑ', 'ዒ', 'ዓ', 'ዔ', 'ዕ', 'ዖ'], ['አ', 'ኡ', 'ኢ', 'ኣ', 'ኤ', 'እ', 'ኦ']],
+  [['ጸ', 'ጹ', 'ጺ', 'ጻ', 'ጼ', 'ጽ', 'ጾ'], ['ፀ', 'ፁ', 'ፂ', 'ፃ', 'ፄ', 'ፅ', 'ፆ']]
+]
+for letter in letters:
+  for i in range(len(letter[0])):
+  message_df['text'] = message_df['text'].str.replace(letter[0][i], letter[1][i])
+message_df['symbols'] = message_df['text'].apply(util.extract_symbols)
+message_df.head()
+message_df['text'] = message_df['text'].apply(util.remove_symbols)
+message_df.tail()
+message_df['links'] = message_df['text'].apply(util.extract_urls)
+message_df.head()
+message_df['text'] = message_df['text'].str.replace(util.url_pattern, '', regex=True).str.strip()
+message_df.head()
+message_df['mentions'] = message_df['text'].apply(util.extract_mentions)
+message_df.head()
+message_df['text'] = message_df['text'].str.replace(util.mention_pattern, '', regex=True).str.strip()
+message_df.tail()
+message_df['text'] = message_df['text'].str.replace('\s+', ' ', regex=True).str.strip()
+message_df['text'] = message_df['text'].replace(r'!+', '!', regex=True)
+message_df['text'] = message_df['text'].replace(r'\.+', '', regex=True)
+message_df.head()
+nan_rows_count = message_df['text'].isna().sum()
+nan_rows_count
+ 
+message_df = message_df.dropna(subset='text')
+message_df.tail()
+ 
+message_df = message_df[message_df['text'].str.len() >= 20]
+message_df.to_csv(f"{cleaned_dir}/dilela_page.csv")
+message_df['text'].to_csv(f"{cleaned_dir}/dilela_page.txt", index=False, header=False)
+df = pd.read_csv(f"{cleaned_dir}/dilela_page.csv")
+df.head()
+df['word_count'] = df['text'].str.split().str.len()
+df.columns
+ 
+df_labeled = df.drop(['Unnamed: 0','telegram_channel_name','telegeram_channel_type','message_id','message_type','hashtags', 'emojis', 'created_at','symbols', 'links','mentions'],axis=1)
+df_labeled.rename(columns={'update_at':'date','telegeram_channel_id':'channel_id'},inplace=True)
+df_labeled.to_csv(f"{cleaned_dir}/dilela_page_labeled.csv")
+len = df_labeled['word_count'].sum()
+len
+from fastapi import FastAPI, HTTPException, Depends
+from typing import Annotated, List
+from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
+from utils import simple_rag
+from utils import hugging_face_hub
+app = FastAPI()
+origins = ["http://localhost:5173"]
+app.add_middleware(
+  CORSMiddleware,
+  allow_origins=origins,
+)
+ 
+class RagResponseBase(BaseModel):
+  question: str
+  answer: str
+ 
+class HugResponseBase(BaseModel):
+  question: str
+  answer: str
+ 
+@app.get("/getanswer", response_model=RagResponseBase)
+async def return_answer(question: str):
+  result = simple_rag.test_RAG(question)
+  return result
+ 
+@app.get("/getHuggingFaceAnswer", response_model=HugResponseBase)
+async def return_answer(model: str, prompt: str):
+  result = hugging_face_hub.invoke_current_hugging_face_model(model, prompt)
+  return result
+from langchain import OpenAI
+from langchain.document_loaders import TextLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.embeddings.openai import OpenAIEmbeddings
+from langchain.vectorstores import Chroma
+from langchain.chains import RetrievalQA
+from models import simple_rag_response
+import os
+from dotenv import load_dotenv
+load_dotenv()
+ 
+def load_data():
+  loader = TextLoader("/week_6_challenge_doc.txt")
+  documents = loader.load()
+  return documents
+ 
+def return_chunks(documents):
+  text_splitter = RecursiveCharacterTextSplitter(chunk_size=150, chunk_overlap=30)
+  texts = text_splitter.split_documents(documents)
+  return texts
+ 
+def return_chain(texts):
+  embeddings = OpenAIEmbeddings()
+  store = Chroma.from_documents(
+  texts, embeddings, collection_name="challenge_document"
+  )
+  llm = OpenAI(temperature=0)
+  return RetrievalQA.from_chain_type(llm, retriever=store.as_retriever())
+ 
+def test_RAG(question):
+  documents = load_data()
+  chunks = return_chunks(documents)
+  chain = return_chain(chunks)
+  response = chain.run(question)
+  return simple_rag_response.RagResponse(question, response)
+import React, { useState , useRef} from 'react'
+import 'bootstrap/dist/css/bootstrap.css'
+import FileInput from  './components/FileInput'
+import TextInputWithLable from  './components/TextInputWithLable'
+import Dropdown from './components/Dropdown'
+import NavBarComp from './components/Navbar'
+import SpinnerWithText from './components/SpinnerWithText'
+import api from './api/api'
+function App() {
+  const [answer,setAnswer] = useState([]);
+  const [isShow,setShow] = useState(false);
+  const fetchResponse = async () =>{
+  console.log(ref.current.value);
+  const question = ref.current.value;
+  setShow(true)
+  const response = await api.get('/getanswer?question='+question);
+  console.log(response.data);
+  setAnswer(response.data)
+  setShow(false)
+  }
+  const ref = useRef(null);
+  return (
+  <React.Fragment>
+  <NavBarComp />
+  <main className='container'>
+  <form className="row g-3" >
+  <div>
+  <label htmlFor="inputLable" className="form-label">Input Ad description to be generated</label>
+  <textarea className="form-control" id="inputTextarea" rows="7" ref={ref}/>
+  </div>
+  {isShow && <SpinnerWithText />}
+  <button type="button" className="btn btn-primary mb-4" onClick={fetchResponse}>Get Ad</button>   <div>
+  <TextInputWithLable value= {answer}/>
+  </div>
+  </form>
+  </main>
+  </React.Fragment>
+  )
+}
+export default App
+import pandas as pd
+import json
+import os
+from pprint import pprint
+import bitsandbytes as bnb
+import torch
+import torch.nn as nn
+import transformers
+from datasets import load_dataset, Dataset
+from huggingface_hub import notebook_login
+ 
+from peft import LoraConfig, PeftConfig, PeftModel, get_peft_model, prepare_model_for_kbit_training
+from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, TrainingArguments, pipelines, logging
+from datasets import load_dataset
+dataset_name = 'Henok/amharic-qa' 
+dataset = load_dataset(dataset_name, split="train")
+MODEL_NAME = "mistralai/Mistral-7B-v0.1"
+new_model = "amharic-mistral-7b"
+config = AutoConfig.from_pretrained(MODEL_NAME, trust_remote_code=True, load_in_4bit=True)
+ 
+bnb_config = BitsAndBytesConfig(
+  load_in_4bit=True,
+  bnb_4bit_use_double_quant=True,
+  bnb_4bit_quant_type="nf4",
+  bnb_4bit_compute_dtype=torch.bfloat16
+)
+ 
+model = AutoModelForCausalLM.from_pretrained(
+  MODEL_NAME,
+  device_map="auto",
+  trust_remote_code=True,
+  quantization_config=bnb_config,
+)
+ 
+tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+tokenizer.pad_token = tokenizer.eos_token
+model = prepare_model_for_kbit_training(model)
+use_4bit = True
+ 
+bnb_4bit_compute_dtype = "float16"
+ 
+bnb_4bit_quant_type = "nf4"
+ 
+use_nested_quant = False
+compute_dtype = getattr(torch, bnb_4bit_compute_dtype)
+if compute_dtype == torch.float16 and use_4bit:
+  major, _ = torch.cuda.get_device_capability()
+  if major >= 8:
+  print("=" * 80)
+  print("Your GPU supports bfloat16: accelerate training with bf16=True")
+  print("=" * 80)
+import re
+def get_num_layers(model):
+  numbers = set()
+  for name, _ in model.named_parameters():
+  for number in re.findall(r'\d+', name):
+  numbers.add(int(number))
+  return max(numbers)
+ 
+def get_last_layer_linears(model):
+  names = []
+  num_layers = get_num_layers(model)
+  for name, module in model.named_modules():
+  if str(num_layers) in name and not "encoder" in name:
+  if isinstance(module, torch.nn.Linear):
+  names.append(name)
+  return names
+config = LoraConfig(
+  r=2,
+  lora_alpha=32,
+  target_modules=get_last_layer_linears(model),
+  lora_dropout=0.05,
+  bias="none",
+  task_type="CAUSAL_LM"
+)
+ 
+model = get_peft_model(model, config)
+ 
+output_dir = "./results"
+ 
+num_train_epochs = 1
+ 
+fp16 = False
+bf16 = False
+ 
+per_device_train_batch_size = 4
+ 
+per_device_eval_batch_size = 4
+ 
+gradient_accumulation_steps = 1
+ 
+max_grad_norm = 0.3
+ 
+learning_rate = 2e-4
+ 
+weight_decay = 0.001
+ 
+optim = "paged_adamw_32bit"
+ 
+lr_scheduler_type = "constant"
+ 
+warmup_ratio = 0.03
+ 
+group_by_length = True
+ 
+save_steps = 25
+ 
+logging_steps = 25
+ 
+base_model = AutoModelForCausalLM.from_pretrained(
+  MODEL_NAME,
+  low_cpu_mem_usage=True,
+  return_dict=True,
+  torch_dtype=torch.float16,
+  device_map={"": 0},
+)
+model = PeftModel.from_pretrained(base_model, new_model)
+model = model.merge_and_unload()
+training_arguments = TrainingArguments(
+  output_dir=output_dir,
+  num_train_epochs=num_train_epochs,
+  per_device_train_batch_size=per_device_train_batch_size,
+  gradient_accumulation_steps=gradient_accumulation_steps,
+  optim=optim,
+  save_steps=save_steps,
+  logging_steps=logging_steps,
+  learning_rate=learning_rate,
+  weight_decay=weight_decay,
+  fp16=fp16,
+  bf16=bf16,
+  max_grad_norm=max_grad_norm,
+  max_steps=25,
+  warmup_ratio=warmup_ratio,
+  group_by_length=group_by_length,
+  lr_scheduler_type=lr_scheduler_type,
+  report_to="tensorboard"
+)
+from trl import SFTTrainer
+trainer = SFTTrainer(
+  model=model,
+  train_dataset=dataset,
+  peft_config=peft_params,
+  dataset_text_field="text",
+  max_seq_length=512,
+  tokenizer=tokenizer,
+  args=training_params,
+  packing=False,
+)
+trainer.train()
+class RagResponse:
+  def __init__(self, question, answer) -> None:
+  self.question = question
+  self.answer = answer
+  pass
+ 
+class HugResponse:
+  def __init__(self, question, answer) -> None:
+  self.question = question
+  self.answer = answer
+  pass
+from dotenv import load_dotenv
+from models import simple_rag_response
+load_dotenv()
+from langchain import HuggingFaceHub
+ 
+def invoke_current_hugging_face_model(model, prompt):
+  llm = HuggingFaceHub(
+  repo_id=model, model_kwargs={"temperature": 0, "max_length": 64}
+  )
+  response = llm(prompt)
+  return simple_rag_response.HugResponse(prompt, response)
+import time
+import sentencepiece as spm
+import sentencepiece as spm
+ 
+spm.SentencePieceTrainer.train('--input=merged_text.txt --model_prefix=m --vocab_size=100000')
+sp = spm.SentencePieceProcessor()
+sp.load('m.model')
+ 
+print(sp.encode_as_pieces('የኢትዮጽያ ጂዲፒ ምን ያህል ነበር?'))
+print(sp.encode_as_ids('የኢትዮጽያ ጂዲፒ ምን ያህል ነበር?'))
+ 
+print(sp.encode_as_pieces('ሃይ ሰላም ናችሁ?'))
+ 
+spm.SentencePieceTrainer.train('--input=merged_text.txt --model_prefix=am-word --model_type=word  --vocab_size=100000')
+ 
+sp = spm.SentencePieceProcessor()
+sp.load('am-word.model')
+ 
+print(sp.encode_as_pieces('የኢትዮጽያ  ጂዲፒ ምን ያህል ነበር?'))
+print(sp.encode_as_ids('የኢትዮጽያ ጂዲፒ ምን ያህል ነበር?'))
+sp = spm.SentencePieceProcessor()
+sp.load('am-word.model')
+ 
+print(sp.encode_as_pieces('በአዲስ አበባ የአሜሪካ ኤምባሲ'))
+print(sp.encode_as_ids('በአዲስ አበባ የአሜሪካ ኤምባሲ'))
+sp = spm.SentencePieceProcessor()
+sp.load('am-word.model')
+ 
+print(sp.encode_as_pieces('የፒዛ ምግብ ቤት ለመክፈት የሚጠቅሙ ምክሮች'))
+print(sp.encode_as_ids('ፒዛ ምግብ ቤት ለመክፈት የሚጠቅሙ ምክሮች'))
+print(sp.decode_ids([47914, 1024, 33, 7716, 29922, 26700]))
+import json
+import re
+ 
+class Util():
+  def __init__(self) -> None:
+  self.emoji_pattern = re.compile("["
+  u"\U0001F600-\U0001F64F"   u"\U0001F300-\U0001F5FF"   u"\U0001F680-\U0001F6FF"   u"\U0001F700-\U0001F77F"   u"\U0001F780-\U0001F7FF"   u"\U0001F800-\U0001F8FF"   u"\U0001F900-\U0001F9FF"   u"\U0001FA00-\U0001FA6F"   u"\U0001FA70-\U0001FAFF"   u"\u2600-\u26FF"   u"\u2700-\u27BF"   u"\u2B50"   u"\U00002049 \U0000FE0F"   u"\U0000203C"   u"\U0001F1E6-\U0001F1FF"   "]+", flags=re.UNICODE)
+  self.symbols = re.compile("["
+  "\""
+  "\“"
+  "\""
+  "\'"
+  "\-"
+  "\*"
+  "\•"
+  "\ℹ"
+  "\﻿"
+  "\_"
+  "]+")
+  self.url_pattern = r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+'
+  self.mention_pattern = r'@(\w+)'
+  print(self.emoji_pattern.pattern)
+  def read_file(self, file_path: str) -> dict:
+  with open(file_path, 'r') as file:
+  data = json.load(file)
+  return data
+  def write_file(self, file_path: str, data: dict) -> None:
+  with open(file_path, 'w') as file:
+  json.dump(data, file, indent=2)
+  def parse_text(self, text: any) -> str:
+  if isinstance(text, str):
+  return text
+  elif isinstance(text, list):
+  contents = []
+  for item in text:
+  if isinstance(item, str):
+  contents.append(item)
+  elif isinstance(item, dict):
+  contents.append(item['text'])
+  return "".join(contents)
+  else:
+  return ""
+  def parse_messages(self, messages: list) -> dict:
+  parsed_messages = {
+  'id': [],
+  'text': [],
+  'date': []
+  }
+  for message in messages:
+  if message['type'] != 'message' or len(message['text']) == 0:
+  continue
+  parsed_messages['id'].append(message['id'])
+  message_content = self.parse_text(message['text'])
+  parsed_messages['text'].append(message_content)
+  parsed_messages['date'].append(message['date'])
+  return parsed_messages
+  def extract_hashtags(self, text: str) -> list:
+  return [word for word in text.split() if word.startswith('
+  def extract_emojis(self, text):
+  return ''.join(self.emoji_pattern.findall(text))
+  def remove_emojis(self, text):
+  return self.emoji_pattern.sub(' ', text)
+  def extract_symbols(self, text):
+  return ''.join(self.symbols.findall(text))
+  def remove_symbols(self, text):
+  return self.symbols.sub(' ', text)
+  def extract_urls(self, text):
+  return re.findall(self.url_pattern, text)
+  def extract_mentions(self, text):
+  return re.findall(self.mention_pattern, text)
+import pandas as pd
+import csv, os, sys
+from transformers import AutoTokenizer, AutoModelForCausalLM
+from trl import
+"""
+Convert .txt to csv
+"""
+import csv
+from sklearn.model_selection import train_test_split
+def convert_txt_to_csv(input_txt, output_csv):
+  with open(input_txt, 'r', encoding='utf-8') as infile, open(output_csv, 'w', encoding='utf-8', newline='') as outfile:
+  reader = infile.readlines()
+  data = [line.strip().split() for line in reader]
+  csv_writer = csv.writer(outfile)
+  csv_writer.writerows(data)
+def split_data(input_csv, output_train_csv, output_test_csv, output_val_csv, test_size=0.2, val_size=0.1, random_seed=42):
+  with open(input_csv, 'r', encoding='utf-8') as file:
+  csv_reader = csv.reader(file)
+  data = list(csv_reader)
+  train_data, test_val_data = train_test_split(data, test_size=(test_size + val_size), random_state=random_seed)
+  test_data, val_data = train_test_split(test_val_data, test_size=(val_size / (test_size + val_size)), random_state=random_seed)
+  with open(output_train_csv, 'w', encoding='utf-8', newline='') as train_file:
+  csv_writer = csv.writer(train_file)
+  csv_writer.writerows(train_data)
+  with open(output_test_csv, 'w', encoding='utf-8', newline='') as test_file:
+  csv_writer = csv.writer(test_file)
+  csv_writer.writerows(test_data)
+  with open(output_val_csv, 'w', encoding='utf-8', newline='') as val_file:
+  csv_writer = csv.writer(val_file)
+  csv_writer.writerows(val_data)
+if __name__ == "__main__":
+  input_txt_file = '/home/biniyam_ajaw/finetuning/data/dataset.txt'
+  output_csv_file = '/home/biniyam_ajaw/finetuning/data/output_data.csv'
+  output_train_csv = '/home/biniyam_ajaw/finetuning/data/train_data.csv'
+  output_test_csv = '/home/biniyam_ajaw/finetuning/data/test_data.csv'
+  output_val_csv = '/home/biniyam_ajaw/finetuning/data/val_data.csv'
+  convert_txt_to_csv(input_txt_file, output_csv_file)
+  split_data(output_csv_file, output_train_csv, output_test_csv, output_val_csv)
+  print("Conversion to CSV and data split completed.")
+from tokenizers import Tokenizer
+from tokenizers.models import BPE
+tokenizer = Tokenizer(BPE(unk_token="[UNK]"))
+from tokenizers.trainers import BpeTrainer
+trainer = BpeTrainer(special_tokens=["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]"], vocab_size=100000)
+import tokenizers
+from tokenizers.pre_tokenizers import Whitespace
+tokenizer.pre_tokenizer = Whitespace()
+folder = 'data'
+files = [f"/home/biniyam_ajaw/finetuning/{folder}/{split}.csv" for split in ["test_data", "train_data", "valid_data"]]
+tokenizer.train(files, trainer)
+from tokenizers.processors import TemplateProcessing
+tokenizer.post_processor = TemplateProcessing(
+  single="[CLS] $A [SEP]",
+  pair="[CLS] $A [SEP] $B:1 [SEP]:1",
+  special_tokens=[
+  ("[CLS]", tokenizer.token_to_id("[CLS]")),
+  ("[SEP]", tokenizer.token_to_id("[SEP]")),
+  ],
+)
+tokenizer.enable_padding(pad_id=3, pad_token="[PAD]")
+from transformers import PreTrainedTokenizerFast
+custom_tokenizer = PreTrainedTokenizerFast(tokenizer_object=tokenizer)
+custom_tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+custom_tokenizer.save_pretrained("amharic_tokenizer")
+custom_tokenizer.push_to_hub("amharic_tokenizer")
+max-width: fit-content;
+  width: 100%;
+  margin: 5 auto;
+  padding: 2rem;
+  text-align: start;
+}
+.container {
+  max-width: '100%' 
+}
+.logo {
+  height: 6em;
+  padding: 1.5em;
+  will-change: filter;
+  transition: filter 300ms;
+}
+.logo:hover {
+  filter: drop-shadow(0 0 2em }
+.logo.react:hover {
+  filter: drop-shadow(0 0 2em }
+@keyframes logo-spin {
+  from {
+  transform: rotate(0deg);
+  }
+  to {
+  transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  a:nth-of-type(2) .logo {
+  animation: logo-spin infinite 20s linear;
+  }
+}
+.card {
+  padding: 2em;
+}
+.read-the-docs {
+  color: }
+import React from 'react';
+import 'bootstrap/dist/css/bootstrap.css'
+function FileInput (){
+  return(
+  <div>
+  <div className="input-group mb-3">
+  <input type="file" className="form-control" id="inputGroupFile02"/>
+  <label clclassNameass="input-group-text" for="inputGroupFile02">Upload</label>
+  </div>
+  </div>
+  );
+}
+ 
+export default FileInput;
+/* :root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  width: 100%;
+  color-scheme: light dark;
+  color: rgba(255, 255, 255, 0.87);
+  background-color:   font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+.container {
+  width: 100%;
+  padding-right: 15px;
+  padding-left: 15px;
+  margin-right: auto;
+  margin-left: auto;
+}
+a {
+  font-weight: 500;
+  color:   text-decoration: inherit;
+}
+a:hover {
+  color: }
+body {
+  margin: 0;
+  display: flex;
+  place-items: center;
+  min-width: 320px;
+  min-height: 100vh;
+}
+h1 {
+  font-size: 3.2em;
+  line-height: 1.1;
+}
+button {
+  border-radius: 8px;
+  border: 1px solid transparent;
+  padding: 0.6em 1.2em;
+  font-size: 1em;
+  font-weight: 500;
+  font-family: inherit;
+  background-color:   cursor: pointer;
+  transition: border-color 0.25s;
+}
+button:hover {
+  border-color: }
+button:focus,
+button:focus-visible {
+  outline: 4px auto -webkit-focus-ring-color;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+  color:   background-color:   }
+  a:hover {
+  color:   }
+  button {
+  background-color:   }
+} */
+import Container from 'react-bootstrap/Container';
+import Nav from 'react-bootstrap/Nav';
+import Navbar from 'react-bootstrap/Navbar';
+import NavDropdown from 'react-bootstrap/NavDropdown';
+function NavBarComp() {
+  return (
+  <Navbar expand="lg" className="bg-body-tertiary container-fluid">
+  <Container >
+  <Navbar.Brand href="   <Navbar.Toggle aria-controls="basic-navbar-nav" />
+  <Navbar.Collapse id="basic-navbar-nav">
+  <Nav className="me-auto">
+  <NavDropdown title="Select Model" id="basic-nav-dropdown">
+  <NavDropdown.Item href="   <NavDropdown.Item href="   <NavDropdown.Item href="   </NavDropdown>
+  </Nav>
+  </Navbar.Collapse>
+  </Container>
+  </Navbar>
+  );
+}
+export default NavBarComp;
+import React from 'react';
+import 'bootstrap/dist/css/bootstrap.css'
+function TextInputWithLabel (props) {
+  return(
+  <div>
+  <div className="mb-3">
+  <label htmlFor="exampleFormControlTextarea1" className="form-label">Generated Ad</label>
+  <textarea className="form-control" id="exampleFormControlTextarea1" rows="7"  value={props.value.answer}/>
+  </div>
+  </div>
+  );
+}
+ 
+export default TextInputWithLabel;
+import torch
+from transformers import AutoModelForCausalLM, AutoConfig, AutoTokenizer, BitsAndBytesConfig, TrainingArguments, pipeline, logging
+from datasets import load_dataset
+import os, sys
+from huggingface_hub import notebook_login
+import torch.nn as nn
+import getpass
+from trl import SFTTrainer
+from peft import PeftConfig, LoraConfig
+os.environ["HUGGING_FACE_HUB_TOKEN"] = getpass.getpass("Token:")
+assert os.environ["HUGGING_FACE_HUB_TOKEN"]
+quantization_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16)
+nf4_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4")
+double_quant_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_use_double_quant=True)
+model_id = "microsoft/phi-2"
+new_model = 'amharic-phi'
+model = AutoModelForCausalLM.from_pretrained(model_id, device_map='cuda:0', quantization_config=nf4_config)
+tokenizer = AutoTokenizer.from_pretrained("dagim/amharic_tokenizer")
+ 
+tokenizer.tokenize("ከአሜሪካ ወደ አዲስ አበባለመጓዝምንያህልጊዜይወስዳል??")
+from datasets import load_dataset
+dataset_name = 'Henok/amharic-qa'
+dataset = load_dataset(dataset_name, split="train")
+import re
+def get_num_layers(model):
+  numbers = set()
+  for name, _ in model.named_parameters():
+  for number in re.findall(r'\d+', name):
+  numbers.add(int(number))
+  return max(numbers)
+ 
+def get_last_layer_linears(model):
+  names = []
+  num_layers = get_num_layers(model)
+  for name, module in model.named_modules():
+  if str(num_layers) in name and not "encoder" in name:
+  if isinstance(module, torch.nn.Linear):
+  names.append(name)
+  return names
+config = LoraConfig(
+  r=4,
+  lora_alpha=32,
+  lora_dropout=0.03,
+  bias='none',
+  task_type="CAUSAL_LM"
+)
+training_arguments = TrainingArguments(
+  output_dir="./results",
+  num_train_epochs=2,
+  per_device_train_batch_size=4,
+  gradient_accumulation_steps=1,
+  optim='paged_adamw_32bit',
+  save_steps=25,
+  logging_steps=25,
+  learning_rate=2e-8,
+  weight_decay=0.001,
+  fp16=False,
+  bf16=False,
+  max_grad_norm=0.3,
+  max_steps=25,
+  warmup_ratio=0.03,
+  group_by_length=True,
+  lr_scheduler_type='constant',
+  report_to="tensorboard",
+  gradient_checkpointing=True
+)
+trainer = SFTTrainer(
+  model=model,
+  train_dataset=dataset,
+  peft_config=config,
+  dataset_text_field='inputs',
+  max_seq_length=None,
+  tokenizer=tokenizer,
+  args=training_arguments,
+  packing=False
+)
+trainer.train()
+trainer.model.save_pretrained(new_model)
+logging.set_verbosity(logging.CRITICAL)
+ 
+prompt = "የኢትዮጵያ ጂዲፒ ምን ያህል ነበር?"
+pipe = pipeline(task="text-generation", model=model, tokenizer=tokenizer, max_length=200)
+result = pipe(f"<s>[INST] {prompt} [/INST]")
+print(result[0]['generated_text'])
+from transformers import PreTrainedTokenizerFast
+fast_tokenizer = PreTrainedTokenizerFast(tokenizer_file="/home/biniyam_ajaw/llama-2-amharic-3784m/tokenizer.json")
+print(len(tokenizer.encode('የኢትዮጵያ ጂዲፒ ምን ያህል ነበር?')))
+import logging
+import numpy as np
+import math
+import os, sys
+import torch
+from dataclasses import dataclass, field
+from itertools import chain
+from typing import Optional, List, Tuple, Dict, Any, Mapping
+from pathlib import Path
+import datasets
+from datasets import Dataset, DatasetDict, load_dataset, load_metric, concatenate_datasets
+from transformers import (
+  CONFIG_MAPPING,
+  MODEL_FOR_CAUSAL_LM_MAPPING,
+  AutoConfig,
+  AutoModelForCausalLM,
+  AutoTokenizer,   LlamaForCausalLM,
+  LlamaTokenizer,
+  AutoTokenizer,
+  DataCollatorForLanguageModeling,
+  HfArgumentParser,
+  Trainer,
+  TrainingArguments,
+  set_seed,
+  is_torch_gpu_available,
+)
+from transformers.trainer_utils import get_last_checkpoint, is_main_process
+from transformers.testing_utils import CaptureLogger
+from transformers.utils import send_example_telemetry
+from transformers.utils.versions import require_version_core
+from sklearn.metrics import accuracy_score, precision_recall_fscore_support
+from sklearn.metrics import classification_report
+from peft import LoraConfig, TaskType, get_peft_model, PeftModel, get_peft_model_state_dict
+from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR
+ 
+class SavePeftModelCallback(transformers.TrainerCallback):
+  def save_model(self, args, state, kwargs):
+  if state.best_model_checkpoint is not None:
+  checkpoint_folder = os.path.join(state.best_model_checkpoint, "pt_lora-Model")
+  else:
+  checkpoint_folder = os.path.join(args.output_dir, f"{PREFIX_CHECKPOINT_DIR}-{state.global_step}")
+  peft_model_path = os.path.join(checkpoint_folder, "pt_lora_model")
+  kwargs["model"].save_pretrained(peft_model_path)
+  kwargs["tokenizer"].save_pretrained(peft_model_path)
+  def on_save(self, args, state, control, **kwargs):
+  self.save_model(args, state, kwargs)
+  return control
+  def on_train_end(self, args, state, control, **kwargs):
+  peft_model_path = os.path.join(args.output_dir, "pt_lora_model")
+  kwargs["model"].save_pretrained(peft_model_path)
+  kwargs["tokenizer"].save_pretrained(peft_model_path)
+def accuracy(predictions, references, normalize=True, sample_weight=None):
+  return {
+  "accuracy": float(
+  accuracy_score(references, predictions, normalize=normalize, sample_weight=sample_weight)
+  )
+  }
+def compute_metrics(eval_preds):
+  preds, labels = eval_preds
+  labels = labels[:, 1:].reshape(-1)
+  preds = preds[:, :-1].reshape(-1)
+  return accuracy(predictions=preds, references=labels)
+def preprocess_logits_for_metrics(logits, labels):
+  if isinstance(logits, tuple):
+  logits = logits[0]
+  return logits.argmax(dim=-1)
+def fault_tolerance_data_collator(features: List) -> Dict[str, Any]:
+  if not isinstance(features[0], Mapping):
+  features = [vars(f) for f in features]
+  first = features[0]
+  batch = {}
+  if "label" in first and first["label"] is not None:
+  label = first["label"].item() if isinstance(first["label"], torch.Tensor) else first["label"]
+  dtype = torch.long if isinstance(label, int) else torch.float
+  batch["label"] = torch.tensor([f["label"] for f in features], dtype=dtype)
+  elif "label_ids" in first and first["label_ids"] is not None:
+  if isinstance(first["label_ids"], torch.Tensor):
+  batch["labels"] = torch.stack([f["label_ids"] for f in features])
+  else:
+  dtype = torch.long if isinstance(first["label_ids"][0], int) else torch.float
+  batch["labels"] = torch.tensor([f["label_ids"] for f in features], dtype=dtype)
+  try:
+  for k, v in first.items():
+  if k not in ("label", "label_ids") and v is not None and not isinstance(v, str):
+  if isinstance(v, torch.Tensor):
+  batch[k] = torch.stack([f[k] for f in features])
+  elif isinstance(v, np.ndarray):
+  batch[k] = torch.tensor(np.stack([f[k] for f in features]))
+  else: batch[k] = torch.tensor([f[k] for f in features])
+  except ValueError:
+  for k, v in first.items():
+  if k not in ("label", "label_ids") and v is not None and not isinstance(v, str):
+  if isinstance(v, torch.Tensor):
+  batch[k] = torch.stack([features[0][k]] * len(features))
+  elif isinstance(v, np.ndarray):
+  batch[k] = torch.tensor(np.stack([features[0][k]] * len(features)))
+  else:   batch[k] = torch.tensor([features[0][k]] * len(features))
+  return batch
+MODEL_CONFIG_CLASSES = list(MODEL_FOR_CAUSAL_MAPPING.keys())
+MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
+@dataclass
+class ModelArguments:
+  model_name_or_path: Optional[str] = field(
+  default=None,
+  metadata={
+  "help": (
+  "The model checkpoint for weights initialization.Don't set if you want to train a model from scratch."
+  )
+  },
+  )
+  tokenizer_name_or_path: Optional[str] = field(
+  default=None,
+  metadata={"help": ("The tokenizer for weights initialization.")},
+  )
+  model_type: Optional[str] = field(
+  default=None,
+  metadata={"help": "If training from scratch, pass a model type from the list: " + ", ".join(MODEL_TYPES)},
+  )
+  config_overrides: Optional[str] = field(
+  default=None,
+  metadata={
+  "help": (
+  "Override some existing default config settings when a model is trained from scratch. Example: "
+  "n_embd=10,resid_pdrop=0.2,scale_attn_weights=false,summary_type=cls_index"
+  )
+  },
+  )
+  config_name: Optional[str] = field(
+  default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
+  )
+  tokenizer_name: Optional[str] = field(
+  default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
+  )
+  cache_dir: Optional[str] = field(
+  default=None,
+  metadata={"help": "Where do you want to store the pretrained models downloaded from huggingface.co"},
+  )
+  use_fast_tokenizer: bool = field(
+  default=True,
+  metadata={"help": "Whether to use one of the fast tokenizer (backed by the tokenizers library) or not."},
+  )
+  model_revision: str = field(
+  default="main",
+  metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
+  )
+  use_auth_token: bool = field(
+  default=False,
+  metadata={
+  "help": (
+  "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
+  "with private models)."
+  )
+  },
+  )
+  torch_dtype: Optional[str] = field(
+  default=None,
+  metadata={
+  "help": (
+  "Override the default `torch.dtype` and load the model under this dtype. If `auto` is passed, the "
+  "dtype will be automatically derived from the model's weights."
+  ),
+  "choices": ["auto", "bfloat16", "float16", "float32"],
+  },
+  )
+  def __post_init__(self):
+  if self.config_overrides is not None and (self.config_name is not None or self.model_name_or_path is not None):
+  raise ValueError(
+  "--config_overrides cannot be used with --config_name or --model_name_or_path. To override some of "
+  )
+ 
+@dataclass
+class DataTrainingArguments:
+  '''
+  Arguments pertaining to what data we are going to input our model for training and eval.
+  '''
+  dataset_dir: Optional[str] = field(
+  default=None, metadata={"the name of the dataset to use"}
+  )
+  dataset_config_name: Optional[str] = field(
+  default=None, metadata={"help": "The configuration name opf the dataset to use"}
+  )
+  train_file: Optional[str] = field(
+  default=None, metadata={"help": "The input training file"}
+  )
+  validation_file: Optional[str] = field(
+  default=None, metadata={"help": "This is optional but recommended if you want to use early stopping"}
+  )
+  max_training_sample: Optional[int] = field(
+  default=None,
+  metadata={
+  "help": "Debugging purposes"
+  },
+  )
+  max_eval_samples: Optional[int] = field(
+  default=None,
+  metadata={
+  "help": "For debugging"
+  },
+  )
+  streaming: bool = field(default=False, metadata={"help": "Enable streaming mode"})
+  block_size: Optional[int] = field(
+  default=None,
+  metadata={
+  "help": (
+  "Optional"
+  "Training dataset will be truncated into a block of this size for training"
+  "Default to the model max input sequence"
+  )
+  }
+  )
+  cache_dir: bool = field(
+  default=None,
+  metadata={"help": "Where do you want to store the pretrained models downloaded from huggingface.co"},
+  )
+  validation_strategy: Optional[float] = field(
+  default=0.01,
+  metadata={
+  "help": "Percentage of the validation set used at the end of each epoch"
+  }
+  )
+  preprocessing_num_workers: Optional[int] = field(
+  default=None,
+  metadata={"help": "Number of processes to use for preprocessing"}
+  )
+  keep_linebreaks: bool = field(
+  default=True, metadata={"help": "Whether to keep the linebreaks when using txt files or not"}
+  )
+  data_cache_dir: Optional[str] = field(default="./", metadata={"help": "The datasets processed store"})
+  def __post_init__(self):
+  if self.streaming:
+  require_version("datasets>=2.0.0", "The streaming feature requires `datasets >= 2.0.0`")
+ 
+@dataclass
+class MyTrainingArguments(TrainingArguments):
+  trainable : Optional[str] = field(default="q_proj, v_proj")
+  lora_rank : Optional[str] = field(default=8)
+  lora_dropout : Optional[float] = field(default=0.03)
+  lora_alpha : Optional[float] = field(default=32.)
+  modules_to_save : Optional[str] = field(default=None)
+  debug_mode : Optional[str] = field(default=False)
+  peft_path : Optional[str] = field(default=None)
+ 
+logger = logging.getLogger(__name__)
+def main():
+  parser = HfArgumentParser(ModelArguments, DataTrainingArguments, MyTrainingArguments)
+  if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
+  model_args, data_args, training_args = parser.parse_parse_json_file(json_file=os.path.abspath(sys.argv[1]))
+  else:
+  model_args, data_args, training_args = parser.parse_args_to_dataclasses()
+  send-example_telemetry("run_clm", model_args, data_args)
+  logging.basicConfig(format="%(asctime)s - %(levelname)s - %(name)s - %(message)s", datefmt="%m/%d/%Y %H:%M:%S",
+  level=logging.INFO,   handlers=[logging.StreamHandler(sys.stdout)],)
+  if training_args.should_log:
+  transformers.utils.logging.set_verbosity_info()
+  log_level = training_args.get_process_log_level()
+  logger.setLevel(log_level)
+  datasets.utils.logging.set_verbosity(log_level)
+  transformers.utils.logging.enable_default_handler()
+  transformers.utils.logging.enable_explicit_format()
+  logger.warning(
+  f"Process rank: {training_args.output_dir}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
+  + f"Distributed training: {bool(training_args.local_rank != -1)}, 16-bits-training: {training_args.fp16}"
+  )
+  last_checkpoint = None
+  if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
+  last_checkpoint = get_last_checkpoint(training_args.output_dir)
+  if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
+  raise ValueError (
+  f"Outpur dir {training_args.output_dir} already exists and is not mt"
+  "Use --overwrite_output_dir to overcome"
+  )
+  elif last_checkpoint is not None and training_args.resume_from_checkpoint is not None:
+  logger.info(
+  f"Checkpoint detected, resuming training at {last_checkpoint}. To avoid this, change "
+  "the --output-dir or --overwrite_output_dir to train from scratch"
+  )
+  set_seed(training_args.seed)
+  config_kwargs = {
+  "cache_dir": model.cache_dir,
+  "revision": model_args.model_revision,
+  "use_auth_token": True if model-args.use_auth_token else None
+  }
+  if model_args.config_name:
+  config = AutoConfig.from_pretrained(model_args.config_name, **config_kwargs)
+  elif model_args.model_name_or_path:
+  config = AutoConfig.from_pretrained(model_args.model_name_or_path, **config_kwargs)
+  else:   config = CONFIG_MAPPING[model_args.model_type]()
+  logger.warning("This is a new config from scratch")
+  if model_args.config_overrides is not None:
+  logger.info(f"Overriding config: {model_args.config_overrides}")
+  config.update_from_string(model_args.config_overrides)
+  logger.info(f"New config: {config}")
+  tokenizer_kwargs = {
+  "cache_dir": model_args.cache_dir,
+  "use_fast": model_args.use_fast_tokenizer,
+  "revision": model_args.model_revision,
+  "use_auth_token": True if model_args.use_auth_token else None
+  }
+  if model_args.tokenizer_name:
+  tokenizer = AutoTokenizer.from_pretrained(model_args.tokenizer_name, **tokenizer_kwargs)
+  elif model_args.tokenizer_name_or_path:
+  tokenizer = LlamaTokenizer.from_pretrained(model_args.tokenizer_name_or_path, **tokenizer_kwargs)
+  else:
+  raise ValueError(
+  "Instantiating a tokenizer from scratch"
+  )
+  def tokenize_function(examples):
+  with CaptureLogger(tok_logger) as cl:
+  return tokenizer(examples[text])
+  if "Token indices sequence length is longer than the" in cl.out:
+  tok_logger.warning(
+  "^^^^^^^ PLease ignore the warning above ^^^^^^^"
+  )
+  return output
+  if data_args.block_size is None:
+  block_size = tokenizer.model_max_length
+  if block_size > 1024:
+  logger.warning(
+  "The chosen tokenizer supports a `model_max_length` that is longer than the default `block_size` value"
+  " of 1024. If you would like to use a longer `block_size` up to `tokenizer.model_max_length` you can"
+  " override this default with `--block_size xxx`."
+  )
+  block_size = 1024   else:
+  if data_args.block_size > tokenizer.model_max_length:
+  logger.warning(
+  f"The block_size passed ({data_args.block_size}) is larger than the maximum length for the model"
+  "Override with `--block_size xxx`"
+  )
+  block_size = min(data_args.block_size, tokenizer.model_max_length)
+  def group_texts(examples):
+  concatenated_examples = {k: list(chain(*examples[k])) for k in examples.keys()}
+  total_length = len(concatenated_examples[list(examples.keys())[0]])
+  if total_length >= block_size:
+  total_length = {total_length // block_size} *  block_size
+  result = {
+  k: [t[i: i + block_size] for i in range(0, total_length, block_size)]
+  for k, t in concatenated_examples.items()
+  }
+  result["labels"] = result["input_ids"].copy()
+  return result
+  with training_args.main_process_first(desc="dataset map tokenizer"):
+  lm_datasets = []
+  path = Path(data_args.dataset_dir)
+  filename = [file.name for file in path.glob("*.txt")]
+  if training_args.debug_mode:
+  files = [files[0]]
+  for idx, file in enumerate(files):
+  data_file = os.path.join(path, file)
+  filename = ''.join(file.split('.')[:-1])
+  cache_path = os.path.join(data_args.data_cache_dir, filename)
+  os.makedirs(cache_path, exist_ok=True)
+  try:
+  processed_dataset = datasets.load_from_disk(cache_path, keep_in_memory=True)
+  logger.info(f'Training datasets-{filename} has been loaded from disk')
+  except Exception:
+  cache_dir = os.path.join(data_args.data_cache_dir, filename+"_text")
+  os.makedirs(cache_dir, exist_ok=True)
+  raw_dataset = load_dataset("text", data_files=data_file, cache_dir=cache_dir, keep_in_memory=False)
+  logger.info(f"{file} has been loaded")
+  tokenized_dataset = raw_dataset.map(
+  tokenize_function,
+  batched=True,
+  num_proc=data_args.preprocessing_num_workers,
+  remove_columns="text",
+  load_from_cache_file=True,
+  keep_in_memory=False,
+  cache_file_names = {k: os.path.join(cache_dir, "tokenized.arrow") for k in raw_dataset},
+  desc="Running tokenizer on the dataset",
+  )
+  grouped_datasets = tokenized_dataset.map(
+  group_texts,
+  batched=True,
+  num_proc=data_args.preprocessing_num_workers,
+  load_from_cache_file=True,
+  keep_in_memory=False,
+  cache_file_names = {k: os.path.join(cache_dir, "grouped.arrow") for k in tokenized_dataset},
+  desc=f'Grouping texts in chunks of {block_size}',
+  )
+  processed_dataset = grouped_datasets
+  processed_dataset.save_to_disk(cache_path)
+  if idx == 0:
+  lm_datasets = processed_dataset['train']
+  else:
+  assert lm_datasets.features.type == processed_dataset['train'].features.type
+  lm_dataset = concatenate_datasets([lm_datasets, processed_dataset['train']])
+  lm_datasets = lm_datasets.train_test_split(test_size= data_args.validation_split_percentage())
+  if training_args.do_train:
+  train_dataset = lm_datasets["train"]
+  if data_args.max_train_samples is not None:
+  max_train_samples = min(len(train_dataset), data_args.max_train_samples)
+  train_dataset = train_dataset.select(range(max_train_samples))
+  logger.info(f"Num train samples {len(train_dataset)}")
+  logger.info("Training example: ")
+  logger.info(tokenizer.decode(train_dataset[0]["input_ids"]))
+  if model_args.model_name_or_path:
+  torch_dtype = (
+  model_args.torch_dtype
+  if model_args.torch_dtype in ["auto", None]
+  else getattr(torch, model_args.torch_dtype)
+  )
+  model = LlamaForCausalLM.from_pretrained(
+  model_args.model_name_or_path,
+  from_tf=bool(".cpkt" in model_args.model_name_or_path),
+  config=config,
+  cache_dir=model_args.cache_dir,
+  revision=model_args.model_revision,
+  use_auth_token=True if model_args.use_auth_token else None,
+  torch_dtype=torch_dtype,
+  low_cpu_mem_usage=True,
+  )
+  else:
+  model = AutoModelForCausalLM.from_config(config)
+  n_params = sum({p.data_ptr(): p.numel() for p in model.parameters()}.values())
+  logger.info(f"Training new model from scratch - Total size={n_params/2**20:.2f}M parameters")
+  model_vocab_size = model.get_output_embeddings().weight.size(0)
+  if not (
+  (model_vocab_size==32000 and len(tokenizer)==51008) or \
+  (model_vocab_size==32000 and len(tokenizer)==32000) or \
+  (model_vocab_size==51008 and len(tokenizer)==51008) or \
+  (model_vocab_size==49954 and len(tokenizer)==49954)
+  ):
+  raise ValueError(
+  f"The combination of base model (size: {model_vocab_size}) and tokenizer (size: {len(tokenizer)}) is not a valid configuration. Please check our project wiki for further information. \n"
+  "Valid configurations (base model / tokenizer):\n"
+  "- Continue pre-training original LLaMA: 32000 / 32000 \n"
+  "- Pre-training (Chinese) Amharic LLaMA based on original LLaMA: 32000 / 51008 \n"
+  "- Continue pre-training (Chinese) Amharic LLaMA: 51008 / 51008 \n"
+  "- Continue pre-training Chinese Alpaca: 49954 / 49954 \n"
+  )
+  model.resize_token_embeddings(len(tokenizer))
+  if training_args.peft_path is not None:
+  logger.info("PEFT from pretrained model")
+  model = PeftModel.from_pretrained(model, training_args.peft_path)
+  else:
+  logger.info("Init new peft model")
+  target_modules = training_args.trainable.split(",")
+  modules_to_save = training_args.modules_to_save
+  if modules_to_save is not None:
+  modules_to_save = modules_to_save.split(",")
+  lora_rank = training_args.lora_rank
+  lora_dropout = training_args.lora_dropout
+  lora_alpha = training_args.lora_alpha
+  logger.info(f"Target modules: {target_modules}")
+  logger.info(f"LoRA Rank: {lora_rank}")
+  peft_config = LoraConfig(
+  task_type = TaskType.CAUSAL_LM,
+  targert_modules = target_modules,
+  inference_mode=False,
+  r = lora_rank, lora_alpha=lora_alpha, lora_dropout=lora_dropout,
+  modules_to_save=modules_to_save,
+  )   model= get_peft_model(model, peft_config)
+  model.print_trainable_parameters()
+!pip install -q -U transformers datasets accelerate peft trl bitsandbytes wandb
+import os
+from dotenv import load_dotenv
+ 
+load_dotenv()
+ 
+hf_token = os.getenv("hf_token")
+ 
+import torch
+from datasets import load_dataset
+from transformers import (
+  AutoModelForCausalLM,
+  AutoTokenizer,
+  BitsAndBytesConfig,
+  TrainingArguments,
+  pipeline,
+  logging,
+)
+ 
+import peft
+ 
+from peft import LoraConfig
+from trl import SFTTrainer
+import pandas as pd
+file_path = '../../merged.csv'
+ 
+df = pd.read_csv(file_path)
+df
+dataset=df[['Text']]
+dataset
+dataset_2=dataset.copy()
+ 
+dataset_2
+!pip install scikit-learn
+ 
+from sklearn.model_selection import train_test_split
+ 
+train_val_data, test_data = train_test_split(dataset_2, test_size=0.20, random_state=42)
+train_data, evaluation_data = train_test_split(train_val_data, test_size=0.10, random_state=42)
+ 
+print('Training dataset shape:', len(train_data))
+print('evaluation dataset shape:', len(evaluation_data))
+print('Testing dataset shape:', len(test_data))
+evaluation_data
+import numpy as np
+ 
+msk = np.random.rand(len(dataset_2)) < 0.8
+train_dataset = dataset_2[msk]
+test_dataset = dataset_2[~msk]
+from datasets import Dataset
+ 
+test_dataset=Dataset.from_pandas(test_dataset)
+ 
+train_dataset=Dataset.from_pandas(train_dataset)
+ 
+evaluation_dataset=Dataset.from_pandas(evaluation_data)
+test_dataset
+ 
+test_dataset=test_dataset.remove_columns("__index_level_0__")
+train_dataset=train_dataset.remove_columns("__index_level_0__")
+evaluation_dataset=evaluation_dataset.remove_columns("__index_level_0__")
+ 
+import datasets
+ 
+main_dataset= datasets.DatasetDict({
+  'train': train_dataset,
+  'test': test_dataset,
+  'evaluate': evaluation_dataset
+})
+main_dataset
+import os
+import torch
+from datasets import load_dataset
+from transformers import (
+  AutoModelForCausalLM,
+  AutoTokenizer,
+  BitsAndBytesConfig,
+  AutoTokenizer,
+  TrainingArguments,
+  pipeline,
+)
+from peft import LoraConfig, PeftModel, prepare_model_for_kbit_training
+from trl import SFTTrainer
+base_model = "NousResearch/Llama-2-7b-hf"
+new_model = "llama-2-7b-Amh"
+ 
+tokenizer = AutoTokenizer.from_pretrained(base_model, use_fast=True)
+tokenizer.pad_token = tokenizer.unk_token
+tokenizer.padding_side = "right"
+bnb_config = BitsAndBytesConfig(
+  load_in_4bit=True,
+  bnb_4bit_quant_type="nf4",
+  bnb_4bit_compute_dtype=torch.float16,
+  bnb_4bit_use_double_quant=True,
+)
+ 
+peft_config = LoraConfig(
+  r=16,
+  lora_alpha=32,
+  lora_dropout=0.05,
+  bias="none",
+  task_type="CAUSAL_LM",
+  target_modules=['up_proj', 'down_proj', 'gate_proj', 'k_proj', 'q_proj', 'v_proj', 'o_proj']
+)
+def load_model(model_name, bnb_config):
+  n_gpus = torch.cuda.device_count()
+  max_memory = f'{23000}MB'
+ 
+load_model(base_model,bnb_config)
+import torch
+torch.cuda.empty_cache()
+ 
+model = AutoModelForCausalLM.from_pretrained(
+  base_model,
+  quantization_config=bnb_config,
+  device_map={"": 0}
+)
+ 
+model = prepare_model_for_kbit_training(model)
+training_dataset=main_dataset
+model
+import torch
+ 
+device = torch.device("cuda:0")
+ 
+torch.cuda.empty_cache()
+ 
+print(torch.cuda.memory_summary(device))
+import torch
+torch.cuda.empty_cache()
+import torch
+ 
+n_gpus = torch.cuda.device_count()
+print(f"Number of available GPUs: {n_gpus}")
+ 
+for i in range(n_gpus):
+  gpu_memory = torch.cuda.get_device_properties(i).total_memory
+  print(f"GPU {i}: Total memory: {gpu_memory / (1024**3)} GB")
+from transformers import Trainer, TrainingArguments, BitsAndBytesConfig
+ 
+training_arguments = TrainingArguments(
+  output_dir="../results",
+  num_train_epochs=1,
+  per_device_train_batch_size=10,
+  per_device_eval_batch_size=1,
+  gradient_accumulation_steps=1,
+  gradient_checkpointing=True,
+  fp16=True,
+  evaluation_strategy="steps",
+  eval_steps=1000,
+  logging_steps=1,
+  optim="paged_adamw_8bit",
+  learning_rate=2e-4,
+  lr_scheduler_type="linear",
+  warmup_steps=10,
+  max_steps=10, 
+)
+ 
+trainer = SFTTrainer(
+  model=model,
+  train_dataset=main_dataset["train"],
+  eval_dataset=main_dataset["evaluate"],
+  peft_config=peft_config,
+  dataset_text_field="Text",
+  max_seq_length=512,
+  tokenizer=tokenizer,
+  args=training_arguments,
+)
+ 
+model.config.use_cache = False  
+trainer.train()
+ 
+trainer.model.save_pretrained(new_model)
+ 
+prompt = "የኢትዮጽያ  ጂዲፒ ምን ያህል ነበር"
+instruction = f"
+pipe = pipeline(task="text-generation", model=model, tokenizer=tokenizer, max_length=128)
+result = pipe(instruction)
+print(result[0]['generated_text'][len(instruction):])
+prompt = "how can i treat flu, give the response in amharic language"
+instruction = f"
+pipe = pipeline(task="text-generation", model=model, tokenizer=tokenizer, max_length=128)
+result = pipe(instruction)
+print(result[0]['generated_text'][len(instruction):])
+prompt = "tell me about ethiopian politics, give the response in amharic language"
+instruction = f"
+pipe = pipeline(task="text-generation", model=model, tokenizer=tokenizer, max_length=128)
+result = pipe(instruction)
+print(result[0]['generated_text'][len(instruction):])
+prompt = "who the prime minister of ethiopia, give the response in amharic language"
+instruction = f"
+pipe = pipeline(task="text-generation", model=model, tokenizer=tokenizer, max_length=128)
+result = pipe(instruction)
+print(result[0]['generated_text'][len(instruction):])
+prompt = "3 Ethiopian premier league club, give the response in amharic language"
+instruction = f"
+pipe = pipeline(task="text-generation", model=model, tokenizer=tokenizer, max_length=128)
+result = pipe(instruction)
+print(result[0]['generated_text'][len(instruction):])
+del model
+del pipe
+del trainer
+import gc
+gc.collect()
+gc.collect()
+import torch
+torch.cuda.empty_cache()
+model = AutoModelForCausalLM.from_pretrained(
+  base_model,
+  low_cpu_mem_usage=True,
+  return_dict=True,
+  torch_dtype=torch.float16,
+  device_map={"": 0},
+)
+model = PeftModel.from_pretrained(model, new_model)
+model = model.merge_and_unload()
+ 
+tokenizer = AutoTokenizer.from_pretrained(base_model, trust_remote_code=True)
+tokenizer.pad_token = tokenizer.eos_token
+tokenizer.padding_side = "right"

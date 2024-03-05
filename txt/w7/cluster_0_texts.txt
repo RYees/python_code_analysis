@@ -1,0 +1,4868 @@
+import json
+import re
+ 
+class Util:
+  def __init__(self) -> None:
+  self.emoji_pattern = re.compile(
+  "["
+  "\U0001F600-\U0001F64F"   "\U0001F300-\U0001F5FF"   "\U0001F680-\U0001F6FF"   "\U0001F700-\U0001F77F"   "\U0001F780-\U0001F7FF"   "\U0001F800-\U0001F8FF"   "\U0001F900-\U0001F9FF"   "\U0001FA00-\U0001FA6F"   "\U0001FA70-\U0001FAFF"   "\u2600-\u26FF"   "\u2700-\u27BF"   "\u2B50"   "\U0001F1E6-\U0001F1FF"   "]+",
+  flags=re.UNICODE,
+  )
+  self.symbols = re.compile(
+  "[" '"' "\“" '"' "'" "\-" "\*" "\•" "\ℹ" "\﻿" "\_" "]+"
+  )
+  self.url_pattern = r"http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+"
+  self.mention_pattern = r"@(\w+)"
+  def read_file(self, file_path: str) -> dict:
+  with open(file_path, "r") as file:
+  data = json.load(file)
+  return data
+  def write_file(self, file_path: str, data: dict) -> None:
+  with open(file_path, "w") as file:
+  json.dump(data, file, indent=2)
+  def parse_text(self, text: any) -> str:
+  if isinstance(text, str):
+  return text
+  elif isinstance(text, list):
+  contents = []
+  for item in text:
+  if isinstance(item, str):
+  contents.append(item)
+  elif isinstance(item, dict):
+  contents.append(item["text"])
+  return "".join(contents)
+  else:
+  return ""
+  def parse_messages(self, messages: list) -> dict:
+  parsed_messages = {"id": [], "text": [], "date": []}
+  for message in messages:
+  if message["type"] != "message" or len(message["text"]) == 0:
+  continue
+  parsed_messages["id"].append(message["id"])
+  message_content = self.parse_text(message["text"])
+  parsed_messages["text"].append(message_content)
+  parsed_messages["date"].append(message["date"])
+  return parsed_messages
+  def extract_hashtags(self, text: str) -> list:
+  return [word for word in text.split() if word.startswith("
+  def extract_emojis(self, text):
+  return "".join(self.emoji_pattern.findall(text))
+  def remove_emojis(self, text):
+  return self.emoji_pattern.sub("", text)
+  def extract_symbols(self, text):
+  return "".join(self.symbols.findall(text))
+  def remove_symbols(self, text):
+  return self.symbols.sub(" ", text)
+  def extract_urls(self, text):
+  return re.findall(self.url_pattern, text)
+  def remove_links(self, text):
+  return re.sub(self.url_pattern, " ", text)
+  def extract_mentions(self, text):
+  return re.findall(self.mention_pattern, text)
+import sys, os
+import pandas as pd
+sys.path.append(os.path.abspath(os.path.join('../src/')))
+from utils import utils
+letters = [
+  [['ሐ', 'ሑ', 'ሒ', 'ሓ', 'ሔ', 'ሖ'], ['ሀ', 'ሁ', 'ሂ', 'ሃ', 'ሄ', 'ህ', 'ሆ']],
+  [['ኀ', 'ኁ', 'ኂ', 'ኃ', 'ኄ', 'ኅ', 'ኆ'], ['ሀ', 'ሁ', 'ሂ', 'ሃ', 'ሄ', 'ህ', 'ሆ']],
+  [['ሠ', 'ሡ', 'ሢ', 'ሣ', 'ሤ', 'ሦ', 'ሦ', 'ሧ'], ['ሰ', 'ሱ', 'ሲ', 'ሳ', 'ሴ', 'ስ', 'ሶ', 'ሷ']],
+  [['ዐ', 'ዑ', 'ዒ', 'ዓ', 'ዔ', 'ዕ', 'ዖ'], ['አ', 'ኡ', 'ኢ', 'ኣ', 'ኤ', 'እ', 'ኦ']],
+  [['ጸ', 'ጹ', 'ጺ', 'ጻ', 'ጼ', 'ጽ', 'ጾ'], ['ፀ', 'ፁ', 'ፂ', 'ፃ', 'ፄ', 'ፅ', 'ፆ']]
+]
+parsed_dir = "../data/parsed"
+cleaned_dir = "../data/cleaned"
+util = utils.Util()
+def clean_parsed_data(folder_path):
+  if not os.path.isdir(folder_path):
+  print(f"{folder_path} is not a valid directory.")
+  return
+  if not os.path.exists(cleaned_dir):
+  os.makedirs(cleaned_dir)
+  for file_name in os.listdir(folder_path):
+  base_name, extension = os.path.splitext(file_name)
+  print(base_name,extension)
+  if extension =='.csv':
+  df = pd.read_csv(f"{folder_path}/{file_name}", index_col='id')
+  df = df.dropna()
+  df = df.replace('\n', ' ', regex=True)
+  df['hashtags'] = df['text'].apply(lambda x: util.extract_hashtags(x))
+  df['text'] = df['text'].str.replace(r'\
+  df['emojis'] = df['text'].apply(util.extract_emojis)
+  for letter in letters:
+  for i in range(len(letter[0])):
+  df['text'] = df['text'].str.replace(letter[0][i], letter[1][i])
+  df['symbols'] = df['text'].apply(util.extract_symbols)
+  df['text'] = df['text'].apply(util.remove_symbols)
+  df['links'] = df['text'].apply(util.extract_urls)
+  df['text'] = df['text'].apply(util.remove_links)
+  df['text'] = df['text'].str.replace('\s+', ' ', regex=True).str.strip()
+  df['text'] = df['text'].replace(r'!+', '!', regex=True)
+  df['text'] = df['text'].replace(r'\.+', '', regex=True)
+  base_name, extension = os.path.splitext(file_name)
+  df.to_csv(f"{cleaned_dir}/{base_name}.csv")
+  df['text'].to_csv(f"{cleaned_dir}/{base_name}.txt", index=False, header=False)
+ 
+clean_parsed_data(parsed_dir)
+import sys, os
+import pandas as pd
+sys.path.append(os.path.abspath(os.path.join('../src/')))
+from utils.utils import Util
+util = Util()
+raw_dir = "../data/raw"
+parsed_dir = "../data/parsed"
+def process_raw_data(folder_path):
+  if not os.path.isdir(folder_path):
+  print(f"{folder_path} is not a valid directory.")
+  return
+  for filename in os.listdir(folder_path):
+  print(filename)
+  data = util.read_file(f'{folder_path}/{filename}')
+  parsed_message = util.parse_messages(data['messages'])
+  df = pd.DataFrame(parsed_message)
+  df.set_index('id', inplace=True)
+  base_name, extension = os.path.splitext(filename)
+  if not os.path.exists(parsed_dir):
+  os.makedirs(parsed_dir)
+  df.to_csv(f'{parsed_dir}/{base_name}.csv')
+ 
+process_raw_data(raw_dir)
+!
+from transformers import AutoTokenizer, AutoModelForMaskedLM, AutoModelForCausalLM
+ 
+model_name = "Samuael/llama-2-7b-tebot-amharic"
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModelForCausalLM.from_pretrained(model_name)
+ 
+input_text = "እኔ አማርኛ መናገር እረዳለሁ"
+ 
+input_ids = tokenizer.encode(input_text, return_tensors="pt")
+ 
+output_ids = model.generate(input_ids)
+ 
+output_text = tokenizer.decode(output_ids[0], skip_special_tokens=True)
+print("Generated Amharic text:", output_text)
+import argparse
+from dataclasses import dataclass
+from langchain_community.document_loaders import DirectoryLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.schema import Document
+from langchain_openai import OpenAIEmbeddings
+from langchain.vectorstores.chroma import Chroma
+import os
+from langchain_openai import OpenAI
+from dotenv import load_dotenv
+load_dotenv()
+import sys
+ 
+OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
+CHROMA_PATH = './chromadb/'
+client = OpenAI(
+  api_key=OPENAI_API_KEY
+)
+core_embeddings_model = None
+def get_context():
+  vectorstore = Chroma(persist_directory="./cachce",embedding_function=core_embeddings_model)
+  retriever = vectorstore.as_retriever()
+  return retriever
+def generate_add(user_input, context):
+  template = f'''
+  Generate an advertisement given the following context.   You must use the following context:
+  {context}
+  '''   response = client.chat.completions.create(
+  model="gpt-3.5-turbo",
+  messages=[{"role": "system", "content": template},{"role": "user", "content": user_input}],
+  n=3,
+  )
+  return response
+from peft import PeftModel
+from transformers import LlamaForCausalLM, LlamaConfig
+def load_model(model_name, quantization):
+  model = LlamaForCausalLM.from_pretrained(
+  model_name,
+  return_dict=True,
+  load_in_8bit=quantization,
+  device_map="auto",
+  low_cpu_mem_usage=True,
+  )
+  return model
+ 
+def load_peft_model(model, peft_model):
+  peft_model = PeftModel.from_pretrained(model, peft_model)
+  return peft_model
+def load_llama_from_config(config_path):
+  model_config = LlamaConfig.from_pretrained(config_path)   model = LlamaForCausalLM(config=model_config)
+  return model
+import fire
+import torch
+import os
+import sys
+import time
+import json 
+from typing import List
+from transformers import LlamaTokenizer, LlamaForCausalLM
+from model_utils import load_model, load_peft_model
+BASE_PROMPT = """Below is an interaction between a human and an AI fluent in English and Amharic, providing reliable and informative answers.
+Human: {}
+Assistant [Amharic] : """
+def main(
+  model_name: str="",
+  peft_model: str=None,
+  quantization: bool=False,
+  max_new_tokens =400,   prompt_file: str=None,
+  seed: int=42,   do_sample: bool=True,   min_length: int=None,   use_cache: bool=True,   top_p: float=1.0,   temperature: float=1.0,   top_k: int=1,   repetition_penalty: float=1.0,   length_penalty: int=1,   enable_azure_content_safety: bool=False,   enable_sensitive_topics: bool=False,   enable_saleforce_content_safety: bool=False,   **kwargs
+):   print("***Note: model is not set up for chat use case, history is reset after each response.")
+  print("***Ensure that you have replaced the default LLAMA2 tokenizer with the Amharic tokenizer")
+  torch.cuda.manual_seed(seed)
+  torch.manual_seed(seed)
+  MAIN_PATH = '/model/Llama-2-7b-hf'
+  peft_model = '/home/abdulhamid_mussa/LLM_Finetuning_For_Amharic_Ad_Generation/output'
+  model_name = MAIN_PATH
+  quantization = True
+  model = load_model(model_name, quantization)
+  tokenizer = LlamaTokenizer.from_pretrained(model_name)
+  embedding_size = model.get_input_embeddings().weight.shape[0]
+  if len(tokenizer) != embedding_size:
+  print("resize the embedding size by the size of the tokenizer")
+  model.resize_token_embeddings(len(tokenizer))
+  if peft_model:
+  model = load_peft_model(model, peft_model)
+  model.eval()
+  while True:
+  user_query = input('Type question in Amharic or English: ')
+  user_prompt = BASE_PROMPT.format(user_query)
+  batch = tokenizer(user_prompt, return_tensors="pt")
+  batch = {k: v.to("cuda") for k, v in batch.items()}
+  start = time.perf_counter()
+  with torch.no_grad():
+  outputs = model.generate(
+  **batch,
+  max_new_tokens=max_new_tokens,
+  do_sample=do_sample,
+  top_p=top_p,
+  temperature=temperature,
+  min_length=min_length,
+  use_cache=use_cache,
+  top_k=top_k,
+  repetition_penalty=repetition_penalty,
+  length_penalty=length_penalty,
+  **kwargs   )
+  e2e_inference_time = (time.perf_counter()-start)*1000
+  print(f"the inference time is {e2e_inference_time} ms")
+  output_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+  print("MODEL_OUTPUT: {}".format(output_text))
+ 
+if __name__ == "__main__":
+  fire.Fire(main)
+import torch
+from contextlib import nullcontext
+from transformers import (
+  LlamaForCausalLM,   LlamaTokenizer,   TrainerCallback,   default_data_collator,   Trainer,   TrainingArguments
+)
+from peft import (
+  LoraConfig,
+  TaskType,
+  prepare_model_for_int8_training,
+  PeftModel
+)
+from pathlib import Path
+from utils.dataset_utils import get_preprocessed_dataset
+from configs.datasets import amharic_dataset
+def print_trainable_parameters(model):
+  print("Trainable Parameters:")
+  for name, param in model.named_parameters():
+  if param.requires_grad:
+  print(f" - {name}")
+ 
+def finetune():
+  LLAMA_DIR = '/model/Llama-2-7b-hf'
+  PT_DIR = '/model/llama-2-amharic-3784m'
+  OUTPUT_DIR = "/home/abdulhamid_mussa/LLM_Finetuning_For_Amharic_Ad_Generation/output"
+  tokenizer = LlamaTokenizer.from_pretrained(LLAMA_DIR)
+  model = LlamaForCausalLM.from_pretrained(LLAMA_DIR, load_in_8bit=True, device_map='auto', torch_dtype=torch.float16)
+  train_dataset = get_preprocessed_dataset(tokenizer, amharic_dataset, 'train')
+  model.train()
+  embedding_size = model.get_input_embeddings().weight.shape[0]
+  if len(tokenizer) != embedding_size:
+  print("resize the embedding size by the size of the tokenizer")
+  model.resize_token_embeddings(len(tokenizer))
+  print('loading the pretrained model from config')
+  model = prepare_model_for_int8_training(model)
+  model = PeftModel.from_pretrained(model, PT_DIR)
+  model.print_trainable_parameters()
+  lora_config = LoraConfig(
+  task_type=TaskType.CAUSAL_LM,
+  inference_mode=False,
+  r=8,
+  lora_alpha=32,
+  lora_dropout=0.05,
+  target_modules = ["q_proj", "v_proj", "k_proj", "o_proj", "gate_proj", "down_proj", "up_proj"],
+  modules_to_save = ["embed_tokens","lm_head"]
+  )
+  enable_profiler = False
+  config = {
+  'lora_config': lora_config,
+  'learning_rate': 1e-4,
+  'num_train_epochs': 1,
+  'gradient_accumulation_steps': 1,
+  'per_device_train_batch_size': 2,
+  'gradient_checkpointing': False,
+  }
+  if enable_profiler:
+  wait, warmup, active, repeat = 1, 1, 2, 1
+  total_steps = (wait + warmup + active) * (1 + repeat)
+  schedule =  torch.profiler.schedule(wait=wait, warmup=warmup, active=active, repeat=repeat)
+  profiler = torch.profiler.profile(
+  schedule=schedule,
+  on_trace_ready=torch.profiler.tensorboard_trace_handler(f"{OUTPUT_DIR}/logs/tensorboard"),
+  record_shapes=True,
+  profile_memory=True,
+  with_stack=True)
+  class ProfilerCallback(TrainerCallback):
+  def __init__(self, profiler):
+  self.profiler = profiler
+  def on_step_end(self, *args, **kwargs):
+  self.profiler.step()
+  profiler_callback = ProfilerCallback(profiler)
+  else:
+  profiler = nullcontext()
+  training_args = TrainingArguments(
+  output_dir=OUTPUT_DIR,
+  overwrite_output_dir=True,
+  bf16=True,   logging_dir=f"{OUTPUT_DIR}/logs",
+  logging_strategy="steps",
+  logging_steps=10,
+  save_strategy="steps",
+  save_steps=1000,
+  save_total_limit=1,
+  warmup_ratio=0.03,
+  optim="adamw_torch_fused",
+  max_steps=total_steps if enable_profiler else -1,
+  **{k:v for k,v in config.items() if k != 'lora_config'}
+  )
+  with profiler:
+  trainer = Trainer(
+  model=model,
+  args=training_args,
+  train_dataset=train_dataset,
+  data_collator=default_data_collator,
+  callbacks=[profiler_callback] if enable_profiler else [],
+  )
+  print_trainable_parameters(model)
+  trainer.train()
+  model.save_pretrained(OUTPUT_DIR)
+ 
+finetune()
+from dataclasses import dataclass
+@dataclass
+class amharic_dataset:
+  dataset: str = "amharic_dataset"
+  train_split: str = "train"
+  test_split: str = "val"
+  data_path: str = "/data/fine_tun_data6.json"
+import copy
+import json
+import torch
+ 
+from torch.utils.data import Dataset
+ 
+class InstructionDataset(Dataset):
+  def __init__(self, dataset_config, tokenizer, partition="train", max_words=50):
+  self.ann = json.load(open(dataset_config.data_path))
+  if partition == "train":
+  self.ann = self.ann
+  else:
+  self.ann = self.ann[:200]
+  self.max_words = max_words
+  self.tokenizer = tokenizer
+  def __len__(self):
+  return len(self.ann)
+  def __getitem__(self, index):
+  ann = self.ann[index]
+  data = self.create_prompt_formats(ann)
+  prompt = data['prompt']
+  example = data['text']   prompt = torch.tensor(
+  self.tokenizer.encode(prompt), dtype=torch.int64
+  )
+  example = self.tokenizer.encode(example)
+  example.append(self.tokenizer.eos_token_id)
+  example = torch.tensor(
+  example, dtype=torch.int64
+  )
+  padding = self.max_words - example.shape[0]
+  if padding > 0:
+  example = torch.cat((example, torch.zeros(padding, dtype=torch.int64) - 1))
+  elif padding < 0:
+  example = example[: self.max_words]
+  labels = copy.deepcopy(example)
+  labels[: len(prompt)] = -1
+  example_mask = example.ge(0)
+  label_mask = labels.ge(0)
+  example[~example_mask] = 0
+  labels[~label_mask] = 0
+  example_mask = example_mask.float()
+  label_mask = label_mask.float()
+  return {
+  "input_ids": example,
+  "labels": labels,
+  "attention_mask":example_mask,
+  }
+  def create_prompt_formats(self,sample):
+  """
+  Format various fields of the sample ('text', 'label',)
+  Then concatenate them using two newline characters
+  :param sample: Sample dictionnary
+  """
+  INTRO_BLURB = "Generate an advertisement given a category"
+  INSTRUCTION_KEY = "   RESPONSE_KEY = "Response:"
+  END_KEY = "
+  blurb = f"{INTRO_BLURB}"
+  text = f"{INSTRUCTION_KEY}\n{sample['input']}"
+  response = f"{RESPONSE_KEY}\n{sample['output']}"
+  end = f"{END_KEY}"
+  parts = [part for part in [blurb, text, response, end] if part]
+  formatted_prompt = "\n\n".join(parts)
+  sample["text"] = formatted_prompt
+  parts = [part for part in [blurb, text,] if part]
+  formatted_prompt = "\n\n".join(parts)
+  sample["prompt"]= formatted_prompt
+  return sample
+"""
+Fine-tuning the library models for causal language modeling (GPT, GPT-2, CTRL, ...) on a text file or a dataset.
+Here is the full list of checkpoints on the hub that can be fine-tuned by this script:
+https://huggingface.co/models?filter=text-generation
+"""
+import logging
+import numpy as np
+import math
+import os
+import sys
+from dataclasses import dataclass, field
+from itertools import chain
+from typing import Optional, List, Dict, Any, Mapping
+from pathlib import Path
+import datasets
+import torch
+from datasets import load_dataset, concatenate_datasets
+import transformers
+from transformers import (
+  CONFIG_MAPPING,
+  MODEL_FOR_CAUSAL_LM_MAPPING,
+  AutoConfig,
+  AutoModelForCausalLM,
+  LlamaForCausalLM,
+  LlamaTokenizer,
+  AutoTokenizer,
+  HfArgumentParser,
+  Trainer,
+  TrainingArguments,
+  is_torch_tpu_available,
+  set_seed,
+)
+from transformers.testing_utils import CaptureLogger
+from transformers.trainer_utils import get_last_checkpoint
+from transformers.utils import send_example_telemetry
+from transformers.utils.versions import require_version
+from sklearn.metrics import accuracy_score
+from peft import LoraConfig, TaskType, get_peft_model, PeftModel, get_peft_model_state_dict
+from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR
+ 
+class SavePeftModelCallback(transformers.TrainerCallback):
+  def save_model(self, args, state, kwargs):
+  if state.best_model_checkpoint is not None:
+  checkpoint_folder = os.path.join(state.best_model_checkpoint, "pt_lora_model")
+  else:
+  checkpoint_folder = os.path.join(args.output_dir, f"{PREFIX_CHECKPOINT_DIR}-{state.global_step}")
+  peft_model_path = os.path.join(checkpoint_folder, "pt_lora_model")
+  kwargs["model"].save_pretrained(peft_model_path)
+  kwargs["tokenizer"].save_pretrained(peft_model_path)
+  def on_save(self, args, state, control, **kwargs):
+  self.save_model(args, state, kwargs)
+  return control
+  def on_train_end(self, args, state, control, **kwargs):
+  peft_model_path = os.path.join(args.output_dir, "pt_lora_model")
+  kwargs["model"].save_pretrained(peft_model_path)
+  kwargs["tokenizer"].save_pretrained(peft_model_path)
+ 
+def accuracy(predictions, references, normalize=True, sample_weight=None):
+  return {
+  "accuracy": float(
+  accuracy_score(references, predictions, normalize=normalize, sample_weight=sample_weight)
+  )
+  }
+ 
+def compute_metrics(eval_preds):
+  preds, labels = eval_preds
+  labels = labels[:, 1:].reshape(-1)
+  preds = preds[:, :-1].reshape(-1)
+  return accuracy(predictions=preds, references=labels)
+ 
+def preprocess_logits_for_metrics(logits, labels):
+  if isinstance(logits, tuple):
+  logits = logits[0]
+  return logits.argmax(dim=-1)
+ 
+def fault_tolerance_data_collator(features: List) -> Dict[str, Any]:
+  if not isinstance(features[0], Mapping):
+  features = [vars(f) for f in features]
+  first = features[0]
+  batch = {}
+  if "label" in first and first["label"] is not None:
+  label = first["label"].item() if isinstance(first["label"], torch.Tensor) else first["label"]
+  dtype = torch.long if isinstance(label, int) else torch.float
+  batch["labels"] = torch.tensor([f["label"] for f in features], dtype=dtype)
+  elif "label_ids" in first and first["label_ids"] is not None:
+  if isinstance(first["label_ids"], torch.Tensor):
+  batch["labels"] = torch.stack([f["label_ids"] for f in features])
+  else:
+  dtype = torch.long if isinstance(first["label_ids"][0], int) else torch.float
+  batch["labels"] = torch.tensor([f["label_ids"] for f in features], dtype=dtype)
+  try:
+  for k, v in first.items():
+  if k not in ("label", "label_ids") and v is not None and not isinstance(v, str):
+  if isinstance(v, torch.Tensor):
+  batch[k] = torch.stack([f[k] for f in features])
+  elif isinstance(v, np.ndarray):
+  batch[k] = torch.tensor(np.stack([f[k] for f in features]))
+  else:
+  batch[k] = torch.tensor([f[k] for f in features])
+  except ValueError:   for k, v in first.items():
+  if k not in ("label", "label_ids") and v is not None and not isinstance(v, str):
+  if isinstance(v, torch.Tensor):
+  batch[k] = torch.stack([features[0][k]] * len(features))
+  elif isinstance(v, np.ndarray):
+  batch[k] = torch.tensor(np.stack([features[0][k]] * len(features)))
+  else:
+  batch[k] = torch.tensor([features[0][k]] * len(features))
+  return batch
+ 
+MODEL_CONFIG_CLASSES = list(MODEL_FOR_CAUSAL_LM_MAPPING.keys())
+MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
+ 
+@dataclass
+class ModelArguments:
+  """
+  Arguments pertaining to which model/config/tokenizer we are going to fine-tune, or train from scratch.
+  """
+  model_name_or_path: Optional[str] = field(
+  default=None,
+  metadata={
+  "help": (
+  "The model checkpoint for weights initialization.Don't set if you want to train a model from scratch."
+  )
+  },
+  )
+  tokenizer_name_or_path: Optional[str] = field(
+  default=None,
+  metadata={
+  "help": (
+  "The tokenizer for weights initialization.Don't set if you want to train a model from scratch."
+  )
+  },
+  )
+  model_type: Optional[str] = field(
+  default=None,
+  metadata={"help": "If training from scratch, pass a model type from the list: " + ", ".join(MODEL_TYPES)},
+  )
+  config_overrides: Optional[str] = field(
+  default=None,
+  metadata={
+  "help": (
+  "Override some existing default config settings when a model is trained from scratch. Example: "
+  "n_embd=10,resid_pdrop=0.2,scale_attn_weights=false,summary_type=cls_index"
+  )
+  },
+  )
+  config_name: Optional[str] = field(
+  default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
+  )
+  tokenizer_name: Optional[str] = field(
+  default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
+  )
+  cache_dir: Optional[str] = field(
+  default=None,
+  metadata={"help": "Where do you want to store the pretrained models downloaded from huggingface.co"},
+  )
+  use_fast_tokenizer: bool = field(
+  default=True,
+  metadata={"help": "Whether to use one of the fast tokenizer (backed by the tokenizers library) or not."},
+  )
+  model_revision: str = field(
+  default="main",
+  metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
+  )
+  use_auth_token: bool = field(
+  default=False,
+  metadata={
+  "help": (
+  "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
+  "with private models)."
+  )
+  },
+  )
+  torch_dtype: Optional[str] = field(
+  default=None,
+  metadata={
+  "help": (
+  "Override the default `torch.dtype` and load the model under this dtype. If `auto` is passed, the "
+  "dtype will be automatically derived from the model's weights."
+  ),
+  "choices": ["auto", "bfloat16", "float16", "float32"],
+  },
+  )
+  def __post_init__(self):
+  if self.config_overrides is not None and (self.config_name is not None or self.model_name_or_path is not None):
+  raise ValueError(
+  "--config_overrides can't be used in combination with --config_name or --model_name_or_path"
+  )
+ 
+@dataclass
+class DataTrainingArguments:
+  """
+  Arguments pertaining to what data we are going to input our model for training and eval.
+  """
+  dataset_dir: Optional[str] = field(
+  default=None, metadata={"help": "The name of the dataset to use (via the datasets library)."}
+  )
+  dataset_config_name: Optional[str] = field(
+  default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
+  )
+  train_file: Optional[str] = field(default=None, metadata={"help": "The input training data file (a text file)."})
+  validation_file: Optional[str] = field(
+  default=None,
+  metadata={"help": "An optional input evaluation data file to evaluate the perplexity on (a text file)."},
+  )
+  max_train_samples: Optional[int] = field(
+  default=None,
+  metadata={
+  "help": (
+  "For debugging purposes or quicker training, truncate the number of training examples to this "
+  "value if set."
+  )
+  },
+  )
+  max_eval_samples: Optional[int] = field(
+  default=None,
+  metadata={
+  "help": (
+  "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
+  "value if set."
+  )
+  },
+  )
+  streaming: bool = field(default=False, metadata={"help": "Enable streaming mode"})
+  block_size: Optional[int] = field(
+  default=None,
+  metadata={
+  "help": (
+  "Optional input sequence length after tokenization. "
+  "The training dataset will be truncated in block of this size for training. "
+  "Default to the model max input length for single sentence inputs (take into account special tokens)."
+  )
+  },
+  )
+  overwrite_cache: bool = field(
+  default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
+  )
+  validation_split_percentage: Optional[float] = field(
+  default=0.01,
+  metadata={
+  "help": "The percentage of the train set used as validation set in case there's no validation split"
+  },
+  )
+  preprocessing_num_workers: Optional[int] = field(
+  default=None,
+  metadata={"help": "The number of processes to use for the preprocessing."},
+  )
+  keep_linebreaks: bool = field(
+  default=True, metadata={"help": "Whether to keep line breaks when using TXT files or not."}
+  )
+  data_cache_dir: Optional[str] = field(default="./", metadata={"help": "The datasets processed stored"})
+  def __post_init__(self):
+  if self.streaming:
+  require_version("datasets>=2.0.0", "The streaming feature requires `datasets>=2.0.0`")
+ 
+@dataclass
+class MyTrainingArguments(TrainingArguments):
+  trainable : Optional[str] = field(default="q_proj,v_proj")
+  lora_rank : Optional[int] = field(default=8)
+  lora_dropout : Optional[float] = field(default=0.1)
+  lora_alpha : Optional[float] = field(default=32.)
+  modules_to_save : Optional[str] = field(default=None)
+  debug_mode : Optional[bool] = field(default=False)
+  peft_path : Optional[str] = field(default=None)
+ 
+logger = logging.getLogger(__name__)
+ 
+def main():
+  parser = HfArgumentParser((ModelArguments, DataTrainingArguments, MyTrainingArguments))
+  if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
+  model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
+  else:
+  model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+  send_example_telemetry("run_clm", model_args, data_args)
+  logging.basicConfig(format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",datefmt="%m/%d/%Y %H:%M:%S",
+  level=logging.INFO,   handlers=[logging.StreamHandler(sys.stdout)],)
+  if training_args.should_log:
+  transformers.utils.logging.set_verbosity_info()
+  log_level = training_args.get_process_log_level()
+  logger.setLevel(log_level)
+  datasets.utils.logging.set_verbosity(log_level)
+  transformers.utils.logging.set_verbosity(log_level)
+  transformers.utils.logging.enable_default_handler()
+  transformers.utils.logging.enable_explicit_format()
+  logger.warning(
+  f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
+  + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
+  )
+  last_checkpoint = None
+  if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
+  last_checkpoint = get_last_checkpoint(training_args.output_dir)
+  if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
+  raise ValueError(
+  f"Output directory ({training_args.output_dir}) already exists and is not empty. "
+  "Use --overwrite_output_dir to overcome."
+  )
+  elif last_checkpoint is not None and training_args.resume_from_checkpoint is None:
+  logger.info(
+  f"Checkpoint detected, resuming training at {last_checkpoint}. To avoid this behavior, change "
+  "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
+  )
+  set_seed(training_args.seed)
+  config_kwargs = {
+  "cache_dir": model_args.cache_dir,
+  "revision": model_args.model_revision,
+  "use_auth_token": True if model_args.use_auth_token else None,
+  }
+  if model_args.config_name:
+  config = AutoConfig.from_pretrained(model_args.config_name, **config_kwargs)
+  elif model_args.model_name_or_path:
+  config = AutoConfig.from_pretrained(model_args.model_name_or_path, **config_kwargs)
+  else:
+  config = CONFIG_MAPPING[model_args.model_type]()
+  logger.warning("You are instantiating a new config instance from scratch.")
+  if model_args.config_overrides is not None:
+  logger.info(f"Overriding config: {model_args.config_overrides}")
+  config.update_from_string(model_args.config_overrides)
+  logger.info(f"New config: {config}")
+  tokenizer_kwargs = {
+  "cache_dir": model_args.cache_dir,
+  "use_fast": model_args.use_fast_tokenizer,
+  "revision": model_args.model_revision,
+  "use_auth_token": True if model_args.use_auth_token else None,
+  }
+  if model_args.tokenizer_name:
+  tokenizer = AutoTokenizer.from_pretrained(model_args.tokenizer_name, **tokenizer_kwargs)
+  elif model_args.tokenizer_name_or_path:
+  tokenizer = LlamaTokenizer.from_pretrained(model_args.tokenizer_name_or_path, **tokenizer_kwargs)
+  else:
+  raise ValueError(
+  "You are instantiating a new tokenizer from scratch. This is not supported by this script."
+  "You can do it from another script, save it, and load it from here, using --tokenizer_name."
+  )
+  tok_logger = transformers.utils.logging.get_logger("transformers.tokenization_utils_base")
+  def tokenize_function(examples):
+  with CaptureLogger(tok_logger) as cl:
+  output = tokenizer(examples["text"])
+  if "Token indices sequence length is longer than the" in cl.out:
+  tok_logger.warning(
+  "^^^^^^^^^^^^^^^^ Please ignore the warning above - this long input will be chunked into smaller bits"
+  " before being passed to the model."
+  )
+  return output
+  if data_args.block_size is None:
+  block_size = tokenizer.model_max_length
+  if block_size > 1024:
+  logger.warning(
+  "The chosen tokenizer supports a `model_max_length` that is longer than the default `block_size` value"
+  " of 1024. If you would like to use a longer `block_size` up to `tokenizer.model_max_length` you can"
+  " override this default with `--block_size xxx`."
+  )
+  block_size = 1024
+  else:
+  if data_args.block_size > tokenizer.model_max_length:
+  logger.warning(
+  f"The block_size passed ({data_args.block_size}) is larger than the maximum length for the model"
+  f"({tokenizer.model_max_length}). Using block_size={tokenizer.model_max_length}."
+  )
+  block_size = min(data_args.block_size, tokenizer.model_max_length)
+  def group_texts(examples):
+  concatenated_examples = {k: list(chain(*examples[k])) for k in examples.keys()}
+  total_length = len(concatenated_examples[list(examples.keys())[0]])
+  if total_length >= block_size:
+  total_length = (total_length // block_size) * block_size
+  result = {
+  k: [t[i : i + block_size] for i in range(0, total_length, block_size)]
+  for k, t in concatenated_examples.items()
+  }
+  result["labels"] = result["input_ids"].copy()
+  return result
+  with training_args.main_process_first(desc="dataset map tokenization and grouping"):
+  lm_datasets = []
+  path = Path(data_args.dataset_dir)
+  files = [file.name for file in path.glob("*.txt")]
+  if training_args.debug_mode is True:
+  files = [files[0]]
+  print("printing files")
+  print(files)   for idx, file in enumerate(files):
+  data_file = os.path.join(path, file)
+  filename = ''.join(file.split(".")[:-1])
+  cache_path = os.path.join(data_args.data_cache_dir, filename)
+  os.makedirs(cache_path, exist_ok=True)
+  try:
+  processed_dataset = datasets.load_from_disk(cache_path, keep_in_memory=False)
+  logger.info(f'training datasets-{filename} has been loaded from disk')
+  except Exception:
+  cache_dir = os.path.join(data_args.data_cache_dir, filename+"_text")
+  os.makedirs(cache_dir, exist_ok=True)
+  raw_dataset = load_dataset("text", data_files=data_file, cache_dir=cache_dir, keep_in_memory=False)
+  logger.info(f"{file} has been loaded")
+  tokenized_dataset = raw_dataset.map(
+  tokenize_function,
+  batched=True,
+  num_proc=data_args.preprocessing_num_workers,
+  remove_columns="text",
+  load_from_cache_file=True,
+  keep_in_memory=False,
+  cache_file_names = {k: os.path.join(cache_dir, 'tokenized.arrow') for k in raw_dataset},
+  desc="Running tokenizer on dataset",
+  )
+  grouped_datasets = tokenized_dataset.map(
+  group_texts,
+  batched=True,
+  num_proc=data_args.preprocessing_num_workers,
+  load_from_cache_file=True,
+  keep_in_memory=False,
+  cache_file_names = {k: os.path.join(cache_dir, 'grouped.arrow') for k in tokenized_dataset},
+  desc=f"Grouping texts in chunks of {block_size}",
+  )
+  processed_dataset = grouped_datasets
+  processed_dataset.save_to_disk(cache_path)
+  if idx == 0:
+  lm_datasets = processed_dataset['train']
+  else:
+  assert lm_datasets.features.type == processed_dataset["train"].features.type
+  lm_datasets = concatenate_datasets([lm_datasets, processed_dataset["train"]])
+  lm_datasets = lm_datasets.train_test_split(test_size = data_args.validation_split_percentage)
+  if training_args.do_train:
+  train_dataset = lm_datasets['train']
+  if data_args.max_train_samples is not None:
+  max_train_samples = min(len(train_dataset), data_args.max_train_samples)
+  train_dataset = train_dataset.select(range(max_train_samples))
+  logger.info(f"Num train_samples  {len(train_dataset)}")
+  logger.info("training example:")
+  logger.info(tokenizer.decode(train_dataset[0]['input_ids']))
+  if training_args.do_eval:
+  eval_dataset = lm_datasets["test"]
+  if data_args.max_eval_samples is not None:
+  max_eval_samples = min(len(eval_dataset), data_args.max_eval_samples)
+  eval_dataset = eval_dataset.select(range(max_eval_samples))
+  logger.info(f"Num eval_samples  {len(eval_dataset)}")
+  logger.info("training example:")
+  logger.info(tokenizer.decode(eval_dataset[0]['input_ids']))
+  if model_args.model_name_or_path:
+  torch_dtype = (
+  model_args.torch_dtype
+  if model_args.torch_dtype in ["auto", None]
+  else getattr(torch, model_args.torch_dtype)
+  )
+  model = LlamaForCausalLM.from_pretrained(
+  model_args.model_name_or_path,
+  from_tf=bool(".ckpt" in model_args.model_name_or_path),
+  config=config,
+  cache_dir=model_args.cache_dir,
+  revision=model_args.model_revision,
+  use_auth_token=True if model_args.use_auth_token else None,
+  torch_dtype=torch_dtype,
+  low_cpu_mem_usage=True,
+  )
+  else:
+  model = AutoModelForCausalLM.from_config(config)
+  n_params = sum({p.data_ptr(): p.numel() for p in model.parameters()}.values())
+  logger.info(f"Training new model from scratch - Total size={n_params/2**20:.2f}M params")
+  model_vocab_size = model.get_output_embeddings().weight.size(0)
+  if not (
+  (model_vocab_size==32000 and len(tokenizer)==51008) or \
+  (model_vocab_size==32000 and len(tokenizer)==32000) or \
+  (model_vocab_size==51008 and len(tokenizer)==51008) or \
+  (model_vocab_size==49954 and len(tokenizer)==49954)
+  ):
+  raise ValueError(
+  f"The combination of base model (size: {model_vocab_size}) and tokenizer (size: {len(tokenizer)}) is not a valid configuration. Please check our project wiki for further information. \n"
+  "Valid configurations (base model / tokenizer):\n"
+  "- Continue pre-training original LLaMA: 32000 / 32000 \n"
+  "- Pre-training (Chinese) Amharic LLaMA based on original LLaMA: 32000 / 51008 \n"
+  "- Continue pre-training (Chinese) Amharic LLaMA: 51008 / 51008 \n"
+  "- Continue pre-training Chinese Alpaca: 49954 / 49954 \n")
+  model.resize_token_embeddings(len(tokenizer))
+  if training_args.peft_path is not None:
+  logger.info("Peft from pre-trained model")
+  model = PeftModel.from_pretrained(model, training_args.peft_path)
+  else:
+  logger.info("Init new peft model")
+  target_modules = training_args.trainable.split(',')
+  modules_to_save = training_args.modules_to_save
+  if modules_to_save is not None:
+  modules_to_save = modules_to_save.split(',')
+  lora_rank = training_args.lora_rank
+  lora_dropout = training_args.lora_dropout
+  lora_alpha = training_args.lora_alpha
+  logger.info(f"target_modules: {target_modules}")
+  logger.info(f"lora_rank: {lora_rank}")
+  peft_config = LoraConfig(
+  task_type=TaskType.CAUSAL_LM,
+  target_modules=target_modules,
+  inference_mode=False,
+  r=lora_rank, lora_alpha=lora_alpha,
+  lora_dropout=lora_dropout,
+  modules_to_save=modules_to_save)
+  model = get_peft_model(model, peft_config)
+  model.print_trainable_parameters()
+  peft_config = LoraConfig(
+  task_type=TaskType.CAUSAL_LM,
+  inference_mode=False,
+  r=8,
+  lora_alpha=32,
+  lora_dropout=0.05,
+  target_modules = ["q_proj", "v_proj", "k_proj", "o_proj", "gate_proj", "down_proj", "up_proj"],
+  modules_to_save = ["embed_tokens","lm_head"]
+  )
+  """
+  config = {
+  'lora_config': lora_config,
+  'learning_rate': 2e-4,
+  'num_train_epochs': 1,
+  'gradient_accumulation_steps': 2,
+  'per_device_train_batch_size': 1,
+  'per_device_eval_batch_size': 1,
+  'gradient_checkpointing': True,
+  }
+  """
+  trainer = Trainer(
+  model=model,
+  args=training_args,
+  train_dataset=train_dataset if training_args.do_train else None,
+  eval_dataset=eval_dataset if training_args.do_eval else None,
+  tokenizer=tokenizer,
+  data_collator=fault_tolerance_data_collator,
+  compute_metrics=compute_metrics if training_args.do_eval and not is_torch_tpu_available() else None,
+  preprocess_logits_for_metrics=preprocess_logits_for_metrics
+  if training_args.do_eval and not is_torch_tpu_available()
+  else None,
+  )
+  """
+  output_dir=training_args.output_dir,
+  overwrite_output_dir=True,
+  bf16=True,   logging_dir=f"{training_args.output_dir}/logs",
+  logging_strategy="steps",
+  logging_steps=10,
+  save_strategy="steps",
+  save_steps=5000,
+  optim="adamw_torch_fused",
+  max_steps=-1,   **{k:v for k,v in config.items() if k != 'lora_config'}
+  """
+  trainer.add_callback(SavePeftModelCallback)
+  if training_args.do_train:
+  checkpoint = None
+  if training_args.resume_from_checkpoint is not None:
+  checkpoint = training_args.resume_from_checkpoint
+  elif last_checkpoint is not None:
+  checkpoint = last_checkpoint
+  train_result = trainer.train(resume_from_checkpoint=checkpoint)
+  metrics = train_result.metrics
+  max_train_samples = (
+  data_args.max_train_samples if data_args.max_train_samples is not None else len(train_dataset)
+  )
+  metrics["train_samples"] = min(max_train_samples, len(train_dataset))
+  trainer.log_metrics("train", metrics)
+  trainer.save_metrics("train", metrics)
+  trainer.save_state()
+  model.save_pretrained(training_args.output_dir)
+  if training_args.do_eval:
+  logger.info("*** Evaluate ***")
+  metrics = trainer.evaluate()
+  max_eval_samples = data_args.max_eval_samples if data_args.max_eval_samples is not None else len(eval_dataset)
+  metrics["eval_samples"] = min(max_eval_samples, len(eval_dataset))
+  try:
+  perplexity = math.exp(metrics["eval_loss"])
+  except OverflowError:
+  perplexity = float("inf")
+  metrics["perplexity"] = perplexity
+  trainer.log_metrics("eval", metrics)
+  trainer.save_metrics("eval", metrics)
+ 
+if __name__ == "__main__":
+  main()
+lr=2e-4
+lora_rank=8
+lora_alpha=32
+lora_trainable="q_proj,v_proj,k_proj,o_proj,gate_proj,down_proj,up_proj"
+modules_to_save="embed_tokens,lm_head"
+lora_dropout=0.05
+pretrained_model=/model/Llama-2-7b-hf
+amharic_tokenizer_path=/model/Llama-2-7b-hf
+dataset_dir=/home/abdulhamid_mussa/LLM_Finetuning_For_Amharic_Ad_Generation/data/cleaned
+data_cache=/home/abdulhamid_mussa/LLM_Finetuning_For_Amharic_Ad_Generation/cache
+per_device_train_batch_size=32
+per_device_eval_batch_size=1
+gradient_accumulation_steps=1
+output_dir=/home/abdulhamid_mussa/LLM_Finetuning_For_Amharic_Ad_Generation/output
+python pretrain.py \
+  --model_name_or_path ${pretrained_model} \
+  --tokenizer_name_or_path ${amharic_tokenizer_path} \
+  --dataset_dir ${dataset_dir} \
+  --data_cache_dir ${data_cache} \
+  --validation_split_percentage 0.001 \
+  --per_device_train_batch_size ${per_device_train_batch_size} \
+  --per_device_eval_batch_size ${per_device_eval_batch_size} \
+  --do_train \
+  --seed $RANDOM \
+  --num_train_epochs 1 \
+  --lr_scheduler_type cosine \
+  --learning_rate ${lr} \
+  --warmup_ratio 0.05 \
+  --weight_decay 0.01 \
+  --logging_strategy steps \
+  --logging_steps 10 \
+  --save_strategy steps \
+  --save_total_limit 1 \
+  --save_steps 7528 \
+  --evaluation_strategy steps \
+  --eval_steps 3000 \
+  --preprocessing_num_workers 8 \
+  --block_size 512 \
+  --output_dir ${output_dir} \
+  --bf16 \
+  --overwrite_output_dir \
+  --logging_first_step True \
+  --lora_rank ${lora_rank} \
+  --lora_alpha ${lora_alpha} \
+  --trainable ${lora_trainable} \
+  --modules_to_save ${modules_to_save} \
+  --lora_dropout ${lora_dropout} \
+  --gradient_checkpointing \
+import pandas as pd
+df = pd.read_json("/data/fine_tun_data2.json")
+df.tail()
+df[df['output']=='not advertisement'].iloc[1]['input']
+'Identify whether the given text is an advertisement or not advertisement from the given input. Make sure you respond only with advertisment or not advertisment. NOTHING ELSE. Input: ለኢሬቻ በኣል ወደቢሾፍቱ የተጓዙት የሲዳማ ወጣቶች(ኤጄቶዎች) ከሰኣታት በፊት ቢሾፍቱ ገብተዋል። @tsegabwolde @tikvahethiopia''
+import pandas as pd
+df = pd.read_csv("/data/wasu_mohammed_labeled.csv")
+df.head()
+df.shape
+df['label'] = df['label'].fillna("Not Advertisement")
+df.tail(5)
+df
+from datasets import Dataset
+ 
+data_dict = {"text": df['text'].tolist()}
+ 
+dataset = Dataset.from_dict(data_dict)
+dataset.save_to_disk("../data/train")
+ 
+from peft import PeftModel
+from transformers import LlamaForCausalLM, LlamaConfig
+ 
+def load_model(model_name, quantization):
+  model = LlamaForCausalLM.from_pretrained(
+  model_name,
+  return_dict=True,
+  load_in_8bit=quantization,
+  device_map="auto",
+  low_cpu_mem_usage=True,
+  )
+  return model
+ 
+def load_peft_model(model, peft_model):
+  peft_model = PeftModel.from_pretrained(model, peft_model)
+  return peft_model
+ 
+def load_llama_from_config(config_path):
+  model_config = LlamaConfig.from_pretrained(config_path)   model = LlamaForCausalLM(config=model_config)
+  return model
+from transformers import LlamaTokenizer
+ 
+MAIN_PATH = '/model/Llama-2-7b-hf'
+tokenizer = LlamaTokenizer.from_pretrained(MAIN_PATH)
+ 
+example = 'አፖሎ ካለ " ኢንተርኔት ተቋርጦ ገንዘብ መላክም መቀበልም አልቻልኩ" ማለት የለም። *685
+ 
+tokens = tokenizer.tokenize(example)
+print(tokens)
+print(len(tokenizer))
+example = 'አፖሎ ካለ " ኢንተርኔት ተቋርጦ ገንዘብ መላክም መቀበልም አልቻልኩ" ማለት የለም። *685
+ 
+tokens = tokenizer.tokenize(example)
+print(tokens)
+df['text'][0]
+df = pd.read_csv("/data/wasu_mohammed_labeled.csv")
+ 
+total_word_count = 0
+total_tokens = 0
+ 
+for index, row in df.iterrows():
+  text = row['text']
+  if not isinstance(text, str):   continue
+  word_count = len(text.split())
+  total_word_count += word_count
+  tokens = tokenizer.tokenize(text)
+  total_tokens+=tokens
+  print(tokens)
+ 
+print("Total Word Count:", total_word_count)
+print("Total tokens count: ",total_tokens)
+total_tokens
+df.shape
+from transformers import (
+  AutoModelForCausalLM,
+  AutoTokenizer,
+  BitsAndBytesConfig,
+  HfArgumentParser,
+  TrainingArguments,
+  pipeline,
+  LlamaForCausalLM,   LlamaTokenizer,
+  logging,
+)
+from peft import (
+  LoraConfig,
+  TaskType,
+  prepare_model_for_int8_training,
+  PeftModel
+)
+import torch
+LLAMA_DIR = '/model/Llama-2-7b-hf'
+tokenizer = LlamaTokenizer.from_pretrained(LLAMA_DIR)
+ 
+model = LlamaForCausalLM.from_pretrained(LLAMA_DIR, load_in_8bit=True, device_map='auto', torch_dtype=torch.float16)
+embedding_size = model.get_input_embeddings().weight.shape[0]
+ 
+if len(tokenizer) != embedding_size:
+  print("resize the embedding size by the size of the tokenizer")
+  model.resize_token_embeddings(len(tokenizer))
+ 
+new_model ='/home/abdulhamid_mussa/LLM_Finetuning_For_Amharic_Ad_Generation/output'
+model = PeftModel.from_pretrained(model, new_model)
+ 
+prompt = "Who is Leonardo Da Vinci?"
+pipe = pipeline(task="text-generation", model=model, tokenizer=model, max_length=200)
+result = pipe(f"<s>[INST] {prompt} [/INST]")
+print(result[0]['generated_text'])
+ቨርቹዋል ረዳቶች እንደ Amazon&
+run-20240203_155644-4hm9i4tp
+from langchain_community.document_loaders import DirectoryLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.schema import Document
+from langchain_openai import OpenAIEmbeddings
+from langchain.vectorstores.chroma import Chroma
+from transformers import AutoTokenizer, AutoModel
+import os
+import torch
+import shutil
+from dotenv import load_dotenv
+load_dotenv()
+import sys
+ 
+OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
+model_name = 'Davlan/bert-base-multilingual-cased-finetuned-amharic'
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModel.from_pretrained(model_name)
+data_path = '../data/'
+CHROMA_PATH = '../RAG/chromadb'
+def embed_doc(document):
+  encoded_input = tokenizer(document, padding=True, truncation=True, return_tensors='pt')
+  with torch.no_grad():
+  outputs1 = model(**encoded_input)
+  embeddings1 = outputs1.last_hidden_state.squeeze(dim=0)
+  return embeddings1
+def load_documents(data_path):   try:
+  loader = DirectoryLoader(data_path)
+  documents = loader.load()   print("data loaded sucessfully")
+  return documents[0].page_content
+  except:
+  print("document not found!")
+  return None
+ 
+def split_text(documents:list[Document]):
+  try:
+  text_spliter = RecursiveCharacterTextSplitter(
+  chunk_size=1000,
+  chunk_overlap=500,
+  length_function=len,
+  add_start_index = True
+  )
+  chunk = text_spliter.split_documents(documents)
+  print("data splited successfuly!")
+  return chunk
+  except:
+  print("document not found")
+def save_chunks_to_chroma(chunks):
+  if os.path.exists(CHROMA_PATH):
+  shutil.rmtree(CHROMA_PATH)
+  try:
+  db = Chroma.from_documents(chunks,embed_doc(),\
+  persist_directory=CHROMA_PATH)
+  db.persist()
+  print("Vectorstore created successfully!")
+  except:
+  print("Couldn't create the vectore database")
+def generate_data_store():
+  documents = load_documents(data_path)
+  chunks = split_text(documents)
+  embeding1 = embed_doc(chunks)
+  print(embeding1)
+  save_chunks_to_chroma(embeding1)  
+def main():
+  generate_data_store()  
+if __name__ == "__main__":
+  main()
+import sys, os
+import pandas as pd
+sys.path.append(os.path.abspath(os.path.join('../src/')))
+from utils import utils
+letters = [
+  [['ሐ', 'ሑ', 'ሒ', 'ሓ', 'ሔ', 'ሖ'], ['ሀ', 'ሁ', 'ሂ', 'ሃ', 'ሄ', 'ህ', 'ሆ']],
+  [['ኀ', 'ኁ', 'ኂ', 'ኃ', 'ኄ', 'ኅ', 'ኆ'], ['ሀ', 'ሁ', 'ሂ', 'ሃ', 'ሄ', 'ህ', 'ሆ']],
+  [['ሠ', 'ሡ', 'ሢ', 'ሣ', 'ሤ', 'ሦ', 'ሦ', 'ሧ'], ['ሰ', 'ሱ', 'ሲ', 'ሳ', 'ሴ', 'ስ', 'ሶ', 'ሷ']],
+  [['ዐ', 'ዑ', 'ዒ', 'ዓ', 'ዔ', 'ዕ', 'ዖ'], ['አ', 'ኡ', 'ኢ', 'ኣ', 'ኤ', 'እ', 'ኦ']],
+  [['ጸ', 'ጹ', 'ጺ', 'ጻ', 'ጼ', 'ጽ', 'ጾ'], ['ፀ', 'ፁ', 'ፂ', 'ፃ', 'ፄ', 'ፅ', 'ፆ']]
+]
+parsed_dir = "../data/parsed"
+cleaned_dir = "../data/cleaned"
+util = utils.Util()
+def clean_parsed_data(folder_path):
+  if not os.path.isdir(folder_path):
+  print(f"{folder_path} is not a valid directory.")
+  return
+  if not os.path.exists(cleaned_dir):
+  os.makedirs(cleaned_dir)
+  for file_name in os.listdir(folder_path):
+  base_name, extension = os.path.splitext(file_name)
+  print(base_name,extension)
+  if extension =='.csv':
+  df = pd.read_csv(f"{folder_path}/{file_name}", index_col='id')
+  df = df.dropna()
+  df = df.replace('\n', ' ', regex=True)
+  df['hashtags'] = df['text'].apply(lambda x: util.extract_hashtags(x))
+  df['text'] = df['text'].str.replace(r'\
+  df['emojis'] = df['text'].apply(util.extract_emojis)
+  for letter in letters:
+  for i in range(len(letter[0])):
+  df['text'] = df['text'].str.replace(letter[0][i], letter[1][i])
+  df['symbols'] = df['text'].apply(util.extract_symbols)
+  df['text'] = df['text'].apply(util.remove_symbols)
+  df['links'] = df['text'].apply(util.extract_urls)
+  df['text'] = df['text'].apply(util.remove_links)
+  df['text'] = df['text'].str.replace('\s+', ' ', regex=True).str.strip()
+  df['text'] = df['text'].replace(r'!+', '!', regex=True)
+  df['text'] = df['text'].replace(r'\.+', '', regex=True)
+  base_name, extension = os.path.splitext(file_name)
+  df.to_csv(f"{cleaned_dir}/{base_name}.csv")
+  df['text'].to_csv(f"{cleaned_dir}/{base_name}.txt", index=False, header=False)
+ 
+clean_parsed_data(parsed_dir)
+import sys, os
+import pandas as pd
+sys.path.append(os.path.abspath(os.path.join('../src/')))
+from utils.utils import Util
+util = Util()
+raw_dir = "../data/raw"
+parsed_dir = "../data/parsed"
+def process_raw_data(folder_path):
+  if not os.path.isdir(folder_path):
+  print(f"{folder_path} is not a valid directory.")
+  return
+  for filename in os.listdir(folder_path):
+  print(filename)
+  data = util.read_file(f'{folder_path}/{filename}')
+  parsed_message = util.parse_messages(data['messages'])
+  df = pd.DataFrame(parsed_message)
+  df.set_index('id', inplace=True)
+  base_name, extension = os.path.splitext(filename)
+  if not os.path.exists(parsed_dir):
+  os.makedirs(parsed_dir)
+  df.to_csv(f'{parsed_dir}/{base_name}.csv')
+ 
+process_raw_data(raw_dir)
+!
+from transformers import AutoTokenizer, AutoModelForMaskedLM, AutoModelForCausalLM
+ 
+model_name = "Samuael/llama-2-7b-tebot-amharic"
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModelForCausalLM.from_pretrained(model_name)
+ 
+input_text = "እኔ አማርኛ መናገር እረዳለሁ"
+ 
+input_ids = tokenizer.encode(input_text, return_tensors="pt")
+ 
+output_ids = model.generate(input_ids)
+ 
+output_text = tokenizer.decode(output_ids[0], skip_special_tokens=True)
+print("Generated Amharic text:", output_text)
+import json
+import re
+ 
+class Util:
+  def __init__(self) -> None:
+  self.emoji_pattern = re.compile(
+  "["
+  "\U0001F600-\U0001F64F"   "\U0001F300-\U0001F5FF"   "\U0001F680-\U0001F6FF"   "\U0001F700-\U0001F77F"   "\U0001F780-\U0001F7FF"   "\U0001F800-\U0001F8FF"   "\U0001F900-\U0001F9FF"   "\U0001FA00-\U0001FA6F"   "\U0001FA70-\U0001FAFF"   "\u2600-\u26FF"   "\u2700-\u27BF"   "\u2B50"   "\U0001F1E6-\U0001F1FF"   "]+",
+  flags=re.UNICODE,
+  )
+  self.symbols = re.compile(
+  "[" '"' "\“" '"' "'" "\-" "\*" "\•" "\ℹ" "\﻿" "\_" "]+"
+  )
+  self.url_pattern = r"http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+"
+  self.mention_pattern = r"@(\w+)"
+  def read_file(self, file_path: str) -> dict:
+  with open(file_path, "r") as file:
+  data = json.load(file)
+  return data
+  def write_file(self, file_path: str, data: dict) -> None:
+  with open(file_path, "w") as file:
+  json.dump(data, file, indent=2)
+  def parse_text(self, text: any) -> str:
+  if isinstance(text, str):
+  return text
+  elif isinstance(text, list):
+  contents = []
+  for item in text:
+  if isinstance(item, str):
+  contents.append(item)
+  elif isinstance(item, dict):
+  contents.append(item["text"])
+  return "".join(contents)
+  else:
+  return ""
+  def parse_messages(self, messages: list) -> dict:
+  parsed_messages = {"id": [], "text": [], "date": []}
+  for message in messages:
+  if message["type"] != "message" or len(message["text"]) == 0:
+  continue
+  parsed_messages["id"].append(message["id"])
+  message_content = self.parse_text(message["text"])
+  parsed_messages["text"].append(message_content)
+  parsed_messages["date"].append(message["date"])
+  return parsed_messages
+  def extract_hashtags(self, text: str) -> list:
+  return [word for word in text.split() if word.startswith("
+  def extract_emojis(self, text):
+  return "".join(self.emoji_pattern.findall(text))
+  def remove_emojis(self, text):
+  return self.emoji_pattern.sub("", text)
+  def extract_symbols(self, text):
+  return "".join(self.symbols.findall(text))
+  def remove_symbols(self, text):
+  return self.symbols.sub(" ", text)
+  def extract_urls(self, text):
+  return re.findall(self.url_pattern, text)
+  def remove_links(self, text):
+  return re.sub(self.url_pattern, " ", text)
+  def extract_mentions(self, text):
+  return re.findall(self.mention_pattern, text)
+import argparse
+from dataclasses import dataclass
+from langchain_community.document_loaders import DirectoryLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.schema import Document
+from langchain_openai import OpenAIEmbeddings
+from langchain.vectorstores.chroma import Chroma
+import os
+from langchain_openai import OpenAI
+from dotenv import load_dotenv
+load_dotenv()
+import sys
+ 
+OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
+CHROMA_PATH = './chromadb/'
+client = OpenAI(
+  api_key=OPENAI_API_KEY
+)
+core_embeddings_model = None
+def get_context():
+  vectorstore = Chroma(persist_directory="./cachce",embedding_function=core_embeddings_model)
+  retriever = vectorstore.as_retriever()
+  return retriever
+def generate_add(user_input, context):
+  template = f'''
+  Generate an advertisement given the following context.   You must use the following context:
+  {context}
+  '''   response = client.chat.completions.create(
+  model="gpt-3.5-turbo",
+  messages=[{"role": "system", "content": template},{"role": "user", "content": user_input}],
+  n=3,
+  )
+  return response
+from peft import PeftModel
+from transformers import LlamaForCausalLM, LlamaConfig
+def load_model(model_name, quantization):
+  model = LlamaForCausalLM.from_pretrained(
+  model_name,
+  return_dict=True,
+  load_in_8bit=quantization,
+  device_map="auto",
+  low_cpu_mem_usage=True,
+  )
+  return model
+ 
+def load_peft_model(model, peft_model):
+  peft_model = PeftModel.from_pretrained(model, peft_model)
+  return peft_model
+def load_llama_from_config(config_path):
+  model_config = LlamaConfig.from_pretrained(config_path)   model = LlamaForCausalLM(config=model_config)
+  return model
+import fire
+import torch
+import os
+import sys
+import time
+import json 
+from typing import List
+from transformers import LlamaTokenizer, LlamaForCausalLM
+from model_utils import load_model, load_peft_model
+BASE_PROMPT = """Below is an interaction between a human and an AI fluent in English and Amharic, providing reliable and informative answers.
+Human: {}
+Assistant [Amharic] : """
+def main(
+  model_name: str="",
+  peft_model: str=None,
+  quantization: bool=False,
+  max_new_tokens =400,   prompt_file: str=None,
+  seed: int=42,   do_sample: bool=True,   min_length: int=None,   use_cache: bool=True,   top_p: float=1.0,   temperature: float=1.0,   top_k: int=1,   repetition_penalty: float=1.0,   length_penalty: int=1,   enable_azure_content_safety: bool=False,   enable_sensitive_topics: bool=False,   enable_saleforce_content_safety: bool=False,   **kwargs
+):   print("***Note: model is not set up for chat use case, history is reset after each response.")
+  print("***Ensure that you have replaced the default LLAMA2 tokenizer with the Amharic tokenizer")
+  torch.cuda.manual_seed(seed)
+  torch.manual_seed(seed)
+  MAIN_PATH = '/model/Llama-2-7b-hf'
+  peft_model = '/home/abdulhamid_mussa/LLM_Finetuning_For_Amharic_Ad_Generation/output'
+  model_name = MAIN_PATH
+  quantization = True
+  model = load_model(model_name, quantization)
+  tokenizer = LlamaTokenizer.from_pretrained(model_name)
+  embedding_size = model.get_input_embeddings().weight.shape[0]
+  if len(tokenizer) != embedding_size:
+  print("resize the embedding size by the size of the tokenizer")
+  model.resize_token_embeddings(len(tokenizer))
+  if peft_model:
+  model = load_peft_model(model, peft_model)
+  model.eval()
+  while True:
+  user_query = input('Type question in Amharic or English: ')
+  user_prompt = BASE_PROMPT.format(user_query)
+  batch = tokenizer(user_prompt, return_tensors="pt")
+  batch = {k: v.to("cuda") for k, v in batch.items()}
+  start = time.perf_counter()
+  with torch.no_grad():
+  outputs = model.generate(
+  **batch,
+  max_new_tokens=max_new_tokens,
+  do_sample=do_sample,
+  top_p=top_p,
+  temperature=temperature,
+  min_length=min_length,
+  use_cache=use_cache,
+  top_k=top_k,
+  repetition_penalty=repetition_penalty,
+  length_penalty=length_penalty,
+  **kwargs   )
+  e2e_inference_time = (time.perf_counter()-start)*1000
+  print(f"the inference time is {e2e_inference_time} ms")
+  output_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+  print("MODEL_OUTPUT: {}".format(output_text))
+ 
+if __name__ == "__main__":
+  fire.Fire(main)
+import torch
+from contextlib import nullcontext
+from transformers import (
+  LlamaForCausalLM,   LlamaTokenizer,   TrainerCallback,   default_data_collator,   Trainer,   TrainingArguments
+)
+from peft import (
+  LoraConfig,
+  TaskType,
+  prepare_model_for_int8_training,
+  PeftModel
+)
+from pathlib import Path
+from utils.dataset_utils import get_preprocessed_dataset
+from configs.datasets import amharic_dataset
+def print_trainable_parameters(model):
+  print("Trainable Parameters:")
+  for name, param in model.named_parameters():
+  if param.requires_grad:
+  print(f" - {name}")
+ 
+def finetune():
+  LLAMA_DIR = '/model/Llama-2-7b-hf'
+  PT_DIR = '/model/llama-2-amharic-3784m'
+  OUTPUT_DIR = "/home/abdulhamid_mussa/LLM_Finetuning_For_Amharic_Ad_Generation/output"
+  tokenizer = LlamaTokenizer.from_pretrained(LLAMA_DIR)
+  model = LlamaForCausalLM.from_pretrained(LLAMA_DIR, load_in_8bit=True, device_map='auto', torch_dtype=torch.float16)
+  train_dataset = get_preprocessed_dataset(tokenizer, amharic_dataset, 'train')
+  model.train()
+  embedding_size = model.get_input_embeddings().weight.shape[0]
+  if len(tokenizer) != embedding_size:
+  print("resize the embedding size by the size of the tokenizer")
+  model.resize_token_embeddings(len(tokenizer))
+  print('loading the pretrained model from config')
+  model = prepare_model_for_int8_training(model)
+  model = PeftModel.from_pretrained(model, PT_DIR)
+  model.print_trainable_parameters()
+  lora_config = LoraConfig(
+  task_type=TaskType.CAUSAL_LM,
+  inference_mode=False,
+  r=8,
+  lora_alpha=32,
+  lora_dropout=0.05,
+  target_modules = ["q_proj", "v_proj", "k_proj", "o_proj", "gate_proj", "down_proj", "up_proj"],
+  modules_to_save = ["embed_tokens","lm_head"]
+  )
+  enable_profiler = False
+  config = {
+  'lora_config': lora_config,
+  'learning_rate': 1e-4,
+  'num_train_epochs': 1,
+  'gradient_accumulation_steps': 1,
+  'per_device_train_batch_size': 2,
+  'gradient_checkpointing': False,
+  }
+  if enable_profiler:
+  wait, warmup, active, repeat = 1, 1, 2, 1
+  total_steps = (wait + warmup + active) * (1 + repeat)
+  schedule =  torch.profiler.schedule(wait=wait, warmup=warmup, active=active, repeat=repeat)
+  profiler = torch.profiler.profile(
+  schedule=schedule,
+  on_trace_ready=torch.profiler.tensorboard_trace_handler(f"{OUTPUT_DIR}/logs/tensorboard"),
+  record_shapes=True,
+  profile_memory=True,
+  with_stack=True)
+  class ProfilerCallback(TrainerCallback):
+  def __init__(self, profiler):
+  self.profiler = profiler
+  def on_step_end(self, *args, **kwargs):
+  self.profiler.step()
+  profiler_callback = ProfilerCallback(profiler)
+  else:
+  profiler = nullcontext()
+  training_args = TrainingArguments(
+  output_dir=OUTPUT_DIR,
+  overwrite_output_dir=True,
+  bf16=True,   logging_dir=f"{OUTPUT_DIR}/logs",
+  logging_strategy="steps",
+  logging_steps=10,
+  save_strategy="steps",
+  save_steps=1000,
+  save_total_limit=1,
+  warmup_ratio=0.03,
+  optim="adamw_torch_fused",
+  max_steps=total_steps if enable_profiler else -1,
+  **{k:v for k,v in config.items() if k != 'lora_config'}
+  )
+  with profiler:
+  trainer = Trainer(
+  model=model,
+  args=training_args,
+  train_dataset=train_dataset,
+  data_collator=default_data_collator,
+  callbacks=[profiler_callback] if enable_profiler else [],
+  )
+  print_trainable_parameters(model)
+  trainer.train()
+  model.save_pretrained(OUTPUT_DIR)
+ 
+finetune()
+from dataclasses import dataclass
+@dataclass
+class amharic_dataset:
+  dataset: str = "amharic_dataset"
+  train_split: str = "train"
+  test_split: str = "val"
+  data_path: str = "/data/fine_tun_data6.json"
+import copy
+import json
+import torch
+ 
+from torch.utils.data import Dataset
+ 
+class InstructionDataset(Dataset):
+  def __init__(self, dataset_config, tokenizer, partition="train", max_words=50):
+  self.ann = json.load(open(dataset_config.data_path))
+  if partition == "train":
+  self.ann = self.ann
+  else:
+  self.ann = self.ann[:200]
+  self.max_words = max_words
+  self.tokenizer = tokenizer
+  def __len__(self):
+  return len(self.ann)
+  def __getitem__(self, index):
+  ann = self.ann[index]
+  data = self.create_prompt_formats(ann)
+  prompt = data['prompt']
+  example = data['text']   prompt = torch.tensor(
+  self.tokenizer.encode(prompt), dtype=torch.int64
+  )
+  example = self.tokenizer.encode(example)
+  example.append(self.tokenizer.eos_token_id)
+  example = torch.tensor(
+  example, dtype=torch.int64
+  )
+  padding = self.max_words - example.shape[0]
+  if padding > 0:
+  example = torch.cat((example, torch.zeros(padding, dtype=torch.int64) - 1))
+  elif padding < 0:
+  example = example[: self.max_words]
+  labels = copy.deepcopy(example)
+  labels[: len(prompt)] = -1
+  example_mask = example.ge(0)
+  label_mask = labels.ge(0)
+  example[~example_mask] = 0
+  labels[~label_mask] = 0
+  example_mask = example_mask.float()
+  label_mask = label_mask.float()
+  return {
+  "input_ids": example,
+  "labels": labels,
+  "attention_mask":example_mask,
+  }
+  def create_prompt_formats(self,sample):
+  """
+  Format various fields of the sample ('text', 'label',)
+  Then concatenate them using two newline characters
+  :param sample: Sample dictionnary
+  """
+  INTRO_BLURB = "Generate an advertisement given a category"
+  INSTRUCTION_KEY = "   RESPONSE_KEY = "Response:"
+  END_KEY = "
+  blurb = f"{INTRO_BLURB}"
+  text = f"{INSTRUCTION_KEY}\n{sample['input']}"
+  response = f"{RESPONSE_KEY}\n{sample['output']}"
+  end = f"{END_KEY}"
+  parts = [part for part in [blurb, text, response, end] if part]
+  formatted_prompt = "\n\n".join(parts)
+  sample["text"] = formatted_prompt
+  parts = [part for part in [blurb, text,] if part]
+  formatted_prompt = "\n\n".join(parts)
+  sample["prompt"]= formatted_prompt
+  return sample
+"""
+Fine-tuning the library models for causal language modeling (GPT, GPT-2, CTRL, ...) on a text file or a dataset.
+Here is the full list of checkpoints on the hub that can be fine-tuned by this script:
+https://huggingface.co/models?filter=text-generation
+"""
+import logging
+import numpy as np
+import math
+import os
+import sys
+from dataclasses import dataclass, field
+from itertools import chain
+from typing import Optional, List, Dict, Any, Mapping
+from pathlib import Path
+import datasets
+import torch
+from datasets import load_dataset, concatenate_datasets
+import transformers
+from transformers import (
+  CONFIG_MAPPING,
+  MODEL_FOR_CAUSAL_LM_MAPPING,
+  AutoConfig,
+  AutoModelForCausalLM,
+  LlamaForCausalLM,
+  LlamaTokenizer,
+  AutoTokenizer,
+  HfArgumentParser,
+  Trainer,
+  TrainingArguments,
+  is_torch_tpu_available,
+  set_seed,
+)
+from transformers.testing_utils import CaptureLogger
+from transformers.trainer_utils import get_last_checkpoint
+from transformers.utils import send_example_telemetry
+from transformers.utils.versions import require_version
+from sklearn.metrics import accuracy_score
+from peft import LoraConfig, TaskType, get_peft_model, PeftModel, get_peft_model_state_dict
+from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR
+ 
+class SavePeftModelCallback(transformers.TrainerCallback):
+  def save_model(self, args, state, kwargs):
+  if state.best_model_checkpoint is not None:
+  checkpoint_folder = os.path.join(state.best_model_checkpoint, "pt_lora_model")
+  else:
+  checkpoint_folder = os.path.join(args.output_dir, f"{PREFIX_CHECKPOINT_DIR}-{state.global_step}")
+  peft_model_path = os.path.join(checkpoint_folder, "pt_lora_model")
+  kwargs["model"].save_pretrained(peft_model_path)
+  kwargs["tokenizer"].save_pretrained(peft_model_path)
+  def on_save(self, args, state, control, **kwargs):
+  self.save_model(args, state, kwargs)
+  return control
+  def on_train_end(self, args, state, control, **kwargs):
+  peft_model_path = os.path.join(args.output_dir, "pt_lora_model")
+  kwargs["model"].save_pretrained(peft_model_path)
+  kwargs["tokenizer"].save_pretrained(peft_model_path)
+ 
+def accuracy(predictions, references, normalize=True, sample_weight=None):
+  return {
+  "accuracy": float(
+  accuracy_score(references, predictions, normalize=normalize, sample_weight=sample_weight)
+  )
+  }
+ 
+def compute_metrics(eval_preds):
+  preds, labels = eval_preds
+  labels = labels[:, 1:].reshape(-1)
+  preds = preds[:, :-1].reshape(-1)
+  return accuracy(predictions=preds, references=labels)
+ 
+def preprocess_logits_for_metrics(logits, labels):
+  if isinstance(logits, tuple):
+  logits = logits[0]
+  return logits.argmax(dim=-1)
+ 
+def fault_tolerance_data_collator(features: List) -> Dict[str, Any]:
+  if not isinstance(features[0], Mapping):
+  features = [vars(f) for f in features]
+  first = features[0]
+  batch = {}
+  if "label" in first and first["label"] is not None:
+  label = first["label"].item() if isinstance(first["label"], torch.Tensor) else first["label"]
+  dtype = torch.long if isinstance(label, int) else torch.float
+  batch["labels"] = torch.tensor([f["label"] for f in features], dtype=dtype)
+  elif "label_ids" in first and first["label_ids"] is not None:
+  if isinstance(first["label_ids"], torch.Tensor):
+  batch["labels"] = torch.stack([f["label_ids"] for f in features])
+  else:
+  dtype = torch.long if isinstance(first["label_ids"][0], int) else torch.float
+  batch["labels"] = torch.tensor([f["label_ids"] for f in features], dtype=dtype)
+  try:
+  for k, v in first.items():
+  if k not in ("label", "label_ids") and v is not None and not isinstance(v, str):
+  if isinstance(v, torch.Tensor):
+  batch[k] = torch.stack([f[k] for f in features])
+  elif isinstance(v, np.ndarray):
+  batch[k] = torch.tensor(np.stack([f[k] for f in features]))
+  else:
+  batch[k] = torch.tensor([f[k] for f in features])
+  except ValueError:   for k, v in first.items():
+  if k not in ("label", "label_ids") and v is not None and not isinstance(v, str):
+  if isinstance(v, torch.Tensor):
+  batch[k] = torch.stack([features[0][k]] * len(features))
+  elif isinstance(v, np.ndarray):
+  batch[k] = torch.tensor(np.stack([features[0][k]] * len(features)))
+  else:
+  batch[k] = torch.tensor([features[0][k]] * len(features))
+  return batch
+ 
+MODEL_CONFIG_CLASSES = list(MODEL_FOR_CAUSAL_LM_MAPPING.keys())
+MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
+ 
+@dataclass
+class ModelArguments:
+  """
+  Arguments pertaining to which model/config/tokenizer we are going to fine-tune, or train from scratch.
+  """
+  model_name_or_path: Optional[str] = field(
+  default=None,
+  metadata={
+  "help": (
+  "The model checkpoint for weights initialization.Don't set if you want to train a model from scratch."
+  )
+  },
+  )
+  tokenizer_name_or_path: Optional[str] = field(
+  default=None,
+  metadata={
+  "help": (
+  "The tokenizer for weights initialization.Don't set if you want to train a model from scratch."
+  )
+  },
+  )
+  model_type: Optional[str] = field(
+  default=None,
+  metadata={"help": "If training from scratch, pass a model type from the list: " + ", ".join(MODEL_TYPES)},
+  )
+  config_overrides: Optional[str] = field(
+  default=None,
+  metadata={
+  "help": (
+  "Override some existing default config settings when a model is trained from scratch. Example: "
+  "n_embd=10,resid_pdrop=0.2,scale_attn_weights=false,summary_type=cls_index"
+  )
+  },
+  )
+  config_name: Optional[str] = field(
+  default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
+  )
+  tokenizer_name: Optional[str] = field(
+  default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
+  )
+  cache_dir: Optional[str] = field(
+  default=None,
+  metadata={"help": "Where do you want to store the pretrained models downloaded from huggingface.co"},
+  )
+  use_fast_tokenizer: bool = field(
+  default=True,
+  metadata={"help": "Whether to use one of the fast tokenizer (backed by the tokenizers library) or not."},
+  )
+  model_revision: str = field(
+  default="main",
+  metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
+  )
+  use_auth_token: bool = field(
+  default=False,
+  metadata={
+  "help": (
+  "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
+  "with private models)."
+  )
+  },
+  )
+  torch_dtype: Optional[str] = field(
+  default=None,
+  metadata={
+  "help": (
+  "Override the default `torch.dtype` and load the model under this dtype. If `auto` is passed, the "
+  "dtype will be automatically derived from the model's weights."
+  ),
+  "choices": ["auto", "bfloat16", "float16", "float32"],
+  },
+  )
+  def __post_init__(self):
+  if self.config_overrides is not None and (self.config_name is not None or self.model_name_or_path is not None):
+  raise ValueError(
+  "--config_overrides can't be used in combination with --config_name or --model_name_or_path"
+  )
+ 
+@dataclass
+class DataTrainingArguments:
+  """
+  Arguments pertaining to what data we are going to input our model for training and eval.
+  """
+  dataset_dir: Optional[str] = field(
+  default=None, metadata={"help": "The name of the dataset to use (via the datasets library)."}
+  )
+  dataset_config_name: Optional[str] = field(
+  default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
+  )
+  train_file: Optional[str] = field(default=None, metadata={"help": "The input training data file (a text file)."})
+  validation_file: Optional[str] = field(
+  default=None,
+  metadata={"help": "An optional input evaluation data file to evaluate the perplexity on (a text file)."},
+  )
+  max_train_samples: Optional[int] = field(
+  default=None,
+  metadata={
+  "help": (
+  "For debugging purposes or quicker training, truncate the number of training examples to this "
+  "value if set."
+  )
+  },
+  )
+  max_eval_samples: Optional[int] = field(
+  default=None,
+  metadata={
+  "help": (
+  "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
+  "value if set."
+  )
+  },
+  )
+  streaming: bool = field(default=False, metadata={"help": "Enable streaming mode"})
+  block_size: Optional[int] = field(
+  default=None,
+  metadata={
+  "help": (
+  "Optional input sequence length after tokenization. "
+  "The training dataset will be truncated in block of this size for training. "
+  "Default to the model max input length for single sentence inputs (take into account special tokens)."
+  )
+  },
+  )
+  overwrite_cache: bool = field(
+  default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
+  )
+  validation_split_percentage: Optional[float] = field(
+  default=0.01,
+  metadata={
+  "help": "The percentage of the train set used as validation set in case there's no validation split"
+  },
+  )
+  preprocessing_num_workers: Optional[int] = field(
+  default=None,
+  metadata={"help": "The number of processes to use for the preprocessing."},
+  )
+  keep_linebreaks: bool = field(
+  default=True, metadata={"help": "Whether to keep line breaks when using TXT files or not."}
+  )
+  data_cache_dir: Optional[str] = field(default="./", metadata={"help": "The datasets processed stored"})
+  def __post_init__(self):
+  if self.streaming:
+  require_version("datasets>=2.0.0", "The streaming feature requires `datasets>=2.0.0`")
+ 
+@dataclass
+class MyTrainingArguments(TrainingArguments):
+  trainable : Optional[str] = field(default="q_proj,v_proj")
+  lora_rank : Optional[int] = field(default=8)
+  lora_dropout : Optional[float] = field(default=0.1)
+  lora_alpha : Optional[float] = field(default=32.)
+  modules_to_save : Optional[str] = field(default=None)
+  debug_mode : Optional[bool] = field(default=False)
+  peft_path : Optional[str] = field(default=None)
+ 
+logger = logging.getLogger(__name__)
+ 
+def main():
+  parser = HfArgumentParser((ModelArguments, DataTrainingArguments, MyTrainingArguments))
+  if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
+  model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
+  else:
+  model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+  send_example_telemetry("run_clm", model_args, data_args)
+  logging.basicConfig(format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",datefmt="%m/%d/%Y %H:%M:%S",
+  level=logging.INFO,   handlers=[logging.StreamHandler(sys.stdout)],)
+  if training_args.should_log:
+  transformers.utils.logging.set_verbosity_info()
+  log_level = training_args.get_process_log_level()
+  logger.setLevel(log_level)
+  datasets.utils.logging.set_verbosity(log_level)
+  transformers.utils.logging.set_verbosity(log_level)
+  transformers.utils.logging.enable_default_handler()
+  transformers.utils.logging.enable_explicit_format()
+  logger.warning(
+  f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
+  + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
+  )
+  last_checkpoint = None
+  if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
+  last_checkpoint = get_last_checkpoint(training_args.output_dir)
+  if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
+  raise ValueError(
+  f"Output directory ({training_args.output_dir}) already exists and is not empty. "
+  "Use --overwrite_output_dir to overcome."
+  )
+  elif last_checkpoint is not None and training_args.resume_from_checkpoint is None:
+  logger.info(
+  f"Checkpoint detected, resuming training at {last_checkpoint}. To avoid this behavior, change "
+  "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
+  )
+  set_seed(training_args.seed)
+  config_kwargs = {
+  "cache_dir": model_args.cache_dir,
+  "revision": model_args.model_revision,
+  "use_auth_token": True if model_args.use_auth_token else None,
+  }
+  if model_args.config_name:
+  config = AutoConfig.from_pretrained(model_args.config_name, **config_kwargs)
+  elif model_args.model_name_or_path:
+  config = AutoConfig.from_pretrained(model_args.model_name_or_path, **config_kwargs)
+  else:
+  config = CONFIG_MAPPING[model_args.model_type]()
+  logger.warning("You are instantiating a new config instance from scratch.")
+  if model_args.config_overrides is not None:
+  logger.info(f"Overriding config: {model_args.config_overrides}")
+  config.update_from_string(model_args.config_overrides)
+  logger.info(f"New config: {config}")
+  tokenizer_kwargs = {
+  "cache_dir": model_args.cache_dir,
+  "use_fast": model_args.use_fast_tokenizer,
+  "revision": model_args.model_revision,
+  "use_auth_token": True if model_args.use_auth_token else None,
+  }
+  if model_args.tokenizer_name:
+  tokenizer = AutoTokenizer.from_pretrained(model_args.tokenizer_name, **tokenizer_kwargs)
+  elif model_args.tokenizer_name_or_path:
+  tokenizer = LlamaTokenizer.from_pretrained(model_args.tokenizer_name_or_path, **tokenizer_kwargs)
+  else:
+  raise ValueError(
+  "You are instantiating a new tokenizer from scratch. This is not supported by this script."
+  "You can do it from another script, save it, and load it from here, using --tokenizer_name."
+  )
+  tok_logger = transformers.utils.logging.get_logger("transformers.tokenization_utils_base")
+  def tokenize_function(examples):
+  with CaptureLogger(tok_logger) as cl:
+  output = tokenizer(examples["text"])
+  if "Token indices sequence length is longer than the" in cl.out:
+  tok_logger.warning(
+  "^^^^^^^^^^^^^^^^ Please ignore the warning above - this long input will be chunked into smaller bits"
+  " before being passed to the model."
+  )
+  return output
+  if data_args.block_size is None:
+  block_size = tokenizer.model_max_length
+  if block_size > 1024:
+  logger.warning(
+  "The chosen tokenizer supports a `model_max_length` that is longer than the default `block_size` value"
+  " of 1024. If you would like to use a longer `block_size` up to `tokenizer.model_max_length` you can"
+  " override this default with `--block_size xxx`."
+  )
+  block_size = 1024
+  else:
+  if data_args.block_size > tokenizer.model_max_length:
+  logger.warning(
+  f"The block_size passed ({data_args.block_size}) is larger than the maximum length for the model"
+  f"({tokenizer.model_max_length}). Using block_size={tokenizer.model_max_length}."
+  )
+  block_size = min(data_args.block_size, tokenizer.model_max_length)
+  def group_texts(examples):
+  concatenated_examples = {k: list(chain(*examples[k])) for k in examples.keys()}
+  total_length = len(concatenated_examples[list(examples.keys())[0]])
+  if total_length >= block_size:
+  total_length = (total_length // block_size) * block_size
+  result = {
+  k: [t[i : i + block_size] for i in range(0, total_length, block_size)]
+  for k, t in concatenated_examples.items()
+  }
+  result["labels"] = result["input_ids"].copy()
+  return result
+  with training_args.main_process_first(desc="dataset map tokenization and grouping"):
+  lm_datasets = []
+  path = Path(data_args.dataset_dir)
+  files = [file.name for file in path.glob("*.txt")]
+  if training_args.debug_mode is True:
+  files = [files[0]]
+  print("printing files")
+  print(files)   for idx, file in enumerate(files):
+  data_file = os.path.join(path, file)
+  filename = ''.join(file.split(".")[:-1])
+  cache_path = os.path.join(data_args.data_cache_dir, filename)
+  os.makedirs(cache_path, exist_ok=True)
+  try:
+  processed_dataset = datasets.load_from_disk(cache_path, keep_in_memory=False)
+  logger.info(f'training datasets-{filename} has been loaded from disk')
+  except Exception:
+  cache_dir = os.path.join(data_args.data_cache_dir, filename+"_text")
+  os.makedirs(cache_dir, exist_ok=True)
+  raw_dataset = load_dataset("text", data_files=data_file, cache_dir=cache_dir, keep_in_memory=False)
+  logger.info(f"{file} has been loaded")
+  tokenized_dataset = raw_dataset.map(
+  tokenize_function,
+  batched=True,
+  num_proc=data_args.preprocessing_num_workers,
+  remove_columns="text",
+  load_from_cache_file=True,
+  keep_in_memory=False,
+  cache_file_names = {k: os.path.join(cache_dir, 'tokenized.arrow') for k in raw_dataset},
+  desc="Running tokenizer on dataset",
+  )
+  grouped_datasets = tokenized_dataset.map(
+  group_texts,
+  batched=True,
+  num_proc=data_args.preprocessing_num_workers,
+  load_from_cache_file=True,
+  keep_in_memory=False,
+  cache_file_names = {k: os.path.join(cache_dir, 'grouped.arrow') for k in tokenized_dataset},
+  desc=f"Grouping texts in chunks of {block_size}",
+  )
+  processed_dataset = grouped_datasets
+  processed_dataset.save_to_disk(cache_path)
+  if idx == 0:
+  lm_datasets = processed_dataset['train']
+  else:
+  assert lm_datasets.features.type == processed_dataset["train"].features.type
+  lm_datasets = concatenate_datasets([lm_datasets, processed_dataset["train"]])
+  lm_datasets = lm_datasets.train_test_split(test_size = data_args.validation_split_percentage)
+  if training_args.do_train:
+  train_dataset = lm_datasets['train']
+  if data_args.max_train_samples is not None:
+  max_train_samples = min(len(train_dataset), data_args.max_train_samples)
+  train_dataset = train_dataset.select(range(max_train_samples))
+  logger.info(f"Num train_samples  {len(train_dataset)}")
+  logger.info("training example:")
+  logger.info(tokenizer.decode(train_dataset[0]['input_ids']))
+  if training_args.do_eval:
+  eval_dataset = lm_datasets["test"]
+  if data_args.max_eval_samples is not None:
+  max_eval_samples = min(len(eval_dataset), data_args.max_eval_samples)
+  eval_dataset = eval_dataset.select(range(max_eval_samples))
+  logger.info(f"Num eval_samples  {len(eval_dataset)}")
+  logger.info("training example:")
+  logger.info(tokenizer.decode(eval_dataset[0]['input_ids']))
+  if model_args.model_name_or_path:
+  torch_dtype = (
+  model_args.torch_dtype
+  if model_args.torch_dtype in ["auto", None]
+  else getattr(torch, model_args.torch_dtype)
+  )
+  model = LlamaForCausalLM.from_pretrained(
+  model_args.model_name_or_path,
+  from_tf=bool(".ckpt" in model_args.model_name_or_path),
+  config=config,
+  cache_dir=model_args.cache_dir,
+  revision=model_args.model_revision,
+  use_auth_token=True if model_args.use_auth_token else None,
+  torch_dtype=torch_dtype,
+  low_cpu_mem_usage=True,
+  )
+  else:
+  model = AutoModelForCausalLM.from_config(config)
+  n_params = sum({p.data_ptr(): p.numel() for p in model.parameters()}.values())
+  logger.info(f"Training new model from scratch - Total size={n_params/2**20:.2f}M params")
+  model_vocab_size = model.get_output_embeddings().weight.size(0)
+  if not (
+  (model_vocab_size==32000 and len(tokenizer)==51008) or \
+  (model_vocab_size==32000 and len(tokenizer)==32000) or \
+  (model_vocab_size==51008 and len(tokenizer)==51008) or \
+  (model_vocab_size==49954 and len(tokenizer)==49954)
+  ):
+  raise ValueError(
+  f"The combination of base model (size: {model_vocab_size}) and tokenizer (size: {len(tokenizer)}) is not a valid configuration. Please check our project wiki for further information. \n"
+  "Valid configurations (base model / tokenizer):\n"
+  "- Continue pre-training original LLaMA: 32000 / 32000 \n"
+  "- Pre-training (Chinese) Amharic LLaMA based on original LLaMA: 32000 / 51008 \n"
+  "- Continue pre-training (Chinese) Amharic LLaMA: 51008 / 51008 \n"
+  "- Continue pre-training Chinese Alpaca: 49954 / 49954 \n")
+  model.resize_token_embeddings(len(tokenizer))
+  if training_args.peft_path is not None:
+  logger.info("Peft from pre-trained model")
+  model = PeftModel.from_pretrained(model, training_args.peft_path)
+  else:
+  logger.info("Init new peft model")
+  target_modules = training_args.trainable.split(',')
+  modules_to_save = training_args.modules_to_save
+  if modules_to_save is not None:
+  modules_to_save = modules_to_save.split(',')
+  lora_rank = training_args.lora_rank
+  lora_dropout = training_args.lora_dropout
+  lora_alpha = training_args.lora_alpha
+  logger.info(f"target_modules: {target_modules}")
+  logger.info(f"lora_rank: {lora_rank}")
+  peft_config = LoraConfig(
+  task_type=TaskType.CAUSAL_LM,
+  target_modules=target_modules,
+  inference_mode=False,
+  r=lora_rank, lora_alpha=lora_alpha,
+  lora_dropout=lora_dropout,
+  modules_to_save=modules_to_save)
+  model = get_peft_model(model, peft_config)
+  model.print_trainable_parameters()
+  peft_config = LoraConfig(
+  task_type=TaskType.CAUSAL_LM,
+  inference_mode=False,
+  r=8,
+  lora_alpha=32,
+  lora_dropout=0.05,
+  target_modules = ["q_proj", "v_proj", "k_proj", "o_proj", "gate_proj", "down_proj", "up_proj"],
+  modules_to_save = ["embed_tokens","lm_head"]
+  )
+  """
+  config = {
+  'lora_config': lora_config,
+  'learning_rate': 2e-4,
+  'num_train_epochs': 1,
+  'gradient_accumulation_steps': 2,
+  'per_device_train_batch_size': 1,
+  'per_device_eval_batch_size': 1,
+  'gradient_checkpointing': True,
+  }
+  """
+  trainer = Trainer(
+  model=model,
+  args=training_args,
+  train_dataset=train_dataset if training_args.do_train else None,
+  eval_dataset=eval_dataset if training_args.do_eval else None,
+  tokenizer=tokenizer,
+  data_collator=fault_tolerance_data_collator,
+  compute_metrics=compute_metrics if training_args.do_eval and not is_torch_tpu_available() else None,
+  preprocess_logits_for_metrics=preprocess_logits_for_metrics
+  if training_args.do_eval and not is_torch_tpu_available()
+  else None,
+  )
+  """
+  output_dir=training_args.output_dir,
+  overwrite_output_dir=True,
+  bf16=True,   logging_dir=f"{training_args.output_dir}/logs",
+  logging_strategy="steps",
+  logging_steps=10,
+  save_strategy="steps",
+  save_steps=5000,
+  optim="adamw_torch_fused",
+  max_steps=-1,   **{k:v for k,v in config.items() if k != 'lora_config'}
+  """
+  trainer.add_callback(SavePeftModelCallback)
+  if training_args.do_train:
+  checkpoint = None
+  if training_args.resume_from_checkpoint is not None:
+  checkpoint = training_args.resume_from_checkpoint
+  elif last_checkpoint is not None:
+  checkpoint = last_checkpoint
+  train_result = trainer.train(resume_from_checkpoint=checkpoint)
+  metrics = train_result.metrics
+  max_train_samples = (
+  data_args.max_train_samples if data_args.max_train_samples is not None else len(train_dataset)
+  )
+  metrics["train_samples"] = min(max_train_samples, len(train_dataset))
+  trainer.log_metrics("train", metrics)
+  trainer.save_metrics("train", metrics)
+  trainer.save_state()
+  model.save_pretrained(training_args.output_dir)
+  if training_args.do_eval:
+  logger.info("*** Evaluate ***")
+  metrics = trainer.evaluate()
+  max_eval_samples = data_args.max_eval_samples if data_args.max_eval_samples is not None else len(eval_dataset)
+  metrics["eval_samples"] = min(max_eval_samples, len(eval_dataset))
+  try:
+  perplexity = math.exp(metrics["eval_loss"])
+  except OverflowError:
+  perplexity = float("inf")
+  metrics["perplexity"] = perplexity
+  trainer.log_metrics("eval", metrics)
+  trainer.save_metrics("eval", metrics)
+ 
+if __name__ == "__main__":
+  main()
+lr=2e-4
+lora_rank=8
+lora_alpha=32
+lora_trainable="q_proj,v_proj,k_proj,o_proj,gate_proj,down_proj,up_proj"
+modules_to_save="embed_tokens,lm_head"
+lora_dropout=0.05
+pretrained_model=/model/Llama-2-7b-hf
+amharic_tokenizer_path=/model/Llama-2-7b-hf
+dataset_dir=/home/abdulhamid_mussa/LLM_Finetuning_For_Amharic_Ad_Generation/data/cleaned
+data_cache=/home/abdulhamid_mussa/LLM_Finetuning_For_Amharic_Ad_Generation/cache
+per_device_train_batch_size=32
+per_device_eval_batch_size=1
+gradient_accumulation_steps=1
+output_dir=/home/abdulhamid_mussa/LLM_Finetuning_For_Amharic_Ad_Generation/output
+python pretrain.py \
+  --model_name_or_path ${pretrained_model} \
+  --tokenizer_name_or_path ${amharic_tokenizer_path} \
+  --dataset_dir ${dataset_dir} \
+  --data_cache_dir ${data_cache} \
+  --validation_split_percentage 0.001 \
+  --per_device_train_batch_size ${per_device_train_batch_size} \
+  --per_device_eval_batch_size ${per_device_eval_batch_size} \
+  --do_train \
+  --seed $RANDOM \
+  --num_train_epochs 1 \
+  --lr_scheduler_type cosine \
+  --learning_rate ${lr} \
+  --warmup_ratio 0.05 \
+  --weight_decay 0.01 \
+  --logging_strategy steps \
+  --logging_steps 10 \
+  --save_strategy steps \
+  --save_total_limit 1 \
+  --save_steps 7528 \
+  --evaluation_strategy steps \
+  --eval_steps 3000 \
+  --preprocessing_num_workers 8 \
+  --block_size 512 \
+  --output_dir ${output_dir} \
+  --bf16 \
+  --overwrite_output_dir \
+  --logging_first_step True \
+  --lora_rank ${lora_rank} \
+  --lora_alpha ${lora_alpha} \
+  --trainable ${lora_trainable} \
+  --modules_to_save ${modules_to_save} \
+  --lora_dropout ${lora_dropout} \
+  --gradient_checkpointing \
+import pandas as pd
+df = pd.read_json("/data/fine_tun_data2.json")
+df.tail()
+df[df['output']=='not advertisement'].iloc[1]['input']
+'Identify whether the given text is an advertisement or not advertisement from the given input. Make sure you respond only with advertisment or not advertisment. NOTHING ELSE. Input: ለኢሬቻ በኣል ወደቢሾፍቱ የተጓዙት የሲዳማ ወጣቶች(ኤጄቶዎች) ከሰኣታት በፊት ቢሾፍቱ ገብተዋል። @tsegabwolde @tikvahethiopia''
+import pandas as pd
+df = pd.read_csv("/data/wasu_mohammed_labeled.csv")
+df.head()
+df.shape
+df['label'] = df['label'].fillna("Not Advertisement")
+df.tail(5)
+df
+from datasets import Dataset
+ 
+data_dict = {"text": df['text'].tolist()}
+ 
+dataset = Dataset.from_dict(data_dict)
+dataset.save_to_disk("../data/train")
+ 
+from peft import PeftModel
+from transformers import LlamaForCausalLM, LlamaConfig
+ 
+def load_model(model_name, quantization):
+  model = LlamaForCausalLM.from_pretrained(
+  model_name,
+  return_dict=True,
+  load_in_8bit=quantization,
+  device_map="auto",
+  low_cpu_mem_usage=True,
+  )
+  return model
+ 
+def load_peft_model(model, peft_model):
+  peft_model = PeftModel.from_pretrained(model, peft_model)
+  return peft_model
+ 
+def load_llama_from_config(config_path):
+  model_config = LlamaConfig.from_pretrained(config_path)   model = LlamaForCausalLM(config=model_config)
+  return model
+from transformers import LlamaTokenizer
+ 
+MAIN_PATH = '/model/Llama-2-7b-hf'
+tokenizer = LlamaTokenizer.from_pretrained(MAIN_PATH)
+ 
+example = 'አፖሎ ካለ " ኢንተርኔት ተቋርጦ ገንዘብ መላክም መቀበልም አልቻልኩ" ማለት የለም። *685
+ 
+tokens = tokenizer.tokenize(example)
+print(tokens)
+print(len(tokenizer))
+example = 'አፖሎ ካለ " ኢንተርኔት ተቋርጦ ገንዘብ መላክም መቀበልም አልቻልኩ" ማለት የለም። *685
+ 
+tokens = tokenizer.tokenize(example)
+print(tokens)
+df['text'][0]
+df = pd.read_csv("/data/wasu_mohammed_labeled.csv")
+ 
+total_word_count = 0
+total_tokens = 0
+ 
+for index, row in df.iterrows():
+  text = row['text']
+  if not isinstance(text, str):   continue
+  word_count = len(text.split())
+  total_word_count += word_count
+  tokens = tokenizer.tokenize(text)
+  total_tokens+=tokens
+  print(tokens)
+ 
+print("Total Word Count:", total_word_count)
+print("Total tokens count: ",total_tokens)
+total_tokens
+df.shape
+from transformers import (
+  AutoModelForCausalLM,
+  AutoTokenizer,
+  BitsAndBytesConfig,
+  HfArgumentParser,
+  TrainingArguments,
+  pipeline,
+  LlamaForCausalLM,   LlamaTokenizer,
+  logging,
+)
+from peft import (
+  LoraConfig,
+  TaskType,
+  prepare_model_for_int8_training,
+  PeftModel
+)
+import torch
+LLAMA_DIR = '/model/Llama-2-7b-hf'
+tokenizer = LlamaTokenizer.from_pretrained(LLAMA_DIR)
+ 
+model = LlamaForCausalLM.from_pretrained(LLAMA_DIR, load_in_8bit=True, device_map='auto', torch_dtype=torch.float16)
+embedding_size = model.get_input_embeddings().weight.shape[0]
+ 
+if len(tokenizer) != embedding_size:
+  print("resize the embedding size by the size of the tokenizer")
+  model.resize_token_embeddings(len(tokenizer))
+ 
+new_model ='/home/abdulhamid_mussa/LLM_Finetuning_For_Amharic_Ad_Generation/output'
+model = PeftModel.from_pretrained(model, new_model)
+ 
+prompt = "Who is Leonardo Da Vinci?"
+pipe = pipeline(task="text-generation", model=model, tokenizer=model, max_length=200)
+result = pipe(f"<s>[INST] {prompt} [/INST]")
+print(result[0]['generated_text'])
+ቨርቹዋል ረዳቶች እንደ Amazon&
+run-20240203_155644-4hm9i4tp
+from langchain_community.document_loaders import DirectoryLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.schema import Document
+from langchain_openai import OpenAIEmbeddings
+from langchain.vectorstores.chroma import Chroma
+from transformers import AutoTokenizer, AutoModel
+import os
+import torch
+import shutil
+from dotenv import load_dotenv
+load_dotenv()
+import sys
+ 
+OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
+model_name = 'Davlan/bert-base-multilingual-cased-finetuned-amharic'
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModel.from_pretrained(model_name)
+data_path = '../data/'
+CHROMA_PATH = '../RAG/chromadb'
+def embed_doc(document):
+  encoded_input = tokenizer(document, padding=True, truncation=True, return_tensors='pt')
+  with torch.no_grad():
+  outputs1 = model(**encoded_input)
+  embeddings1 = outputs1.last_hidden_state.squeeze(dim=0)
+  return embeddings1
+def load_documents(data_path):   try:
+  loader = DirectoryLoader(data_path)
+  documents = loader.load()   print("data loaded sucessfully")
+  return documents[0].page_content
+  except:
+  print("document not found!")
+  return None
+ 
+def split_text(documents:list[Document]):
+  try:
+  text_spliter = RecursiveCharacterTextSplitter(
+  chunk_size=1000,
+  chunk_overlap=500,
+  length_function=len,
+  add_start_index = True
+  )
+  chunk = text_spliter.split_documents(documents)
+  print("data splited successfuly!")
+  return chunk
+  except:
+  print("document not found")
+def save_chunks_to_chroma(chunks):
+  if os.path.exists(CHROMA_PATH):
+  shutil.rmtree(CHROMA_PATH)
+  try:
+  db = Chroma.from_documents(chunks,embed_doc(),\
+  persist_directory=CHROMA_PATH)
+  db.persist()
+  print("Vectorstore created successfully!")
+  except:
+  print("Couldn't create the vectore database")
+def generate_data_store():
+  documents = load_documents(data_path)
+  chunks = split_text(documents)
+  embeding1 = embed_doc(chunks)
+  print(embeding1)
+  save_chunks_to_chroma(embeding1)  
+def main():
+  generate_data_store()  
+if __name__ == "__main__":
+  main()
+import sys, os
+import pandas as pd
+sys.path.append(os.path.abspath(os.path.join('../src/')))
+from utils import utils
+letters = [
+  [['ሐ', 'ሑ', 'ሒ', 'ሓ', 'ሔ', 'ሖ'], ['ሀ', 'ሁ', 'ሂ', 'ሃ', 'ሄ', 'ህ', 'ሆ']],
+  [['ኀ', 'ኁ', 'ኂ', 'ኃ', 'ኄ', 'ኅ', 'ኆ'], ['ሀ', 'ሁ', 'ሂ', 'ሃ', 'ሄ', 'ህ', 'ሆ']],
+  [['ሠ', 'ሡ', 'ሢ', 'ሣ', 'ሤ', 'ሦ', 'ሦ', 'ሧ'], ['ሰ', 'ሱ', 'ሲ', 'ሳ', 'ሴ', 'ስ', 'ሶ', 'ሷ']],
+  [['ዐ', 'ዑ', 'ዒ', 'ዓ', 'ዔ', 'ዕ', 'ዖ'], ['አ', 'ኡ', 'ኢ', 'ኣ', 'ኤ', 'እ', 'ኦ']],
+  [['ጸ', 'ጹ', 'ጺ', 'ጻ', 'ጼ', 'ጽ', 'ጾ'], ['ፀ', 'ፁ', 'ፂ', 'ፃ', 'ፄ', 'ፅ', 'ፆ']]
+]
+parsed_dir = "../data/parsed"
+cleaned_dir = "../data/cleaned"
+util = utils.Util()
+def clean_parsed_data(folder_path):
+  if not os.path.isdir(folder_path):
+  print(f"{folder_path} is not a valid directory.")
+  return
+  if not os.path.exists(cleaned_dir):
+  os.makedirs(cleaned_dir)
+  for file_name in os.listdir(folder_path):
+  base_name, extension = os.path.splitext(file_name)
+  print(base_name,extension)
+  if extension =='.csv':
+  df = pd.read_csv(f"{folder_path}/{file_name}", index_col='id')
+  df = df.dropna()
+  df = df.replace('\n', ' ', regex=True)
+  df['hashtags'] = df['text'].apply(lambda x: util.extract_hashtags(x))
+  df['text'] = df['text'].str.replace(r'\
+  df['emojis'] = df['text'].apply(util.extract_emojis)
+  for letter in letters:
+  for i in range(len(letter[0])):
+  df['text'] = df['text'].str.replace(letter[0][i], letter[1][i])
+  df['symbols'] = df['text'].apply(util.extract_symbols)
+  df['text'] = df['text'].apply(util.remove_symbols)
+  df['links'] = df['text'].apply(util.extract_urls)
+  df['text'] = df['text'].apply(util.remove_links)
+  df['text'] = df['text'].str.replace('\s+', ' ', regex=True).str.strip()
+  df['text'] = df['text'].replace(r'!+', '!', regex=True)
+  df['text'] = df['text'].replace(r'\.+', '', regex=True)
+  base_name, extension = os.path.splitext(file_name)
+  df.to_csv(f"{cleaned_dir}/{base_name}.csv")
+  df['text'].to_csv(f"{cleaned_dir}/{base_name}.txt", index=False, header=False)
+ 
+clean_parsed_data(parsed_dir)
+import sys, os
+import pandas as pd
+sys.path.append(os.path.abspath(os.path.join('../src/')))
+from utils.utils import Util
+util = Util()
+raw_dir = "../data/raw"
+parsed_dir = "../data/parsed"
+def process_raw_data(folder_path):
+  if not os.path.isdir(folder_path):
+  print(f"{folder_path} is not a valid directory.")
+  return
+  for filename in os.listdir(folder_path):
+  print(filename)
+  data = util.read_file(f'{folder_path}/{filename}')
+  parsed_message = util.parse_messages(data['messages'])
+  df = pd.DataFrame(parsed_message)
+  df.set_index('id', inplace=True)
+  base_name, extension = os.path.splitext(filename)
+  if not os.path.exists(parsed_dir):
+  os.makedirs(parsed_dir)
+  df.to_csv(f'{parsed_dir}/{base_name}.csv')
+ 
+process_raw_data(raw_dir)
+!
+from transformers import AutoTokenizer, AutoModelForMaskedLM, AutoModelForCausalLM
+ 
+model_name = "Samuael/llama-2-7b-tebot-amharic"
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModelForCausalLM.from_pretrained(model_name)
+ 
+input_text = "እኔ አማርኛ መናገር እረዳለሁ"
+ 
+input_ids = tokenizer.encode(input_text, return_tensors="pt")
+ 
+output_ids = model.generate(input_ids)
+ 
+output_text = tokenizer.decode(output_ids[0], skip_special_tokens=True)
+print("Generated Amharic text:", output_text)
+import json
+import re
+ 
+class Util:
+  def __init__(self) -> None:
+  self.emoji_pattern = re.compile(
+  "["
+  "\U0001F600-\U0001F64F"   "\U0001F300-\U0001F5FF"   "\U0001F680-\U0001F6FF"   "\U0001F700-\U0001F77F"   "\U0001F780-\U0001F7FF"   "\U0001F800-\U0001F8FF"   "\U0001F900-\U0001F9FF"   "\U0001FA00-\U0001FA6F"   "\U0001FA70-\U0001FAFF"   "\u2600-\u26FF"   "\u2700-\u27BF"   "\u2B50"   "\U0001F1E6-\U0001F1FF"   "]+",
+  flags=re.UNICODE,
+  )
+  self.symbols = re.compile(
+  "[" '"' "\“" '"' "'" "\-" "\*" "\•" "\ℹ" "\﻿" "\_" "]+"
+  )
+  self.url_pattern = r"http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+"
+  self.mention_pattern = r"@(\w+)"
+  def read_file(self, file_path: str) -> dict:
+  with open(file_path, "r") as file:
+  data = json.load(file)
+  return data
+  def write_file(self, file_path: str, data: dict) -> None:
+  with open(file_path, "w") as file:
+  json.dump(data, file, indent=2)
+  def parse_text(self, text: any) -> str:
+  if isinstance(text, str):
+  return text
+  elif isinstance(text, list):
+  contents = []
+  for item in text:
+  if isinstance(item, str):
+  contents.append(item)
+  elif isinstance(item, dict):
+  contents.append(item["text"])
+  return "".join(contents)
+  else:
+  return ""
+  def parse_messages(self, messages: list) -> dict:
+  parsed_messages = {"id": [], "text": [], "date": []}
+  for message in messages:
+  if message["type"] != "message" or len(message["text"]) == 0:
+  continue
+  parsed_messages["id"].append(message["id"])
+  message_content = self.parse_text(message["text"])
+  parsed_messages["text"].append(message_content)
+  parsed_messages["date"].append(message["date"])
+  return parsed_messages
+  def extract_hashtags(self, text: str) -> list:
+  return [word for word in text.split() if word.startswith("
+  def extract_emojis(self, text):
+  return "".join(self.emoji_pattern.findall(text))
+  def remove_emojis(self, text):
+  return self.emoji_pattern.sub("", text)
+  def extract_symbols(self, text):
+  return "".join(self.symbols.findall(text))
+  def remove_symbols(self, text):
+  return self.symbols.sub(" ", text)
+  def extract_urls(self, text):
+  return re.findall(self.url_pattern, text)
+  def remove_links(self, text):
+  return re.sub(self.url_pattern, " ", text)
+  def extract_mentions(self, text):
+  return re.findall(self.mention_pattern, text)
+import argparse
+from dataclasses import dataclass
+from langchain_community.document_loaders import DirectoryLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.schema import Document
+from langchain_openai import OpenAIEmbeddings
+from langchain.vectorstores.chroma import Chroma
+import os
+from langchain_openai import OpenAI
+from dotenv import load_dotenv
+load_dotenv()
+import sys
+ 
+OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
+CHROMA_PATH = './chromadb/'
+client = OpenAI(
+  api_key=OPENAI_API_KEY
+)
+core_embeddings_model = None
+def get_context():
+  vectorstore = Chroma(persist_directory="./cachce",embedding_function=core_embeddings_model)
+  retriever = vectorstore.as_retriever()
+  return retriever
+def generate_add(user_input, context):
+  template = f'''
+  Generate an advertisement given the following context.   You must use the following context:
+  {context}
+  '''   response = client.chat.completions.create(
+  model="gpt-3.5-turbo",
+  messages=[{"role": "system", "content": template},{"role": "user", "content": user_input}],
+  n=3,
+  )
+  return response
+from peft import PeftModel
+from transformers import LlamaForCausalLM, LlamaConfig
+def load_model(model_name, quantization):
+  model = LlamaForCausalLM.from_pretrained(
+  model_name,
+  return_dict=True,
+  load_in_8bit=quantization,
+  device_map="auto",
+  low_cpu_mem_usage=True,
+  )
+  return model
+ 
+def load_peft_model(model, peft_model):
+  peft_model = PeftModel.from_pretrained(model, peft_model)
+  return peft_model
+def load_llama_from_config(config_path):
+  model_config = LlamaConfig.from_pretrained(config_path)   model = LlamaForCausalLM(config=model_config)
+  return model
+import fire
+import torch
+import os
+import sys
+import time
+import json 
+from typing import List
+from transformers import LlamaTokenizer, LlamaForCausalLM
+from model_utils import load_model, load_peft_model
+BASE_PROMPT = """Below is an interaction between a human and an AI fluent in English and Amharic, providing reliable and informative answers.
+Human: {}
+Assistant [Amharic] : """
+def main(
+  model_name: str="",
+  peft_model: str=None,
+  quantization: bool=False,
+  max_new_tokens =400,   prompt_file: str=None,
+  seed: int=42,   do_sample: bool=True,   min_length: int=None,   use_cache: bool=True,   top_p: float=1.0,   temperature: float=1.0,   top_k: int=1,   repetition_penalty: float=1.0,   length_penalty: int=1,   enable_azure_content_safety: bool=False,   enable_sensitive_topics: bool=False,   enable_saleforce_content_safety: bool=False,   **kwargs
+):   print("***Note: model is not set up for chat use case, history is reset after each response.")
+  print("***Ensure that you have replaced the default LLAMA2 tokenizer with the Amharic tokenizer")
+  torch.cuda.manual_seed(seed)
+  torch.manual_seed(seed)
+  MAIN_PATH = '/model/Llama-2-7b-hf'
+  peft_model = '/home/abdulhamid_mussa/LLM_Finetuning_For_Amharic_Ad_Generation/output'
+  model_name = MAIN_PATH
+  quantization = True
+  model = load_model(model_name, quantization)
+  tokenizer = LlamaTokenizer.from_pretrained(model_name)
+  embedding_size = model.get_input_embeddings().weight.shape[0]
+  if len(tokenizer) != embedding_size:
+  print("resize the embedding size by the size of the tokenizer")
+  model.resize_token_embeddings(len(tokenizer))
+  if peft_model:
+  model = load_peft_model(model, peft_model)
+  model.eval()
+  while True:
+  user_query = input('Type question in Amharic or English: ')
+  user_prompt = BASE_PROMPT.format(user_query)
+  batch = tokenizer(user_prompt, return_tensors="pt")
+  batch = {k: v.to("cuda") for k, v in batch.items()}
+  start = time.perf_counter()
+  with torch.no_grad():
+  outputs = model.generate(
+  **batch,
+  max_new_tokens=max_new_tokens,
+  do_sample=do_sample,
+  top_p=top_p,
+  temperature=temperature,
+  min_length=min_length,
+  use_cache=use_cache,
+  top_k=top_k,
+  repetition_penalty=repetition_penalty,
+  length_penalty=length_penalty,
+  **kwargs   )
+  e2e_inference_time = (time.perf_counter()-start)*1000
+  print(f"the inference time is {e2e_inference_time} ms")
+  output_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+  print("MODEL_OUTPUT: {}".format(output_text))
+ 
+if __name__ == "__main__":
+  fire.Fire(main)
+import torch
+from contextlib import nullcontext
+from transformers import (
+  LlamaForCausalLM,   LlamaTokenizer,   TrainerCallback,   default_data_collator,   Trainer,   TrainingArguments
+)
+from peft import (
+  LoraConfig,
+  TaskType,
+  prepare_model_for_int8_training,
+  PeftModel
+)
+from pathlib import Path
+from utils.dataset_utils import get_preprocessed_dataset
+from configs.datasets import amharic_dataset
+def print_trainable_parameters(model):
+  print("Trainable Parameters:")
+  for name, param in model.named_parameters():
+  if param.requires_grad:
+  print(f" - {name}")
+ 
+def finetune():
+  LLAMA_DIR = '/model/Llama-2-7b-hf'
+  PT_DIR = '/model/llama-2-amharic-3784m'
+  OUTPUT_DIR = "/home/abdulhamid_mussa/LLM_Finetuning_For_Amharic_Ad_Generation/output"
+  tokenizer = LlamaTokenizer.from_pretrained(LLAMA_DIR)
+  model = LlamaForCausalLM.from_pretrained(LLAMA_DIR, load_in_8bit=True, device_map='auto', torch_dtype=torch.float16)
+  train_dataset = get_preprocessed_dataset(tokenizer, amharic_dataset, 'train')
+  model.train()
+  embedding_size = model.get_input_embeddings().weight.shape[0]
+  if len(tokenizer) != embedding_size:
+  print("resize the embedding size by the size of the tokenizer")
+  model.resize_token_embeddings(len(tokenizer))
+  print('loading the pretrained model from config')
+  model = prepare_model_for_int8_training(model)
+  model = PeftModel.from_pretrained(model, PT_DIR)
+  model.print_trainable_parameters()
+  lora_config = LoraConfig(
+  task_type=TaskType.CAUSAL_LM,
+  inference_mode=False,
+  r=8,
+  lora_alpha=32,
+  lora_dropout=0.05,
+  target_modules = ["q_proj", "v_proj", "k_proj", "o_proj", "gate_proj", "down_proj", "up_proj"],
+  modules_to_save = ["embed_tokens","lm_head"]
+  )
+  enable_profiler = False
+  config = {
+  'lora_config': lora_config,
+  'learning_rate': 1e-4,
+  'num_train_epochs': 1,
+  'gradient_accumulation_steps': 1,
+  'per_device_train_batch_size': 2,
+  'gradient_checkpointing': False,
+  }
+  if enable_profiler:
+  wait, warmup, active, repeat = 1, 1, 2, 1
+  total_steps = (wait + warmup + active) * (1 + repeat)
+  schedule =  torch.profiler.schedule(wait=wait, warmup=warmup, active=active, repeat=repeat)
+  profiler = torch.profiler.profile(
+  schedule=schedule,
+  on_trace_ready=torch.profiler.tensorboard_trace_handler(f"{OUTPUT_DIR}/logs/tensorboard"),
+  record_shapes=True,
+  profile_memory=True,
+  with_stack=True)
+  class ProfilerCallback(TrainerCallback):
+  def __init__(self, profiler):
+  self.profiler = profiler
+  def on_step_end(self, *args, **kwargs):
+  self.profiler.step()
+  profiler_callback = ProfilerCallback(profiler)
+  else:
+  profiler = nullcontext()
+  training_args = TrainingArguments(
+  output_dir=OUTPUT_DIR,
+  overwrite_output_dir=True,
+  bf16=True,   logging_dir=f"{OUTPUT_DIR}/logs",
+  logging_strategy="steps",
+  logging_steps=10,
+  save_strategy="steps",
+  save_steps=1000,
+  save_total_limit=1,
+  warmup_ratio=0.03,
+  optim="adamw_torch_fused",
+  max_steps=total_steps if enable_profiler else -1,
+  **{k:v for k,v in config.items() if k != 'lora_config'}
+  )
+  with profiler:
+  trainer = Trainer(
+  model=model,
+  args=training_args,
+  train_dataset=train_dataset,
+  data_collator=default_data_collator,
+  callbacks=[profiler_callback] if enable_profiler else [],
+  )
+  print_trainable_parameters(model)
+  trainer.train()
+  model.save_pretrained(OUTPUT_DIR)
+ 
+finetune()
+from dataclasses import dataclass
+@dataclass
+class amharic_dataset:
+  dataset: str = "amharic_dataset"
+  train_split: str = "train"
+  test_split: str = "val"
+  data_path: str = "/data/fine_tun_data6.json"
+import copy
+import json
+import torch
+ 
+from torch.utils.data import Dataset
+ 
+class InstructionDataset(Dataset):
+  def __init__(self, dataset_config, tokenizer, partition="train", max_words=50):
+  self.ann = json.load(open(dataset_config.data_path))
+  if partition == "train":
+  self.ann = self.ann
+  else:
+  self.ann = self.ann[:200]
+  self.max_words = max_words
+  self.tokenizer = tokenizer
+  def __len__(self):
+  return len(self.ann)
+  def __getitem__(self, index):
+  ann = self.ann[index]
+  data = self.create_prompt_formats(ann)
+  prompt = data['prompt']
+  example = data['text']   prompt = torch.tensor(
+  self.tokenizer.encode(prompt), dtype=torch.int64
+  )
+  example = self.tokenizer.encode(example)
+  example.append(self.tokenizer.eos_token_id)
+  example = torch.tensor(
+  example, dtype=torch.int64
+  )
+  padding = self.max_words - example.shape[0]
+  if padding > 0:
+  example = torch.cat((example, torch.zeros(padding, dtype=torch.int64) - 1))
+  elif padding < 0:
+  example = example[: self.max_words]
+  labels = copy.deepcopy(example)
+  labels[: len(prompt)] = -1
+  example_mask = example.ge(0)
+  label_mask = labels.ge(0)
+  example[~example_mask] = 0
+  labels[~label_mask] = 0
+  example_mask = example_mask.float()
+  label_mask = label_mask.float()
+  return {
+  "input_ids": example,
+  "labels": labels,
+  "attention_mask":example_mask,
+  }
+  def create_prompt_formats(self,sample):
+  """
+  Format various fields of the sample ('text', 'label',)
+  Then concatenate them using two newline characters
+  :param sample: Sample dictionnary
+  """
+  INTRO_BLURB = "Generate an advertisement given a category"
+  INSTRUCTION_KEY = "   RESPONSE_KEY = "Response:"
+  END_KEY = "
+  blurb = f"{INTRO_BLURB}"
+  text = f"{INSTRUCTION_KEY}\n{sample['input']}"
+  response = f"{RESPONSE_KEY}\n{sample['output']}"
+  end = f"{END_KEY}"
+  parts = [part for part in [blurb, text, response, end] if part]
+  formatted_prompt = "\n\n".join(parts)
+  sample["text"] = formatted_prompt
+  parts = [part for part in [blurb, text,] if part]
+  formatted_prompt = "\n\n".join(parts)
+  sample["prompt"]= formatted_prompt
+  return sample
+"""
+Fine-tuning the library models for causal language modeling (GPT, GPT-2, CTRL, ...) on a text file or a dataset.
+Here is the full list of checkpoints on the hub that can be fine-tuned by this script:
+https://huggingface.co/models?filter=text-generation
+"""
+import logging
+import numpy as np
+import math
+import os
+import sys
+from dataclasses import dataclass, field
+from itertools import chain
+from typing import Optional, List, Dict, Any, Mapping
+from pathlib import Path
+import datasets
+import torch
+from datasets import load_dataset, concatenate_datasets
+import transformers
+from transformers import (
+  CONFIG_MAPPING,
+  MODEL_FOR_CAUSAL_LM_MAPPING,
+  AutoConfig,
+  AutoModelForCausalLM,
+  LlamaForCausalLM,
+  LlamaTokenizer,
+  AutoTokenizer,
+  HfArgumentParser,
+  Trainer,
+  TrainingArguments,
+  is_torch_tpu_available,
+  set_seed,
+)
+from transformers.testing_utils import CaptureLogger
+from transformers.trainer_utils import get_last_checkpoint
+from transformers.utils import send_example_telemetry
+from transformers.utils.versions import require_version
+from sklearn.metrics import accuracy_score
+from peft import LoraConfig, TaskType, get_peft_model, PeftModel, get_peft_model_state_dict
+from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR
+ 
+class SavePeftModelCallback(transformers.TrainerCallback):
+  def save_model(self, args, state, kwargs):
+  if state.best_model_checkpoint is not None:
+  checkpoint_folder = os.path.join(state.best_model_checkpoint, "pt_lora_model")
+  else:
+  checkpoint_folder = os.path.join(args.output_dir, f"{PREFIX_CHECKPOINT_DIR}-{state.global_step}")
+  peft_model_path = os.path.join(checkpoint_folder, "pt_lora_model")
+  kwargs["model"].save_pretrained(peft_model_path)
+  kwargs["tokenizer"].save_pretrained(peft_model_path)
+  def on_save(self, args, state, control, **kwargs):
+  self.save_model(args, state, kwargs)
+  return control
+  def on_train_end(self, args, state, control, **kwargs):
+  peft_model_path = os.path.join(args.output_dir, "pt_lora_model")
+  kwargs["model"].save_pretrained(peft_model_path)
+  kwargs["tokenizer"].save_pretrained(peft_model_path)
+ 
+def accuracy(predictions, references, normalize=True, sample_weight=None):
+  return {
+  "accuracy": float(
+  accuracy_score(references, predictions, normalize=normalize, sample_weight=sample_weight)
+  )
+  }
+ 
+def compute_metrics(eval_preds):
+  preds, labels = eval_preds
+  labels = labels[:, 1:].reshape(-1)
+  preds = preds[:, :-1].reshape(-1)
+  return accuracy(predictions=preds, references=labels)
+ 
+def preprocess_logits_for_metrics(logits, labels):
+  if isinstance(logits, tuple):
+  logits = logits[0]
+  return logits.argmax(dim=-1)
+ 
+def fault_tolerance_data_collator(features: List) -> Dict[str, Any]:
+  if not isinstance(features[0], Mapping):
+  features = [vars(f) for f in features]
+  first = features[0]
+  batch = {}
+  if "label" in first and first["label"] is not None:
+  label = first["label"].item() if isinstance(first["label"], torch.Tensor) else first["label"]
+  dtype = torch.long if isinstance(label, int) else torch.float
+  batch["labels"] = torch.tensor([f["label"] for f in features], dtype=dtype)
+  elif "label_ids" in first and first["label_ids"] is not None:
+  if isinstance(first["label_ids"], torch.Tensor):
+  batch["labels"] = torch.stack([f["label_ids"] for f in features])
+  else:
+  dtype = torch.long if isinstance(first["label_ids"][0], int) else torch.float
+  batch["labels"] = torch.tensor([f["label_ids"] for f in features], dtype=dtype)
+  try:
+  for k, v in first.items():
+  if k not in ("label", "label_ids") and v is not None and not isinstance(v, str):
+  if isinstance(v, torch.Tensor):
+  batch[k] = torch.stack([f[k] for f in features])
+  elif isinstance(v, np.ndarray):
+  batch[k] = torch.tensor(np.stack([f[k] for f in features]))
+  else:
+  batch[k] = torch.tensor([f[k] for f in features])
+  except ValueError:   for k, v in first.items():
+  if k not in ("label", "label_ids") and v is not None and not isinstance(v, str):
+  if isinstance(v, torch.Tensor):
+  batch[k] = torch.stack([features[0][k]] * len(features))
+  elif isinstance(v, np.ndarray):
+  batch[k] = torch.tensor(np.stack([features[0][k]] * len(features)))
+  else:
+  batch[k] = torch.tensor([features[0][k]] * len(features))
+  return batch
+ 
+MODEL_CONFIG_CLASSES = list(MODEL_FOR_CAUSAL_LM_MAPPING.keys())
+MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
+ 
+@dataclass
+class ModelArguments:
+  """
+  Arguments pertaining to which model/config/tokenizer we are going to fine-tune, or train from scratch.
+  """
+  model_name_or_path: Optional[str] = field(
+  default=None,
+  metadata={
+  "help": (
+  "The model checkpoint for weights initialization.Don't set if you want to train a model from scratch."
+  )
+  },
+  )
+  tokenizer_name_or_path: Optional[str] = field(
+  default=None,
+  metadata={
+  "help": (
+  "The tokenizer for weights initialization.Don't set if you want to train a model from scratch."
+  )
+  },
+  )
+  model_type: Optional[str] = field(
+  default=None,
+  metadata={"help": "If training from scratch, pass a model type from the list: " + ", ".join(MODEL_TYPES)},
+  )
+  config_overrides: Optional[str] = field(
+  default=None,
+  metadata={
+  "help": (
+  "Override some existing default config settings when a model is trained from scratch. Example: "
+  "n_embd=10,resid_pdrop=0.2,scale_attn_weights=false,summary_type=cls_index"
+  )
+  },
+  )
+  config_name: Optional[str] = field(
+  default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
+  )
+  tokenizer_name: Optional[str] = field(
+  default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
+  )
+  cache_dir: Optional[str] = field(
+  default=None,
+  metadata={"help": "Where do you want to store the pretrained models downloaded from huggingface.co"},
+  )
+  use_fast_tokenizer: bool = field(
+  default=True,
+  metadata={"help": "Whether to use one of the fast tokenizer (backed by the tokenizers library) or not."},
+  )
+  model_revision: str = field(
+  default="main",
+  metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
+  )
+  use_auth_token: bool = field(
+  default=False,
+  metadata={
+  "help": (
+  "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
+  "with private models)."
+  )
+  },
+  )
+  torch_dtype: Optional[str] = field(
+  default=None,
+  metadata={
+  "help": (
+  "Override the default `torch.dtype` and load the model under this dtype. If `auto` is passed, the "
+  "dtype will be automatically derived from the model's weights."
+  ),
+  "choices": ["auto", "bfloat16", "float16", "float32"],
+  },
+  )
+  def __post_init__(self):
+  if self.config_overrides is not None and (self.config_name is not None or self.model_name_or_path is not None):
+  raise ValueError(
+  "--config_overrides can't be used in combination with --config_name or --model_name_or_path"
+  )
+ 
+@dataclass
+class DataTrainingArguments:
+  """
+  Arguments pertaining to what data we are going to input our model for training and eval.
+  """
+  dataset_dir: Optional[str] = field(
+  default=None, metadata={"help": "The name of the dataset to use (via the datasets library)."}
+  )
+  dataset_config_name: Optional[str] = field(
+  default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
+  )
+  train_file: Optional[str] = field(default=None, metadata={"help": "The input training data file (a text file)."})
+  validation_file: Optional[str] = field(
+  default=None,
+  metadata={"help": "An optional input evaluation data file to evaluate the perplexity on (a text file)."},
+  )
+  max_train_samples: Optional[int] = field(
+  default=None,
+  metadata={
+  "help": (
+  "For debugging purposes or quicker training, truncate the number of training examples to this "
+  "value if set."
+  )
+  },
+  )
+  max_eval_samples: Optional[int] = field(
+  default=None,
+  metadata={
+  "help": (
+  "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
+  "value if set."
+  )
+  },
+  )
+  streaming: bool = field(default=False, metadata={"help": "Enable streaming mode"})
+  block_size: Optional[int] = field(
+  default=None,
+  metadata={
+  "help": (
+  "Optional input sequence length after tokenization. "
+  "The training dataset will be truncated in block of this size for training. "
+  "Default to the model max input length for single sentence inputs (take into account special tokens)."
+  )
+  },
+  )
+  overwrite_cache: bool = field(
+  default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
+  )
+  validation_split_percentage: Optional[float] = field(
+  default=0.01,
+  metadata={
+  "help": "The percentage of the train set used as validation set in case there's no validation split"
+  },
+  )
+  preprocessing_num_workers: Optional[int] = field(
+  default=None,
+  metadata={"help": "The number of processes to use for the preprocessing."},
+  )
+  keep_linebreaks: bool = field(
+  default=True, metadata={"help": "Whether to keep line breaks when using TXT files or not."}
+  )
+  data_cache_dir: Optional[str] = field(default="./", metadata={"help": "The datasets processed stored"})
+  def __post_init__(self):
+  if self.streaming:
+  require_version("datasets>=2.0.0", "The streaming feature requires `datasets>=2.0.0`")
+ 
+@dataclass
+class MyTrainingArguments(TrainingArguments):
+  trainable : Optional[str] = field(default="q_proj,v_proj")
+  lora_rank : Optional[int] = field(default=8)
+  lora_dropout : Optional[float] = field(default=0.1)
+  lora_alpha : Optional[float] = field(default=32.)
+  modules_to_save : Optional[str] = field(default=None)
+  debug_mode : Optional[bool] = field(default=False)
+  peft_path : Optional[str] = field(default=None)
+ 
+logger = logging.getLogger(__name__)
+ 
+def main():
+  parser = HfArgumentParser((ModelArguments, DataTrainingArguments, MyTrainingArguments))
+  if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
+  model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
+  else:
+  model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+  send_example_telemetry("run_clm", model_args, data_args)
+  logging.basicConfig(format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",datefmt="%m/%d/%Y %H:%M:%S",
+  level=logging.INFO,   handlers=[logging.StreamHandler(sys.stdout)],)
+  if training_args.should_log:
+  transformers.utils.logging.set_verbosity_info()
+  log_level = training_args.get_process_log_level()
+  logger.setLevel(log_level)
+  datasets.utils.logging.set_verbosity(log_level)
+  transformers.utils.logging.set_verbosity(log_level)
+  transformers.utils.logging.enable_default_handler()
+  transformers.utils.logging.enable_explicit_format()
+  logger.warning(
+  f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
+  + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
+  )
+  last_checkpoint = None
+  if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
+  last_checkpoint = get_last_checkpoint(training_args.output_dir)
+  if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
+  raise ValueError(
+  f"Output directory ({training_args.output_dir}) already exists and is not empty. "
+  "Use --overwrite_output_dir to overcome."
+  )
+  elif last_checkpoint is not None and training_args.resume_from_checkpoint is None:
+  logger.info(
+  f"Checkpoint detected, resuming training at {last_checkpoint}. To avoid this behavior, change "
+  "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
+  )
+  set_seed(training_args.seed)
+  config_kwargs = {
+  "cache_dir": model_args.cache_dir,
+  "revision": model_args.model_revision,
+  "use_auth_token": True if model_args.use_auth_token else None,
+  }
+  if model_args.config_name:
+  config = AutoConfig.from_pretrained(model_args.config_name, **config_kwargs)
+  elif model_args.model_name_or_path:
+  config = AutoConfig.from_pretrained(model_args.model_name_or_path, **config_kwargs)
+  else:
+  config = CONFIG_MAPPING[model_args.model_type]()
+  logger.warning("You are instantiating a new config instance from scratch.")
+  if model_args.config_overrides is not None:
+  logger.info(f"Overriding config: {model_args.config_overrides}")
+  config.update_from_string(model_args.config_overrides)
+  logger.info(f"New config: {config}")
+  tokenizer_kwargs = {
+  "cache_dir": model_args.cache_dir,
+  "use_fast": model_args.use_fast_tokenizer,
+  "revision": model_args.model_revision,
+  "use_auth_token": True if model_args.use_auth_token else None,
+  }
+  if model_args.tokenizer_name:
+  tokenizer = AutoTokenizer.from_pretrained(model_args.tokenizer_name, **tokenizer_kwargs)
+  elif model_args.tokenizer_name_or_path:
+  tokenizer = LlamaTokenizer.from_pretrained(model_args.tokenizer_name_or_path, **tokenizer_kwargs)
+  else:
+  raise ValueError(
+  "You are instantiating a new tokenizer from scratch. This is not supported by this script."
+  "You can do it from another script, save it, and load it from here, using --tokenizer_name."
+  )
+  tok_logger = transformers.utils.logging.get_logger("transformers.tokenization_utils_base")
+  def tokenize_function(examples):
+  with CaptureLogger(tok_logger) as cl:
+  output = tokenizer(examples["text"])
+  if "Token indices sequence length is longer than the" in cl.out:
+  tok_logger.warning(
+  "^^^^^^^^^^^^^^^^ Please ignore the warning above - this long input will be chunked into smaller bits"
+  " before being passed to the model."
+  )
+  return output
+  if data_args.block_size is None:
+  block_size = tokenizer.model_max_length
+  if block_size > 1024:
+  logger.warning(
+  "The chosen tokenizer supports a `model_max_length` that is longer than the default `block_size` value"
+  " of 1024. If you would like to use a longer `block_size` up to `tokenizer.model_max_length` you can"
+  " override this default with `--block_size xxx`."
+  )
+  block_size = 1024
+  else:
+  if data_args.block_size > tokenizer.model_max_length:
+  logger.warning(
+  f"The block_size passed ({data_args.block_size}) is larger than the maximum length for the model"
+  f"({tokenizer.model_max_length}). Using block_size={tokenizer.model_max_length}."
+  )
+  block_size = min(data_args.block_size, tokenizer.model_max_length)
+  def group_texts(examples):
+  concatenated_examples = {k: list(chain(*examples[k])) for k in examples.keys()}
+  total_length = len(concatenated_examples[list(examples.keys())[0]])
+  if total_length >= block_size:
+  total_length = (total_length // block_size) * block_size
+  result = {
+  k: [t[i : i + block_size] for i in range(0, total_length, block_size)]
+  for k, t in concatenated_examples.items()
+  }
+  result["labels"] = result["input_ids"].copy()
+  return result
+  with training_args.main_process_first(desc="dataset map tokenization and grouping"):
+  lm_datasets = []
+  path = Path(data_args.dataset_dir)
+  files = [file.name for file in path.glob("*.txt")]
+  if training_args.debug_mode is True:
+  files = [files[0]]
+  print("printing files")
+  print(files)   for idx, file in enumerate(files):
+  data_file = os.path.join(path, file)
+  filename = ''.join(file.split(".")[:-1])
+  cache_path = os.path.join(data_args.data_cache_dir, filename)
+  os.makedirs(cache_path, exist_ok=True)
+  try:
+  processed_dataset = datasets.load_from_disk(cache_path, keep_in_memory=False)
+  logger.info(f'training datasets-{filename} has been loaded from disk')
+  except Exception:
+  cache_dir = os.path.join(data_args.data_cache_dir, filename+"_text")
+  os.makedirs(cache_dir, exist_ok=True)
+  raw_dataset = load_dataset("text", data_files=data_file, cache_dir=cache_dir, keep_in_memory=False)
+  logger.info(f"{file} has been loaded")
+  tokenized_dataset = raw_dataset.map(
+  tokenize_function,
+  batched=True,
+  num_proc=data_args.preprocessing_num_workers,
+  remove_columns="text",
+  load_from_cache_file=True,
+  keep_in_memory=False,
+  cache_file_names = {k: os.path.join(cache_dir, 'tokenized.arrow') for k in raw_dataset},
+  desc="Running tokenizer on dataset",
+  )
+  grouped_datasets = tokenized_dataset.map(
+  group_texts,
+  batched=True,
+  num_proc=data_args.preprocessing_num_workers,
+  load_from_cache_file=True,
+  keep_in_memory=False,
+  cache_file_names = {k: os.path.join(cache_dir, 'grouped.arrow') for k in tokenized_dataset},
+  desc=f"Grouping texts in chunks of {block_size}",
+  )
+  processed_dataset = grouped_datasets
+  processed_dataset.save_to_disk(cache_path)
+  if idx == 0:
+  lm_datasets = processed_dataset['train']
+  else:
+  assert lm_datasets.features.type == processed_dataset["train"].features.type
+  lm_datasets = concatenate_datasets([lm_datasets, processed_dataset["train"]])
+  lm_datasets = lm_datasets.train_test_split(test_size = data_args.validation_split_percentage)
+  if training_args.do_train:
+  train_dataset = lm_datasets['train']
+  if data_args.max_train_samples is not None:
+  max_train_samples = min(len(train_dataset), data_args.max_train_samples)
+  train_dataset = train_dataset.select(range(max_train_samples))
+  logger.info(f"Num train_samples  {len(train_dataset)}")
+  logger.info("training example:")
+  logger.info(tokenizer.decode(train_dataset[0]['input_ids']))
+  if training_args.do_eval:
+  eval_dataset = lm_datasets["test"]
+  if data_args.max_eval_samples is not None:
+  max_eval_samples = min(len(eval_dataset), data_args.max_eval_samples)
+  eval_dataset = eval_dataset.select(range(max_eval_samples))
+  logger.info(f"Num eval_samples  {len(eval_dataset)}")
+  logger.info("training example:")
+  logger.info(tokenizer.decode(eval_dataset[0]['input_ids']))
+  if model_args.model_name_or_path:
+  torch_dtype = (
+  model_args.torch_dtype
+  if model_args.torch_dtype in ["auto", None]
+  else getattr(torch, model_args.torch_dtype)
+  )
+  model = LlamaForCausalLM.from_pretrained(
+  model_args.model_name_or_path,
+  from_tf=bool(".ckpt" in model_args.model_name_or_path),
+  config=config,
+  cache_dir=model_args.cache_dir,
+  revision=model_args.model_revision,
+  use_auth_token=True if model_args.use_auth_token else None,
+  torch_dtype=torch_dtype,
+  low_cpu_mem_usage=True,
+  )
+  else:
+  model = AutoModelForCausalLM.from_config(config)
+  n_params = sum({p.data_ptr(): p.numel() for p in model.parameters()}.values())
+  logger.info(f"Training new model from scratch - Total size={n_params/2**20:.2f}M params")
+  model_vocab_size = model.get_output_embeddings().weight.size(0)
+  if not (
+  (model_vocab_size==32000 and len(tokenizer)==51008) or \
+  (model_vocab_size==32000 and len(tokenizer)==32000) or \
+  (model_vocab_size==51008 and len(tokenizer)==51008) or \
+  (model_vocab_size==49954 and len(tokenizer)==49954)
+  ):
+  raise ValueError(
+  f"The combination of base model (size: {model_vocab_size}) and tokenizer (size: {len(tokenizer)}) is not a valid configuration. Please check our project wiki for further information. \n"
+  "Valid configurations (base model / tokenizer):\n"
+  "- Continue pre-training original LLaMA: 32000 / 32000 \n"
+  "- Pre-training (Chinese) Amharic LLaMA based on original LLaMA: 32000 / 51008 \n"
+  "- Continue pre-training (Chinese) Amharic LLaMA: 51008 / 51008 \n"
+  "- Continue pre-training Chinese Alpaca: 49954 / 49954 \n")
+  model.resize_token_embeddings(len(tokenizer))
+  if training_args.peft_path is not None:
+  logger.info("Peft from pre-trained model")
+  model = PeftModel.from_pretrained(model, training_args.peft_path)
+  else:
+  logger.info("Init new peft model")
+  target_modules = training_args.trainable.split(',')
+  modules_to_save = training_args.modules_to_save
+  if modules_to_save is not None:
+  modules_to_save = modules_to_save.split(',')
+  lora_rank = training_args.lora_rank
+  lora_dropout = training_args.lora_dropout
+  lora_alpha = training_args.lora_alpha
+  logger.info(f"target_modules: {target_modules}")
+  logger.info(f"lora_rank: {lora_rank}")
+  peft_config = LoraConfig(
+  task_type=TaskType.CAUSAL_LM,
+  target_modules=target_modules,
+  inference_mode=False,
+  r=lora_rank, lora_alpha=lora_alpha,
+  lora_dropout=lora_dropout,
+  modules_to_save=modules_to_save)
+  model = get_peft_model(model, peft_config)
+  model.print_trainable_parameters()
+  peft_config = LoraConfig(
+  task_type=TaskType.CAUSAL_LM,
+  inference_mode=False,
+  r=8,
+  lora_alpha=32,
+  lora_dropout=0.05,
+  target_modules = ["q_proj", "v_proj", "k_proj", "o_proj", "gate_proj", "down_proj", "up_proj"],
+  modules_to_save = ["embed_tokens","lm_head"]
+  )
+  """
+  config = {
+  'lora_config': lora_config,
+  'learning_rate': 2e-4,
+  'num_train_epochs': 1,
+  'gradient_accumulation_steps': 2,
+  'per_device_train_batch_size': 1,
+  'per_device_eval_batch_size': 1,
+  'gradient_checkpointing': True,
+  }
+  """
+  trainer = Trainer(
+  model=model,
+  args=training_args,
+  train_dataset=train_dataset if training_args.do_train else None,
+  eval_dataset=eval_dataset if training_args.do_eval else None,
+  tokenizer=tokenizer,
+  data_collator=fault_tolerance_data_collator,
+  compute_metrics=compute_metrics if training_args.do_eval and not is_torch_tpu_available() else None,
+  preprocess_logits_for_metrics=preprocess_logits_for_metrics
+  if training_args.do_eval and not is_torch_tpu_available()
+  else None,
+  )
+  """
+  output_dir=training_args.output_dir,
+  overwrite_output_dir=True,
+  bf16=True,   logging_dir=f"{training_args.output_dir}/logs",
+  logging_strategy="steps",
+  logging_steps=10,
+  save_strategy="steps",
+  save_steps=5000,
+  optim="adamw_torch_fused",
+  max_steps=-1,   **{k:v for k,v in config.items() if k != 'lora_config'}
+  """
+  trainer.add_callback(SavePeftModelCallback)
+  if training_args.do_train:
+  checkpoint = None
+  if training_args.resume_from_checkpoint is not None:
+  checkpoint = training_args.resume_from_checkpoint
+  elif last_checkpoint is not None:
+  checkpoint = last_checkpoint
+  train_result = trainer.train(resume_from_checkpoint=checkpoint)
+  metrics = train_result.metrics
+  max_train_samples = (
+  data_args.max_train_samples if data_args.max_train_samples is not None else len(train_dataset)
+  )
+  metrics["train_samples"] = min(max_train_samples, len(train_dataset))
+  trainer.log_metrics("train", metrics)
+  trainer.save_metrics("train", metrics)
+  trainer.save_state()
+  model.save_pretrained(training_args.output_dir)
+  if training_args.do_eval:
+  logger.info("*** Evaluate ***")
+  metrics = trainer.evaluate()
+  max_eval_samples = data_args.max_eval_samples if data_args.max_eval_samples is not None else len(eval_dataset)
+  metrics["eval_samples"] = min(max_eval_samples, len(eval_dataset))
+  try:
+  perplexity = math.exp(metrics["eval_loss"])
+  except OverflowError:
+  perplexity = float("inf")
+  metrics["perplexity"] = perplexity
+  trainer.log_metrics("eval", metrics)
+  trainer.save_metrics("eval", metrics)
+ 
+if __name__ == "__main__":
+  main()
+lr=2e-4
+lora_rank=8
+lora_alpha=32
+lora_trainable="q_proj,v_proj,k_proj,o_proj,gate_proj,down_proj,up_proj"
+modules_to_save="embed_tokens,lm_head"
+lora_dropout=0.05
+pretrained_model=/model/Llama-2-7b-hf
+amharic_tokenizer_path=/model/Llama-2-7b-hf
+dataset_dir=/home/abdulhamid_mussa/LLM_Finetuning_For_Amharic_Ad_Generation/data/cleaned
+data_cache=/home/abdulhamid_mussa/LLM_Finetuning_For_Amharic_Ad_Generation/cache
+per_device_train_batch_size=32
+per_device_eval_batch_size=1
+gradient_accumulation_steps=1
+output_dir=/home/abdulhamid_mussa/LLM_Finetuning_For_Amharic_Ad_Generation/output
+python pretrain.py \
+  --model_name_or_path ${pretrained_model} \
+  --tokenizer_name_or_path ${amharic_tokenizer_path} \
+  --dataset_dir ${dataset_dir} \
+  --data_cache_dir ${data_cache} \
+  --validation_split_percentage 0.001 \
+  --per_device_train_batch_size ${per_device_train_batch_size} \
+  --per_device_eval_batch_size ${per_device_eval_batch_size} \
+  --do_train \
+  --seed $RANDOM \
+  --num_train_epochs 1 \
+  --lr_scheduler_type cosine \
+  --learning_rate ${lr} \
+  --warmup_ratio 0.05 \
+  --weight_decay 0.01 \
+  --logging_strategy steps \
+  --logging_steps 10 \
+  --save_strategy steps \
+  --save_total_limit 1 \
+  --save_steps 7528 \
+  --evaluation_strategy steps \
+  --eval_steps 3000 \
+  --preprocessing_num_workers 8 \
+  --block_size 512 \
+  --output_dir ${output_dir} \
+  --bf16 \
+  --overwrite_output_dir \
+  --logging_first_step True \
+  --lora_rank ${lora_rank} \
+  --lora_alpha ${lora_alpha} \
+  --trainable ${lora_trainable} \
+  --modules_to_save ${modules_to_save} \
+  --lora_dropout ${lora_dropout} \
+  --gradient_checkpointing \
+import pandas as pd
+df = pd.read_json("/data/fine_tun_data2.json")
+df.tail()
+df[df['output']=='not advertisement'].iloc[1]['input']
+'Identify whether the given text is an advertisement or not advertisement from the given input. Make sure you respond only with advertisment or not advertisment. NOTHING ELSE. Input: ለኢሬቻ በኣል ወደቢሾፍቱ የተጓዙት የሲዳማ ወጣቶች(ኤጄቶዎች) ከሰኣታት በፊት ቢሾፍቱ ገብተዋል። @tsegabwolde @tikvahethiopia''
+import pandas as pd
+df = pd.read_csv("/data/wasu_mohammed_labeled.csv")
+df.head()
+df.shape
+df['label'] = df['label'].fillna("Not Advertisement")
+df.tail(5)
+df
+from datasets import Dataset
+ 
+data_dict = {"text": df['text'].tolist()}
+ 
+dataset = Dataset.from_dict(data_dict)
+dataset.save_to_disk("../data/train")
+ 
+from peft import PeftModel
+from transformers import LlamaForCausalLM, LlamaConfig
+ 
+def load_model(model_name, quantization):
+  model = LlamaForCausalLM.from_pretrained(
+  model_name,
+  return_dict=True,
+  load_in_8bit=quantization,
+  device_map="auto",
+  low_cpu_mem_usage=True,
+  )
+  return model
+ 
+def load_peft_model(model, peft_model):
+  peft_model = PeftModel.from_pretrained(model, peft_model)
+  return peft_model
+ 
+def load_llama_from_config(config_path):
+  model_config = LlamaConfig.from_pretrained(config_path)   model = LlamaForCausalLM(config=model_config)
+  return model
+from transformers import LlamaTokenizer
+ 
+MAIN_PATH = '/model/Llama-2-7b-hf'
+tokenizer = LlamaTokenizer.from_pretrained(MAIN_PATH)
+ 
+example = 'አፖሎ ካለ " ኢንተርኔት ተቋርጦ ገንዘብ መላክም መቀበልም አልቻልኩ" ማለት የለም። *685
+ 
+tokens = tokenizer.tokenize(example)
+print(tokens)
+print(len(tokenizer))
+example = 'አፖሎ ካለ " ኢንተርኔት ተቋርጦ ገንዘብ መላክም መቀበልም አልቻልኩ" ማለት የለም። *685
+ 
+tokens = tokenizer.tokenize(example)
+print(tokens)
+df['text'][0]
+df = pd.read_csv("/data/wasu_mohammed_labeled.csv")
+ 
+total_word_count = 0
+total_tokens = 0
+ 
+for index, row in df.iterrows():
+  text = row['text']
+  if not isinstance(text, str):   continue
+  word_count = len(text.split())
+  total_word_count += word_count
+  tokens = tokenizer.tokenize(text)
+  total_tokens+=tokens
+  print(tokens)
+ 
+print("Total Word Count:", total_word_count)
+print("Total tokens count: ",total_tokens)
+total_tokens
+df.shape
+from transformers import (
+  AutoModelForCausalLM,
+  AutoTokenizer,
+  BitsAndBytesConfig,
+  HfArgumentParser,
+  TrainingArguments,
+  pipeline,
+  LlamaForCausalLM,   LlamaTokenizer,
+  logging,
+)
+from peft import (
+  LoraConfig,
+  TaskType,
+  prepare_model_for_int8_training,
+  PeftModel
+)
+import torch
+LLAMA_DIR = '/model/Llama-2-7b-hf'
+tokenizer = LlamaTokenizer.from_pretrained(LLAMA_DIR)
+ 
+model = LlamaForCausalLM.from_pretrained(LLAMA_DIR, load_in_8bit=True, device_map='auto', torch_dtype=torch.float16)
+embedding_size = model.get_input_embeddings().weight.shape[0]
+ 
+if len(tokenizer) != embedding_size:
+  print("resize the embedding size by the size of the tokenizer")
+  model.resize_token_embeddings(len(tokenizer))
+ 
+new_model ='/home/abdulhamid_mussa/LLM_Finetuning_For_Amharic_Ad_Generation/output'
+model = PeftModel.from_pretrained(model, new_model)
+ 
+prompt = "Who is Leonardo Da Vinci?"
+pipe = pipeline(task="text-generation", model=model, tokenizer=model, max_length=200)
+result = pipe(f"<s>[INST] {prompt} [/INST]")
+print(result[0]['generated_text'])
+ቨርቹዋል ረዳቶች እንደ Amazon&
+run-20240203_155644-4hm9i4tp
+from langchain_community.document_loaders import DirectoryLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.schema import Document
+from langchain_openai import OpenAIEmbeddings
+from langchain.vectorstores.chroma import Chroma
+from transformers import AutoTokenizer, AutoModel
+import os
+import torch
+import shutil
+from dotenv import load_dotenv
+load_dotenv()
+import sys
+ 
+OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
+model_name = 'Davlan/bert-base-multilingual-cased-finetuned-amharic'
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModel.from_pretrained(model_name)
+data_path = '../data/'
+CHROMA_PATH = '../RAG/chromadb'
+def embed_doc(document):
+  encoded_input = tokenizer(document, padding=True, truncation=True, return_tensors='pt')
+  with torch.no_grad():
+  outputs1 = model(**encoded_input)
+  embeddings1 = outputs1.last_hidden_state.squeeze(dim=0)
+  return embeddings1
+def load_documents(data_path):   try:
+  loader = DirectoryLoader(data_path)
+  documents = loader.load()   print("data loaded sucessfully")
+  return documents[0].page_content
+  except:
+  print("document not found!")
+  return None
+ 
+def split_text(documents:list[Document]):
+  try:
+  text_spliter = RecursiveCharacterTextSplitter(
+  chunk_size=1000,
+  chunk_overlap=500,
+  length_function=len,
+  add_start_index = True
+  )
+  chunk = text_spliter.split_documents(documents)
+  print("data splited successfuly!")
+  return chunk
+  except:
+  print("document not found")
+def save_chunks_to_chroma(chunks):
+  if os.path.exists(CHROMA_PATH):
+  shutil.rmtree(CHROMA_PATH)
+  try:
+  db = Chroma.from_documents(chunks,embed_doc(),\
+  persist_directory=CHROMA_PATH)
+  db.persist()
+  print("Vectorstore created successfully!")
+  except:
+  print("Couldn't create the vectore database")
+def generate_data_store():
+  documents = load_documents(data_path)
+  chunks = split_text(documents)
+  embeding1 = embed_doc(chunks)
+  print(embeding1)
+  save_chunks_to_chroma(embeding1)  
+def main():
+  generate_data_store()  
+if __name__ == "__main__":
+  main()
+import sys, os
+import pandas as pd
+sys.path.append(os.path.abspath(os.path.join('../src/')))
+from utils import utils
+letters = [
+  [['ሐ', 'ሑ', 'ሒ', 'ሓ', 'ሔ', 'ሖ'], ['ሀ', 'ሁ', 'ሂ', 'ሃ', 'ሄ', 'ህ', 'ሆ']],
+  [['ኀ', 'ኁ', 'ኂ', 'ኃ', 'ኄ', 'ኅ', 'ኆ'], ['ሀ', 'ሁ', 'ሂ', 'ሃ', 'ሄ', 'ህ', 'ሆ']],
+  [['ሠ', 'ሡ', 'ሢ', 'ሣ', 'ሤ', 'ሦ', 'ሦ', 'ሧ'], ['ሰ', 'ሱ', 'ሲ', 'ሳ', 'ሴ', 'ስ', 'ሶ', 'ሷ']],
+  [['ዐ', 'ዑ', 'ዒ', 'ዓ', 'ዔ', 'ዕ', 'ዖ'], ['አ', 'ኡ', 'ኢ', 'ኣ', 'ኤ', 'እ', 'ኦ']],
+  [['ጸ', 'ጹ', 'ጺ', 'ጻ', 'ጼ', 'ጽ', 'ጾ'], ['ፀ', 'ፁ', 'ፂ', 'ፃ', 'ፄ', 'ፅ', 'ፆ']]
+]
+parsed_dir = "../data/parsed"
+cleaned_dir = "../data/cleaned"
+util = utils.Util()
+def clean_parsed_data(folder_path):
+  if not os.path.isdir(folder_path):
+  print(f"{folder_path} is not a valid directory.")
+  return
+  if not os.path.exists(cleaned_dir):
+  os.makedirs(cleaned_dir)
+  for file_name in os.listdir(folder_path):
+  base_name, extension = os.path.splitext(file_name)
+  print(base_name,extension)
+  if extension =='.csv':
+  df = pd.read_csv(f"{folder_path}/{file_name}", index_col='id')
+  df = df.dropna()
+  df = df.replace('\n', ' ', regex=True)
+  df['hashtags'] = df['text'].apply(lambda x: util.extract_hashtags(x))
+  df['text'] = df['text'].str.replace(r'\
+  df['emojis'] = df['text'].apply(util.extract_emojis)
+  for letter in letters:
+  for i in range(len(letter[0])):
+  df['text'] = df['text'].str.replace(letter[0][i], letter[1][i])
+  df['symbols'] = df['text'].apply(util.extract_symbols)
+  df['text'] = df['text'].apply(util.remove_symbols)
+  df['links'] = df['text'].apply(util.extract_urls)
+  df['text'] = df['text'].apply(util.remove_links)
+  df['text'] = df['text'].str.replace('\s+', ' ', regex=True).str.strip()
+  df['text'] = df['text'].replace(r'!+', '!', regex=True)
+  df['text'] = df['text'].replace(r'\.+', '', regex=True)
+  base_name, extension = os.path.splitext(file_name)
+  df.to_csv(f"{cleaned_dir}/{base_name}.csv")
+  df['text'].to_csv(f"{cleaned_dir}/{base_name}.txt", index=False, header=False)
+ 
+clean_parsed_data(parsed_dir)
+import sys, os
+import pandas as pd
+sys.path.append(os.path.abspath(os.path.join('../src/')))
+from utils.utils import Util
+util = Util()
+raw_dir = "../data/raw"
+parsed_dir = "../data/parsed"
+def process_raw_data(folder_path):
+  if not os.path.isdir(folder_path):
+  print(f"{folder_path} is not a valid directory.")
+  return
+  for filename in os.listdir(folder_path):
+  print(filename)
+  data = util.read_file(f'{folder_path}/{filename}')
+  parsed_message = util.parse_messages(data['messages'])
+  df = pd.DataFrame(parsed_message)
+  df.set_index('id', inplace=True)
+  base_name, extension = os.path.splitext(filename)
+  if not os.path.exists(parsed_dir):
+  os.makedirs(parsed_dir)
+  df.to_csv(f'{parsed_dir}/{base_name}.csv')
+ 
+process_raw_data(raw_dir)
+!
+from transformers import AutoTokenizer, AutoModelForMaskedLM, AutoModelForCausalLM
+ 
+model_name = "Samuael/llama-2-7b-tebot-amharic"
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModelForCausalLM.from_pretrained(model_name)
+ 
+input_text = "እኔ አማርኛ መናገር እረዳለሁ"
+ 
+input_ids = tokenizer.encode(input_text, return_tensors="pt")
+ 
+output_ids = model.generate(input_ids)
+ 
+output_text = tokenizer.decode(output_ids[0], skip_special_tokens=True)
+print("Generated Amharic text:", output_text)
+import json
+import re
+ 
+class Util:
+  def __init__(self) -> None:
+  self.emoji_pattern = re.compile(
+  "["
+  "\U0001F600-\U0001F64F"   "\U0001F300-\U0001F5FF"   "\U0001F680-\U0001F6FF"   "\U0001F700-\U0001F77F"   "\U0001F780-\U0001F7FF"   "\U0001F800-\U0001F8FF"   "\U0001F900-\U0001F9FF"   "\U0001FA00-\U0001FA6F"   "\U0001FA70-\U0001FAFF"   "\u2600-\u26FF"   "\u2700-\u27BF"   "\u2B50"   "\U0001F1E6-\U0001F1FF"   "]+",
+  flags=re.UNICODE,
+  )
+  self.symbols = re.compile(
+  "[" '"' "\“" '"' "'" "\-" "\*" "\•" "\ℹ" "\﻿" "\_" "]+"
+  )
+  self.url_pattern = r"http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+"
+  self.mention_pattern = r"@(\w+)"
+  def read_file(self, file_path: str) -> dict:
+  with open(file_path, "r") as file:
+  data = json.load(file)
+  return data
+  def write_file(self, file_path: str, data: dict) -> None:
+  with open(file_path, "w") as file:
+  json.dump(data, file, indent=2)
+  def parse_text(self, text: any) -> str:
+  if isinstance(text, str):
+  return text
+  elif isinstance(text, list):
+  contents = []
+  for item in text:
+  if isinstance(item, str):
+  contents.append(item)
+  elif isinstance(item, dict):
+  contents.append(item["text"])
+  return "".join(contents)
+  else:
+  return ""
+  def parse_messages(self, messages: list) -> dict:
+  parsed_messages = {"id": [], "text": [], "date": []}
+  for message in messages:
+  if message["type"] != "message" or len(message["text"]) == 0:
+  continue
+  parsed_messages["id"].append(message["id"])
+  message_content = self.parse_text(message["text"])
+  parsed_messages["text"].append(message_content)
+  parsed_messages["date"].append(message["date"])
+  return parsed_messages
+  def extract_hashtags(self, text: str) -> list:
+  return [word for word in text.split() if word.startswith("
+  def extract_emojis(self, text):
+  return "".join(self.emoji_pattern.findall(text))
+  def remove_emojis(self, text):
+  return self.emoji_pattern.sub("", text)
+  def extract_symbols(self, text):
+  return "".join(self.symbols.findall(text))
+  def remove_symbols(self, text):
+  return self.symbols.sub(" ", text)
+  def extract_urls(self, text):
+  return re.findall(self.url_pattern, text)
+  def remove_links(self, text):
+  return re.sub(self.url_pattern, " ", text)
+  def extract_mentions(self, text):
+  return re.findall(self.mention_pattern, text)
+import argparse
+from dataclasses import dataclass
+from langchain_community.document_loaders import DirectoryLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.schema import Document
+from langchain_openai import OpenAIEmbeddings
+from langchain.vectorstores.chroma import Chroma
+import os
+from langchain_openai import OpenAI
+from dotenv import load_dotenv
+load_dotenv()
+import sys
+ 
+OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
+CHROMA_PATH = './chromadb/'
+client = OpenAI(
+  api_key=OPENAI_API_KEY
+)
+core_embeddings_model = None
+def get_context():
+  vectorstore = Chroma(persist_directory="./cachce",embedding_function=core_embeddings_model)
+  retriever = vectorstore.as_retriever()
+  return retriever
+def generate_add(user_input, context):
+  template = f'''
+  Generate an advertisement given the following context.   You must use the following context:
+  {context}
+  '''   response = client.chat.completions.create(
+  model="gpt-3.5-turbo",
+  messages=[{"role": "system", "content": template},{"role": "user", "content": user_input}],
+  n=3,
+  )
+  return response
+from peft import PeftModel
+from transformers import LlamaForCausalLM, LlamaConfig
+def load_model(model_name, quantization):
+  model = LlamaForCausalLM.from_pretrained(
+  model_name,
+  return_dict=True,
+  load_in_8bit=quantization,
+  device_map="auto",
+  low_cpu_mem_usage=True,
+  )
+  return model
+ 
+def load_peft_model(model, peft_model):
+  peft_model = PeftModel.from_pretrained(model, peft_model)
+  return peft_model
+def load_llama_from_config(config_path):
+  model_config = LlamaConfig.from_pretrained(config_path)   model = LlamaForCausalLM(config=model_config)
+  return model
+import fire
+import torch
+import os
+import sys
+import time
+import json 
+from typing import List
+from transformers import LlamaTokenizer, LlamaForCausalLM
+from model_utils import load_model, load_peft_model
+BASE_PROMPT = """Below is an interaction between a human and an AI fluent in English and Amharic, providing reliable and informative answers.
+Human: {}
+Assistant [Amharic] : """
+def main(
+  model_name: str="",
+  peft_model: str=None,
+  quantization: bool=False,
+  max_new_tokens =400,   prompt_file: str=None,
+  seed: int=42,   do_sample: bool=True,   min_length: int=None,   use_cache: bool=True,   top_p: float=1.0,   temperature: float=1.0,   top_k: int=1,   repetition_penalty: float=1.0,   length_penalty: int=1,   enable_azure_content_safety: bool=False,   enable_sensitive_topics: bool=False,   enable_saleforce_content_safety: bool=False,   **kwargs
+):   print("***Note: model is not set up for chat use case, history is reset after each response.")
+  print("***Ensure that you have replaced the default LLAMA2 tokenizer with the Amharic tokenizer")
+  torch.cuda.manual_seed(seed)
+  torch.manual_seed(seed)
+  MAIN_PATH = '/model/Llama-2-7b-hf'
+  peft_model = '/home/abdulhamid_mussa/LLM_Finetuning_For_Amharic_Ad_Generation/output'
+  model_name = MAIN_PATH
+  quantization = True
+  model = load_model(model_name, quantization)
+  tokenizer = LlamaTokenizer.from_pretrained(model_name)
+  embedding_size = model.get_input_embeddings().weight.shape[0]
+  if len(tokenizer) != embedding_size:
+  print("resize the embedding size by the size of the tokenizer")
+  model.resize_token_embeddings(len(tokenizer))
+  if peft_model:
+  model = load_peft_model(model, peft_model)
+  model.eval()
+  while True:
+  user_query = input('Type question in Amharic or English: ')
+  user_prompt = BASE_PROMPT.format(user_query)
+  batch = tokenizer(user_prompt, return_tensors="pt")
+  batch = {k: v.to("cuda") for k, v in batch.items()}
+  start = time.perf_counter()
+  with torch.no_grad():
+  outputs = model.generate(
+  **batch,
+  max_new_tokens=max_new_tokens,
+  do_sample=do_sample,
+  top_p=top_p,
+  temperature=temperature,
+  min_length=min_length,
+  use_cache=use_cache,
+  top_k=top_k,
+  repetition_penalty=repetition_penalty,
+  length_penalty=length_penalty,
+  **kwargs   )
+  e2e_inference_time = (time.perf_counter()-start)*1000
+  print(f"the inference time is {e2e_inference_time} ms")
+  output_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+  print("MODEL_OUTPUT: {}".format(output_text))
+ 
+if __name__ == "__main__":
+  fire.Fire(main)
+import torch
+from contextlib import nullcontext
+from transformers import (
+  LlamaForCausalLM,   LlamaTokenizer,   TrainerCallback,   default_data_collator,   Trainer,   TrainingArguments
+)
+from peft import (
+  LoraConfig,
+  TaskType,
+  prepare_model_for_int8_training,
+  PeftModel
+)
+from pathlib import Path
+from utils.dataset_utils import get_preprocessed_dataset
+from configs.datasets import amharic_dataset
+def print_trainable_parameters(model):
+  print("Trainable Parameters:")
+  for name, param in model.named_parameters():
+  if param.requires_grad:
+  print(f" - {name}")
+ 
+def finetune():
+  LLAMA_DIR = '/model/Llama-2-7b-hf'
+  PT_DIR = '/model/llama-2-amharic-3784m'
+  OUTPUT_DIR = "/home/abdulhamid_mussa/LLM_Finetuning_For_Amharic_Ad_Generation/output"
+  tokenizer = LlamaTokenizer.from_pretrained(LLAMA_DIR)
+  model = LlamaForCausalLM.from_pretrained(LLAMA_DIR, load_in_8bit=True, device_map='auto', torch_dtype=torch.float16)
+  train_dataset = get_preprocessed_dataset(tokenizer, amharic_dataset, 'train')
+  model.train()
+  embedding_size = model.get_input_embeddings().weight.shape[0]
+  if len(tokenizer) != embedding_size:
+  print("resize the embedding size by the size of the tokenizer")
+  model.resize_token_embeddings(len(tokenizer))
+  print('loading the pretrained model from config')
+  model = prepare_model_for_int8_training(model)
+  model = PeftModel.from_pretrained(model, PT_DIR)
+  model.print_trainable_parameters()
+  lora_config = LoraConfig(
+  task_type=TaskType.CAUSAL_LM,
+  inference_mode=False,
+  r=8,
+  lora_alpha=32,
+  lora_dropout=0.05,
+  target_modules = ["q_proj", "v_proj", "k_proj", "o_proj", "gate_proj", "down_proj", "up_proj"],
+  modules_to_save = ["embed_tokens","lm_head"]
+  )
+  enable_profiler = False
+  config = {
+  'lora_config': lora_config,
+  'learning_rate': 1e-4,
+  'num_train_epochs': 1,
+  'gradient_accumulation_steps': 1,
+  'per_device_train_batch_size': 2,
+  'gradient_checkpointing': False,
+  }
+  if enable_profiler:
+  wait, warmup, active, repeat = 1, 1, 2, 1
+  total_steps = (wait + warmup + active) * (1 + repeat)
+  schedule =  torch.profiler.schedule(wait=wait, warmup=warmup, active=active, repeat=repeat)
+  profiler = torch.profiler.profile(
+  schedule=schedule,
+  on_trace_ready=torch.profiler.tensorboard_trace_handler(f"{OUTPUT_DIR}/logs/tensorboard"),
+  record_shapes=True,
+  profile_memory=True,
+  with_stack=True)
+  class ProfilerCallback(TrainerCallback):
+  def __init__(self, profiler):
+  self.profiler = profiler
+  def on_step_end(self, *args, **kwargs):
+  self.profiler.step()
+  profiler_callback = ProfilerCallback(profiler)
+  else:
+  profiler = nullcontext()
+  training_args = TrainingArguments(
+  output_dir=OUTPUT_DIR,
+  overwrite_output_dir=True,
+  bf16=True,   logging_dir=f"{OUTPUT_DIR}/logs",
+  logging_strategy="steps",
+  logging_steps=10,
+  save_strategy="steps",
+  save_steps=1000,
+  save_total_limit=1,
+  warmup_ratio=0.03,
+  optim="adamw_torch_fused",
+  max_steps=total_steps if enable_profiler else -1,
+  **{k:v for k,v in config.items() if k != 'lora_config'}
+  )
+  with profiler:
+  trainer = Trainer(
+  model=model,
+  args=training_args,
+  train_dataset=train_dataset,
+  data_collator=default_data_collator,
+  callbacks=[profiler_callback] if enable_profiler else [],
+  )
+  print_trainable_parameters(model)
+  trainer.train()
+  model.save_pretrained(OUTPUT_DIR)
+ 
+finetune()
+from dataclasses import dataclass
+@dataclass
+class amharic_dataset:
+  dataset: str = "amharic_dataset"
+  train_split: str = "train"
+  test_split: str = "val"
+  data_path: str = "/data/fine_tun_data6.json"
+import copy
+import json
+import torch
+ 
+from torch.utils.data import Dataset
+ 
+class InstructionDataset(Dataset):
+  def __init__(self, dataset_config, tokenizer, partition="train", max_words=50):
+  self.ann = json.load(open(dataset_config.data_path))
+  if partition == "train":
+  self.ann = self.ann
+  else:
+  self.ann = self.ann[:200]
+  self.max_words = max_words
+  self.tokenizer = tokenizer
+  def __len__(self):
+  return len(self.ann)
+  def __getitem__(self, index):
+  ann = self.ann[index]
+  data = self.create_prompt_formats(ann)
+  prompt = data['prompt']
+  example = data['text']   prompt = torch.tensor(
+  self.tokenizer.encode(prompt), dtype=torch.int64
+  )
+  example = self.tokenizer.encode(example)
+  example.append(self.tokenizer.eos_token_id)
+  example = torch.tensor(
+  example, dtype=torch.int64
+  )
+  padding = self.max_words - example.shape[0]
+  if padding > 0:
+  example = torch.cat((example, torch.zeros(padding, dtype=torch.int64) - 1))
+  elif padding < 0:
+  example = example[: self.max_words]
+  labels = copy.deepcopy(example)
+  labels[: len(prompt)] = -1
+  example_mask = example.ge(0)
+  label_mask = labels.ge(0)
+  example[~example_mask] = 0
+  labels[~label_mask] = 0
+  example_mask = example_mask.float()
+  label_mask = label_mask.float()
+  return {
+  "input_ids": example,
+  "labels": labels,
+  "attention_mask":example_mask,
+  }
+  def create_prompt_formats(self,sample):
+  """
+  Format various fields of the sample ('text', 'label',)
+  Then concatenate them using two newline characters
+  :param sample: Sample dictionnary
+  """
+  INTRO_BLURB = "Generate an advertisement given a category"
+  INSTRUCTION_KEY = "   RESPONSE_KEY = "Response:"
+  END_KEY = "
+  blurb = f"{INTRO_BLURB}"
+  text = f"{INSTRUCTION_KEY}\n{sample['input']}"
+  response = f"{RESPONSE_KEY}\n{sample['output']}"
+  end = f"{END_KEY}"
+  parts = [part for part in [blurb, text, response, end] if part]
+  formatted_prompt = "\n\n".join(parts)
+  sample["text"] = formatted_prompt
+  parts = [part for part in [blurb, text,] if part]
+  formatted_prompt = "\n\n".join(parts)
+  sample["prompt"]= formatted_prompt
+  return sample
+"""
+Fine-tuning the library models for causal language modeling (GPT, GPT-2, CTRL, ...) on a text file or a dataset.
+Here is the full list of checkpoints on the hub that can be fine-tuned by this script:
+https://huggingface.co/models?filter=text-generation
+"""
+import logging
+import numpy as np
+import math
+import os
+import sys
+from dataclasses import dataclass, field
+from itertools import chain
+from typing import Optional, List, Dict, Any, Mapping
+from pathlib import Path
+import datasets
+import torch
+from datasets import load_dataset, concatenate_datasets
+import transformers
+from transformers import (
+  CONFIG_MAPPING,
+  MODEL_FOR_CAUSAL_LM_MAPPING,
+  AutoConfig,
+  AutoModelForCausalLM,
+  LlamaForCausalLM,
+  LlamaTokenizer,
+  AutoTokenizer,
+  HfArgumentParser,
+  Trainer,
+  TrainingArguments,
+  is_torch_tpu_available,
+  set_seed,
+)
+from transformers.testing_utils import CaptureLogger
+from transformers.trainer_utils import get_last_checkpoint
+from transformers.utils import send_example_telemetry
+from transformers.utils.versions import require_version
+from sklearn.metrics import accuracy_score
+from peft import LoraConfig, TaskType, get_peft_model, PeftModel, get_peft_model_state_dict
+from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR
+ 
+class SavePeftModelCallback(transformers.TrainerCallback):
+  def save_model(self, args, state, kwargs):
+  if state.best_model_checkpoint is not None:
+  checkpoint_folder = os.path.join(state.best_model_checkpoint, "pt_lora_model")
+  else:
+  checkpoint_folder = os.path.join(args.output_dir, f"{PREFIX_CHECKPOINT_DIR}-{state.global_step}")
+  peft_model_path = os.path.join(checkpoint_folder, "pt_lora_model")
+  kwargs["model"].save_pretrained(peft_model_path)
+  kwargs["tokenizer"].save_pretrained(peft_model_path)
+  def on_save(self, args, state, control, **kwargs):
+  self.save_model(args, state, kwargs)
+  return control
+  def on_train_end(self, args, state, control, **kwargs):
+  peft_model_path = os.path.join(args.output_dir, "pt_lora_model")
+  kwargs["model"].save_pretrained(peft_model_path)
+  kwargs["tokenizer"].save_pretrained(peft_model_path)
+ 
+def accuracy(predictions, references, normalize=True, sample_weight=None):
+  return {
+  "accuracy": float(
+  accuracy_score(references, predictions, normalize=normalize, sample_weight=sample_weight)
+  )
+  }
+ 
+def compute_metrics(eval_preds):
+  preds, labels = eval_preds
+  labels = labels[:, 1:].reshape(-1)
+  preds = preds[:, :-1].reshape(-1)
+  return accuracy(predictions=preds, references=labels)
+ 
+def preprocess_logits_for_metrics(logits, labels):
+  if isinstance(logits, tuple):
+  logits = logits[0]
+  return logits.argmax(dim=-1)
+ 
+def fault_tolerance_data_collator(features: List) -> Dict[str, Any]:
+  if not isinstance(features[0], Mapping):
+  features = [vars(f) for f in features]
+  first = features[0]
+  batch = {}
+  if "label" in first and first["label"] is not None:
+  label = first["label"].item() if isinstance(first["label"], torch.Tensor) else first["label"]
+  dtype = torch.long if isinstance(label, int) else torch.float
+  batch["labels"] = torch.tensor([f["label"] for f in features], dtype=dtype)
+  elif "label_ids" in first and first["label_ids"] is not None:
+  if isinstance(first["label_ids"], torch.Tensor):
+  batch["labels"] = torch.stack([f["label_ids"] for f in features])
+  else:
+  dtype = torch.long if isinstance(first["label_ids"][0], int) else torch.float
+  batch["labels"] = torch.tensor([f["label_ids"] for f in features], dtype=dtype)
+  try:
+  for k, v in first.items():
+  if k not in ("label", "label_ids") and v is not None and not isinstance(v, str):
+  if isinstance(v, torch.Tensor):
+  batch[k] = torch.stack([f[k] for f in features])
+  elif isinstance(v, np.ndarray):
+  batch[k] = torch.tensor(np.stack([f[k] for f in features]))
+  else:
+  batch[k] = torch.tensor([f[k] for f in features])
+  except ValueError:   for k, v in first.items():
+  if k not in ("label", "label_ids") and v is not None and not isinstance(v, str):
+  if isinstance(v, torch.Tensor):
+  batch[k] = torch.stack([features[0][k]] * len(features))
+  elif isinstance(v, np.ndarray):
+  batch[k] = torch.tensor(np.stack([features[0][k]] * len(features)))
+  else:
+  batch[k] = torch.tensor([features[0][k]] * len(features))
+  return batch
+ 
+MODEL_CONFIG_CLASSES = list(MODEL_FOR_CAUSAL_LM_MAPPING.keys())
+MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
+ 
+@dataclass
+class ModelArguments:
+  """
+  Arguments pertaining to which model/config/tokenizer we are going to fine-tune, or train from scratch.
+  """
+  model_name_or_path: Optional[str] = field(
+  default=None,
+  metadata={
+  "help": (
+  "The model checkpoint for weights initialization.Don't set if you want to train a model from scratch."
+  )
+  },
+  )
+  tokenizer_name_or_path: Optional[str] = field(
+  default=None,
+  metadata={
+  "help": (
+  "The tokenizer for weights initialization.Don't set if you want to train a model from scratch."
+  )
+  },
+  )
+  model_type: Optional[str] = field(
+  default=None,
+  metadata={"help": "If training from scratch, pass a model type from the list: " + ", ".join(MODEL_TYPES)},
+  )
+  config_overrides: Optional[str] = field(
+  default=None,
+  metadata={
+  "help": (
+  "Override some existing default config settings when a model is trained from scratch. Example: "
+  "n_embd=10,resid_pdrop=0.2,scale_attn_weights=false,summary_type=cls_index"
+  )
+  },
+  )
+  config_name: Optional[str] = field(
+  default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
+  )
+  tokenizer_name: Optional[str] = field(
+  default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
+  )
+  cache_dir: Optional[str] = field(
+  default=None,
+  metadata={"help": "Where do you want to store the pretrained models downloaded from huggingface.co"},
+  )
+  use_fast_tokenizer: bool = field(
+  default=True,
+  metadata={"help": "Whether to use one of the fast tokenizer (backed by the tokenizers library) or not."},
+  )
+  model_revision: str = field(
+  default="main",
+  metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
+  )
+  use_auth_token: bool = field(
+  default=False,
+  metadata={
+  "help": (
+  "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
+  "with private models)."
+  )
+  },
+  )
+  torch_dtype: Optional[str] = field(
+  default=None,
+  metadata={
+  "help": (
+  "Override the default `torch.dtype` and load the model under this dtype. If `auto` is passed, the "
+  "dtype will be automatically derived from the model's weights."
+  ),
+  "choices": ["auto", "bfloat16", "float16", "float32"],
+  },
+  )
+  def __post_init__(self):
+  if self.config_overrides is not None and (self.config_name is not None or self.model_name_or_path is not None):
+  raise ValueError(
+  "--config_overrides can't be used in combination with --config_name or --model_name_or_path"
+  )
+ 
+@dataclass
+class DataTrainingArguments:
+  """
+  Arguments pertaining to what data we are going to input our model for training and eval.
+  """
+  dataset_dir: Optional[str] = field(
+  default=None, metadata={"help": "The name of the dataset to use (via the datasets library)."}
+  )
+  dataset_config_name: Optional[str] = field(
+  default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
+  )
+  train_file: Optional[str] = field(default=None, metadata={"help": "The input training data file (a text file)."})
+  validation_file: Optional[str] = field(
+  default=None,
+  metadata={"help": "An optional input evaluation data file to evaluate the perplexity on (a text file)."},
+  )
+  max_train_samples: Optional[int] = field(
+  default=None,
+  metadata={
+  "help": (
+  "For debugging purposes or quicker training, truncate the number of training examples to this "
+  "value if set."
+  )
+  },
+  )
+  max_eval_samples: Optional[int] = field(
+  default=None,
+  metadata={
+  "help": (
+  "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
+  "value if set."
+  )
+  },
+  )
+  streaming: bool = field(default=False, metadata={"help": "Enable streaming mode"})
+  block_size: Optional[int] = field(
+  default=None,
+  metadata={
+  "help": (
+  "Optional input sequence length after tokenization. "
+  "The training dataset will be truncated in block of this size for training. "
+  "Default to the model max input length for single sentence inputs (take into account special tokens)."
+  )
+  },
+  )
+  overwrite_cache: bool = field(
+  default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
+  )
+  validation_split_percentage: Optional[float] = field(
+  default=0.01,
+  metadata={
+  "help": "The percentage of the train set used as validation set in case there's no validation split"
+  },
+  )
+  preprocessing_num_workers: Optional[int] = field(
+  default=None,
+  metadata={"help": "The number of processes to use for the preprocessing."},
+  )
+  keep_linebreaks: bool = field(
+  default=True, metadata={"help": "Whether to keep line breaks when using TXT files or not."}
+  )
+  data_cache_dir: Optional[str] = field(default="./", metadata={"help": "The datasets processed stored"})
+  def __post_init__(self):
+  if self.streaming:
+  require_version("datasets>=2.0.0", "The streaming feature requires `datasets>=2.0.0`")
+ 
+@dataclass
+class MyTrainingArguments(TrainingArguments):
+  trainable : Optional[str] = field(default="q_proj,v_proj")
+  lora_rank : Optional[int] = field(default=8)
+  lora_dropout : Optional[float] = field(default=0.1)
+  lora_alpha : Optional[float] = field(default=32.)
+  modules_to_save : Optional[str] = field(default=None)
+  debug_mode : Optional[bool] = field(default=False)
+  peft_path : Optional[str] = field(default=None)
+ 
+logger = logging.getLogger(__name__)
+ 
+def main():
+  parser = HfArgumentParser((ModelArguments, DataTrainingArguments, MyTrainingArguments))
+  if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
+  model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
+  else:
+  model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+  send_example_telemetry("run_clm", model_args, data_args)
+  logging.basicConfig(format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",datefmt="%m/%d/%Y %H:%M:%S",
+  level=logging.INFO,   handlers=[logging.StreamHandler(sys.stdout)],)
+  if training_args.should_log:
+  transformers.utils.logging.set_verbosity_info()
+  log_level = training_args.get_process_log_level()
+  logger.setLevel(log_level)
+  datasets.utils.logging.set_verbosity(log_level)
+  transformers.utils.logging.set_verbosity(log_level)
+  transformers.utils.logging.enable_default_handler()
+  transformers.utils.logging.enable_explicit_format()
+  logger.warning(
+  f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
+  + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
+  )
+  last_checkpoint = None
+  if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
+  last_checkpoint = get_last_checkpoint(training_args.output_dir)
+  if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
+  raise ValueError(
+  f"Output directory ({training_args.output_dir}) already exists and is not empty. "
+  "Use --overwrite_output_dir to overcome."
+  )
+  elif last_checkpoint is not None and training_args.resume_from_checkpoint is None:
+  logger.info(
+  f"Checkpoint detected, resuming training at {last_checkpoint}. To avoid this behavior, change "
+  "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
+  )
+  set_seed(training_args.seed)
+  config_kwargs = {
+  "cache_dir": model_args.cache_dir,
+  "revision": model_args.model_revision,
+  "use_auth_token": True if model_args.use_auth_token else None,
+  }
+  if model_args.config_name:
+  config = AutoConfig.from_pretrained(model_args.config_name, **config_kwargs)
+  elif model_args.model_name_or_path:
+  config = AutoConfig.from_pretrained(model_args.model_name_or_path, **config_kwargs)
+  else:
+  config = CONFIG_MAPPING[model_args.model_type]()
+  logger.warning("You are instantiating a new config instance from scratch.")
+  if model_args.config_overrides is not None:
+  logger.info(f"Overriding config: {model_args.config_overrides}")
+  config.update_from_string(model_args.config_overrides)
+  logger.info(f"New config: {config}")
+  tokenizer_kwargs = {
+  "cache_dir": model_args.cache_dir,
+  "use_fast": model_args.use_fast_tokenizer,
+  "revision": model_args.model_revision,
+  "use_auth_token": True if model_args.use_auth_token else None,
+  }
+  if model_args.tokenizer_name:
+  tokenizer = AutoTokenizer.from_pretrained(model_args.tokenizer_name, **tokenizer_kwargs)
+  elif model_args.tokenizer_name_or_path:
+  tokenizer = LlamaTokenizer.from_pretrained(model_args.tokenizer_name_or_path, **tokenizer_kwargs)
+  else:
+  raise ValueError(
+  "You are instantiating a new tokenizer from scratch. This is not supported by this script."
+  "You can do it from another script, save it, and load it from here, using --tokenizer_name."
+  )
+  tok_logger = transformers.utils.logging.get_logger("transformers.tokenization_utils_base")
+  def tokenize_function(examples):
+  with CaptureLogger(tok_logger) as cl:
+  output = tokenizer(examples["text"])
+  if "Token indices sequence length is longer than the" in cl.out:
+  tok_logger.warning(
+  "^^^^^^^^^^^^^^^^ Please ignore the warning above - this long input will be chunked into smaller bits"
+  " before being passed to the model."
+  )
+  return output
+  if data_args.block_size is None:
+  block_size = tokenizer.model_max_length
+  if block_size > 1024:
+  logger.warning(
+  "The chosen tokenizer supports a `model_max_length` that is longer than the default `block_size` value"
+  " of 1024. If you would like to use a longer `block_size` up to `tokenizer.model_max_length` you can"
+  " override this default with `--block_size xxx`."
+  )
+  block_size = 1024
+  else:
+  if data_args.block_size > tokenizer.model_max_length:
+  logger.warning(
+  f"The block_size passed ({data_args.block_size}) is larger than the maximum length for the model"
+  f"({tokenizer.model_max_length}). Using block_size={tokenizer.model_max_length}."
+  )
+  block_size = min(data_args.block_size, tokenizer.model_max_length)
+  def group_texts(examples):
+  concatenated_examples = {k: list(chain(*examples[k])) for k in examples.keys()}
+  total_length = len(concatenated_examples[list(examples.keys())[0]])
+  if total_length >= block_size:
+  total_length = (total_length // block_size) * block_size
+  result = {
+  k: [t[i : i + block_size] for i in range(0, total_length, block_size)]
+  for k, t in concatenated_examples.items()
+  }
+  result["labels"] = result["input_ids"].copy()
+  return result
+  with training_args.main_process_first(desc="dataset map tokenization and grouping"):
+  lm_datasets = []
+  path = Path(data_args.dataset_dir)
+  files = [file.name for file in path.glob("*.txt")]
+  if training_args.debug_mode is True:
+  files = [files[0]]
+  print("printing files")
+  print(files)   for idx, file in enumerate(files):
+  data_file = os.path.join(path, file)
+  filename = ''.join(file.split(".")[:-1])
+  cache_path = os.path.join(data_args.data_cache_dir, filename)
+  os.makedirs(cache_path, exist_ok=True)
+  try:
+  processed_dataset = datasets.load_from_disk(cache_path, keep_in_memory=False)
+  logger.info(f'training datasets-{filename} has been loaded from disk')
+  except Exception:
+  cache_dir = os.path.join(data_args.data_cache_dir, filename+"_text")
+  os.makedirs(cache_dir, exist_ok=True)
+  raw_dataset = load_dataset("text", data_files=data_file, cache_dir=cache_dir, keep_in_memory=False)
+  logger.info(f"{file} has been loaded")
+  tokenized_dataset = raw_dataset.map(
+  tokenize_function,
+  batched=True,
+  num_proc=data_args.preprocessing_num_workers,
+  remove_columns="text",
+  load_from_cache_file=True,
+  keep_in_memory=False,
+  cache_file_names = {k: os.path.join(cache_dir, 'tokenized.arrow') for k in raw_dataset},
+  desc="Running tokenizer on dataset",
+  )
+  grouped_datasets = tokenized_dataset.map(
+  group_texts,
+  batched=True,
+  num_proc=data_args.preprocessing_num_workers,
+  load_from_cache_file=True,
+  keep_in_memory=False,
+  cache_file_names = {k: os.path.join(cache_dir, 'grouped.arrow') for k in tokenized_dataset},
+  desc=f"Grouping texts in chunks of {block_size}",
+  )
+  processed_dataset = grouped_datasets
+  processed_dataset.save_to_disk(cache_path)
+  if idx == 0:
+  lm_datasets = processed_dataset['train']
+  else:
+  assert lm_datasets.features.type == processed_dataset["train"].features.type
+  lm_datasets = concatenate_datasets([lm_datasets, processed_dataset["train"]])
+  lm_datasets = lm_datasets.train_test_split(test_size = data_args.validation_split_percentage)
+  if training_args.do_train:
+  train_dataset = lm_datasets['train']
+  if data_args.max_train_samples is not None:
+  max_train_samples = min(len(train_dataset), data_args.max_train_samples)
+  train_dataset = train_dataset.select(range(max_train_samples))
+  logger.info(f"Num train_samples  {len(train_dataset)}")
+  logger.info("training example:")
+  logger.info(tokenizer.decode(train_dataset[0]['input_ids']))
+  if training_args.do_eval:
+  eval_dataset = lm_datasets["test"]
+  if data_args.max_eval_samples is not None:
+  max_eval_samples = min(len(eval_dataset), data_args.max_eval_samples)
+  eval_dataset = eval_dataset.select(range(max_eval_samples))
+  logger.info(f"Num eval_samples  {len(eval_dataset)}")
+  logger.info("training example:")
+  logger.info(tokenizer.decode(eval_dataset[0]['input_ids']))
+  if model_args.model_name_or_path:
+  torch_dtype = (
+  model_args.torch_dtype
+  if model_args.torch_dtype in ["auto", None]
+  else getattr(torch, model_args.torch_dtype)
+  )
+  model = LlamaForCausalLM.from_pretrained(
+  model_args.model_name_or_path,
+  from_tf=bool(".ckpt" in model_args.model_name_or_path),
+  config=config,
+  cache_dir=model_args.cache_dir,
+  revision=model_args.model_revision,
+  use_auth_token=True if model_args.use_auth_token else None,
+  torch_dtype=torch_dtype,
+  low_cpu_mem_usage=True,
+  )
+  else:
+  model = AutoModelForCausalLM.from_config(config)
+  n_params = sum({p.data_ptr(): p.numel() for p in model.parameters()}.values())
+  logger.info(f"Training new model from scratch - Total size={n_params/2**20:.2f}M params")
+  model_vocab_size = model.get_output_embeddings().weight.size(0)
+  if not (
+  (model_vocab_size==32000 and len(tokenizer)==51008) or \
+  (model_vocab_size==32000 and len(tokenizer)==32000) or \
+  (model_vocab_size==51008 and len(tokenizer)==51008) or \
+  (model_vocab_size==49954 and len(tokenizer)==49954)
+  ):
+  raise ValueError(
+  f"The combination of base model (size: {model_vocab_size}) and tokenizer (size: {len(tokenizer)}) is not a valid configuration. Please check our project wiki for further information. \n"
+  "Valid configurations (base model / tokenizer):\n"
+  "- Continue pre-training original LLaMA: 32000 / 32000 \n"
+  "- Pre-training (Chinese) Amharic LLaMA based on original LLaMA: 32000 / 51008 \n"
+  "- Continue pre-training (Chinese) Amharic LLaMA: 51008 / 51008 \n"
+  "- Continue pre-training Chinese Alpaca: 49954 / 49954 \n")
+  model.resize_token_embeddings(len(tokenizer))
+  if training_args.peft_path is not None:
+  logger.info("Peft from pre-trained model")
+  model = PeftModel.from_pretrained(model, training_args.peft_path)
+  else:
+  logger.info("Init new peft model")
+  target_modules = training_args.trainable.split(',')
+  modules_to_save = training_args.modules_to_save
+  if modules_to_save is not None:
+  modules_to_save = modules_to_save.split(',')
+  lora_rank = training_args.lora_rank
+  lora_dropout = training_args.lora_dropout
+  lora_alpha = training_args.lora_alpha
+  logger.info(f"target_modules: {target_modules}")
+  logger.info(f"lora_rank: {lora_rank}")
+  peft_config = LoraConfig(
+  task_type=TaskType.CAUSAL_LM,
+  target_modules=target_modules,
+  inference_mode=False,
+  r=lora_rank, lora_alpha=lora_alpha,
+  lora_dropout=lora_dropout,
+  modules_to_save=modules_to_save)
+  model = get_peft_model(model, peft_config)
+  model.print_trainable_parameters()
+  peft_config = LoraConfig(
+  task_type=TaskType.CAUSAL_LM,
+  inference_mode=False,
+  r=8,
+  lora_alpha=32,
+  lora_dropout=0.05,
+  target_modules = ["q_proj", "v_proj", "k_proj", "o_proj", "gate_proj", "down_proj", "up_proj"],
+  modules_to_save = ["embed_tokens","lm_head"]
+  )
+  """
+  config = {
+  'lora_config': lora_config,
+  'learning_rate': 2e-4,
+  'num_train_epochs': 1,
+  'gradient_accumulation_steps': 2,
+  'per_device_train_batch_size': 1,
+  'per_device_eval_batch_size': 1,
+  'gradient_checkpointing': True,
+  }
+  """
+  trainer = Trainer(
+  model=model,
+  args=training_args,
+  train_dataset=train_dataset if training_args.do_train else None,
+  eval_dataset=eval_dataset if training_args.do_eval else None,
+  tokenizer=tokenizer,
+  data_collator=fault_tolerance_data_collator,
+  compute_metrics=compute_metrics if training_args.do_eval and not is_torch_tpu_available() else None,
+  preprocess_logits_for_metrics=preprocess_logits_for_metrics
+  if training_args.do_eval and not is_torch_tpu_available()
+  else None,
+  )
+  """
+  output_dir=training_args.output_dir,
+  overwrite_output_dir=True,
+  bf16=True,   logging_dir=f"{training_args.output_dir}/logs",
+  logging_strategy="steps",
+  logging_steps=10,
+  save_strategy="steps",
+  save_steps=5000,
+  optim="adamw_torch_fused",
+  max_steps=-1,   **{k:v for k,v in config.items() if k != 'lora_config'}
+  """
+  trainer.add_callback(SavePeftModelCallback)
+  if training_args.do_train:
+  checkpoint = None
+  if training_args.resume_from_checkpoint is not None:
+  checkpoint = training_args.resume_from_checkpoint
+  elif last_checkpoint is not None:
+  checkpoint = last_checkpoint
+  train_result = trainer.train(resume_from_checkpoint=checkpoint)
+  metrics = train_result.metrics
+  max_train_samples = (
+  data_args.max_train_samples if data_args.max_train_samples is not None else len(train_dataset)
+  )
+  metrics["train_samples"] = min(max_train_samples, len(train_dataset))
+  trainer.log_metrics("train", metrics)
+  trainer.save_metrics("train", metrics)
+  trainer.save_state()
+  model.save_pretrained(training_args.output_dir)
+  if training_args.do_eval:
+  logger.info("*** Evaluate ***")
+  metrics = trainer.evaluate()
+  max_eval_samples = data_args.max_eval_samples if data_args.max_eval_samples is not None else len(eval_dataset)
+  metrics["eval_samples"] = min(max_eval_samples, len(eval_dataset))
+  try:
+  perplexity = math.exp(metrics["eval_loss"])
+  except OverflowError:
+  perplexity = float("inf")
+  metrics["perplexity"] = perplexity
+  trainer.log_metrics("eval", metrics)
+  trainer.save_metrics("eval", metrics)
+ 
+if __name__ == "__main__":
+  main()
+lr=2e-4
+lora_rank=8
+lora_alpha=32
+lora_trainable="q_proj,v_proj,k_proj,o_proj,gate_proj,down_proj,up_proj"
+modules_to_save="embed_tokens,lm_head"
+lora_dropout=0.05
+pretrained_model=/model/Llama-2-7b-hf
+amharic_tokenizer_path=/model/Llama-2-7b-hf
+dataset_dir=/home/abdulhamid_mussa/LLM_Finetuning_For_Amharic_Ad_Generation/data/cleaned
+data_cache=/home/abdulhamid_mussa/LLM_Finetuning_For_Amharic_Ad_Generation/cache
+per_device_train_batch_size=32
+per_device_eval_batch_size=1
+gradient_accumulation_steps=1
+output_dir=/home/abdulhamid_mussa/LLM_Finetuning_For_Amharic_Ad_Generation/output
+python pretrain.py \
+  --model_name_or_path ${pretrained_model} \
+  --tokenizer_name_or_path ${amharic_tokenizer_path} \
+  --dataset_dir ${dataset_dir} \
+  --data_cache_dir ${data_cache} \
+  --validation_split_percentage 0.001 \
+  --per_device_train_batch_size ${per_device_train_batch_size} \
+  --per_device_eval_batch_size ${per_device_eval_batch_size} \
+  --do_train \
+  --seed $RANDOM \
+  --num_train_epochs 1 \
+  --lr_scheduler_type cosine \
+  --learning_rate ${lr} \
+  --warmup_ratio 0.05 \
+  --weight_decay 0.01 \
+  --logging_strategy steps \
+  --logging_steps 10 \
+  --save_strategy steps \
+  --save_total_limit 1 \
+  --save_steps 7528 \
+  --evaluation_strategy steps \
+  --eval_steps 3000 \
+  --preprocessing_num_workers 8 \
+  --block_size 512 \
+  --output_dir ${output_dir} \
+  --bf16 \
+  --overwrite_output_dir \
+  --logging_first_step True \
+  --lora_rank ${lora_rank} \
+  --lora_alpha ${lora_alpha} \
+  --trainable ${lora_trainable} \
+  --modules_to_save ${modules_to_save} \
+  --lora_dropout ${lora_dropout} \
+  --gradient_checkpointing \
+import pandas as pd
+df = pd.read_json("/data/fine_tun_data2.json")
+df.tail()
+df[df['output']=='not advertisement'].iloc[1]['input']
+'Identify whether the given text is an advertisement or not advertisement from the given input. Make sure you respond only with advertisment or not advertisment. NOTHING ELSE. Input: ለኢሬቻ በኣል ወደቢሾፍቱ የተጓዙት የሲዳማ ወጣቶች(ኤጄቶዎች) ከሰኣታት በፊት ቢሾፍቱ ገብተዋል። @tsegabwolde @tikvahethiopia''
+import pandas as pd
+df = pd.read_csv("/data/wasu_mohammed_labeled.csv")
+df.head()
+df.shape
+df['label'] = df['label'].fillna("Not Advertisement")
+df.tail(5)
+df
+from datasets import Dataset
+ 
+data_dict = {"text": df['text'].tolist()}
+ 
+dataset = Dataset.from_dict(data_dict)
+dataset.save_to_disk("../data/train")
+ 
+from peft import PeftModel
+from transformers import LlamaForCausalLM, LlamaConfig
+ 
+def load_model(model_name, quantization):
+  model = LlamaForCausalLM.from_pretrained(
+  model_name,
+  return_dict=True,
+  load_in_8bit=quantization,
+  device_map="auto",
+  low_cpu_mem_usage=True,
+  )
+  return model
+ 
+def load_peft_model(model, peft_model):
+  peft_model = PeftModel.from_pretrained(model, peft_model)
+  return peft_model
+ 
+def load_llama_from_config(config_path):
+  model_config = LlamaConfig.from_pretrained(config_path)   model = LlamaForCausalLM(config=model_config)
+  return model
+from transformers import LlamaTokenizer
+ 
+MAIN_PATH = '/model/Llama-2-7b-hf'
+tokenizer = LlamaTokenizer.from_pretrained(MAIN_PATH)
+ 
+example = 'አፖሎ ካለ " ኢንተርኔት ተቋርጦ ገንዘብ መላክም መቀበልም አልቻልኩ" ማለት የለም። *685
+ 
+tokens = tokenizer.tokenize(example)
+print(tokens)
+print(len(tokenizer))
+example = 'አፖሎ ካለ " ኢንተርኔት ተቋርጦ ገንዘብ መላክም መቀበልም አልቻልኩ" ማለት የለም። *685
+ 
+tokens = tokenizer.tokenize(example)
+print(tokens)
+df['text'][0]
+df = pd.read_csv("/data/wasu_mohammed_labeled.csv")
+ 
+total_word_count = 0
+total_tokens = 0
+ 
+for index, row in df.iterrows():
+  text = row['text']
+  if not isinstance(text, str):   continue
+  word_count = len(text.split())
+  total_word_count += word_count
+  tokens = tokenizer.tokenize(text)
+  total_tokens+=tokens
+  print(tokens)
+ 
+print("Total Word Count:", total_word_count)
+print("Total tokens count: ",total_tokens)
+total_tokens
+df.shape
+from transformers import (
+  AutoModelForCausalLM,
+  AutoTokenizer,
+  BitsAndBytesConfig,
+  HfArgumentParser,
+  TrainingArguments,
+  pipeline,
+  LlamaForCausalLM,   LlamaTokenizer,
+  logging,
+)
+from peft import (
+  LoraConfig,
+  TaskType,
+  prepare_model_for_int8_training,
+  PeftModel
+)
+import torch
+LLAMA_DIR = '/model/Llama-2-7b-hf'
+tokenizer = LlamaTokenizer.from_pretrained(LLAMA_DIR)
+ 
+model = LlamaForCausalLM.from_pretrained(LLAMA_DIR, load_in_8bit=True, device_map='auto', torch_dtype=torch.float16)
+embedding_size = model.get_input_embeddings().weight.shape[0]
+ 
+if len(tokenizer) != embedding_size:
+  print("resize the embedding size by the size of the tokenizer")
+  model.resize_token_embeddings(len(tokenizer))
+ 
+new_model ='/home/abdulhamid_mussa/LLM_Finetuning_For_Amharic_Ad_Generation/output'
+model = PeftModel.from_pretrained(model, new_model)
+ 
+prompt = "Who is Leonardo Da Vinci?"
+pipe = pipeline(task="text-generation", model=model, tokenizer=model, max_length=200)
+result = pipe(f"<s>[INST] {prompt} [/INST]")
+print(result[0]['generated_text'])
+ቨርቹዋል ረዳቶች እንደ Amazon&
+run-20240203_155644-4hm9i4tp
+from langchain_community.document_loaders import DirectoryLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.schema import Document
+from langchain_openai import OpenAIEmbeddings
+from langchain.vectorstores.chroma import Chroma
+from transformers import AutoTokenizer, AutoModel
+import os
+import torch
+import shutil
+from dotenv import load_dotenv
+load_dotenv()
+import sys
+ 
+OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
+model_name = 'Davlan/bert-base-multilingual-cased-finetuned-amharic'
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModel.from_pretrained(model_name)
+data_path = '../data/'
+CHROMA_PATH = '../RAG/chromadb'
+def embed_doc(document):
+  encoded_input = tokenizer(document, padding=True, truncation=True, return_tensors='pt')
+  with torch.no_grad():
+  outputs1 = model(**encoded_input)
+  embeddings1 = outputs1.last_hidden_state.squeeze(dim=0)
+  return embeddings1
+def load_documents(data_path):   try:
+  loader = DirectoryLoader(data_path)
+  documents = loader.load()   print("data loaded sucessfully")
+  return documents[0].page_content
+  except:
+  print("document not found!")
+  return None
+ 
+def split_text(documents:list[Document]):
+  try:
+  text_spliter = RecursiveCharacterTextSplitter(
+  chunk_size=1000,
+  chunk_overlap=500,
+  length_function=len,
+  add_start_index = True
+  )
+  chunk = text_spliter.split_documents(documents)
+  print("data splited successfuly!")
+  return chunk
+  except:
+  print("document not found")
+def save_chunks_to_chroma(chunks):
+  if os.path.exists(CHROMA_PATH):
+  shutil.rmtree(CHROMA_PATH)
+  try:
+  db = Chroma.from_documents(chunks,embed_doc(),\
+  persist_directory=CHROMA_PATH)
+  db.persist()
+  print("Vectorstore created successfully!")
+  except:
+  print("Couldn't create the vectore database")
+def generate_data_store():
+  documents = load_documents(data_path)
+  chunks = split_text(documents)
+  embeding1 = embed_doc(chunks)
+  print(embeding1)
+  save_chunks_to_chroma(embeding1)  
+def main():
+  generate_data_store()  
+if __name__ == "__main__":
+  main()

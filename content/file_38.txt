@@ -1,0 +1,238 @@
+import pandas as pd
+
+import pandas.io.sql as sqilo
+
+from sqlalchemy import create_engine
+
+import psycopg2
+
+from psycopg2 import sql
+ 
+database_name = 'telecom'
+
+table_name= 'xdr_data'
+
+connection_params = { "host": "localhost", "user": "postgres", "password": "123",
+
+"port": "5432", "database": database_name}
+
+engine = create_engine(f"postgresql+psycopg2://{connection_params['user']}:{connection_params['password']}@{connection_params['host']}:{connection_params['port']}/{connection_params['database']}")
+ 
+sql_query = 'SELECT * FROM xdr_data'
+
+df = pd.read_sql(sql_query, con= engine)
+
+df.info()
+df.head()
+import pandas as pd
+
+import numpy as np
+
+from IPython.display import Image
+
+import seaborn as sns
+
+import matplotlib.pyplot as plt
+import warnings
+
+warnings.filterwarnings('ignore')
+df.head()
+df['Handset Type'].describe()
+
+def percent_missing(df):
+  totalCells = np.product(df.shape)
+  missingCount = df.isnull().sum()
+  totalMissing = missingCount.sum()
+  print("The dataset contains", round(((totalMissing/totalCells) * 100), 2), "%", "missing values.")
+
+percent_missing(df)
+
+df.isna().sum()
+
+percent_missing(df['TCP UL Retrans. Vol (Bytes)'])
+percent_missing(df['TCP UL Retrans. Vol (Bytes)'])
+percent_missing(df['HTTP DL (Bytes)'])
+percent_missing(df['HTTP DL (Bytes)'])
+
+df_clean = df.drop(['Nb of sec with 37500B < Vol UL', 'Nb of sec with 6250B < Vol UL < 37500B', 'Nb of sec with 31250B < Vol DL < 125000B', 'Nb of sec with 1250B < Vol UL < 6250B', 'Nb of sec with 125000B < Vol DL', 'Nb of sec with 6250B < Vol DL < 31250B', 'TCP DL Retrans. Vol (Bytes)', 'TCP UL Retrans. Vol (Bytes)' ,'HTTP DL (Bytes)', 'HTTP UL (Bytes)'], axis=1)
+
+df_clean.shape
+df_clean.isna().sum()
+df['Dur. (ms)'].hist()
+import seaborn as sns
+
+sns.displot(data=df, x=df['Dur. (ms)'])
+ 
+def plot_hist(df:pd.DataFrame, column:str, color:str)->None:
+  sns.displot(data=df, x=column, color=color, kde=True, height=7, aspect=2)
+  plt.title(f'Distribution of {column}', size=20, fontweight='bold')
+  plt.show()
+ 
+def plot_count(df:pd.DataFrame, column:str) -> None:
+  plt.figure(figsize=(12, 7))
+  sns.countplot(data=df, x=column)
+  plt.title(f'Distribution of {column}', size=20, fontweight='bold')
+  plt.show()
+ 
+def plot_bar(df:pd.DataFrame, x_col:str, y_col:str, title:str, xlabel:str, ylabel:str)->None:
+  plt.figure(figsize=(12, 7))
+  sns.barplot(data = df, x=x_col, y=y_col)
+  plt.title(title, size=20)
+  plt.xticks(rotation=75, fontsize=14)
+  plt.yticks( fontsize=14)
+  plt.xlabel(xlabel, fontsize=16)
+  plt.ylabel(ylabel, fontsize=16)
+  plt.show()
+ 
+def plot_heatmap(df:pd.DataFrame, title:str, cbar=False)->None:
+  plt.figure(figsize=(12, 7))
+  sns.heatmap(df, annot=True, cmap='viridis', vmin=0, vmax=1, fmt='.2f', linewidths=.7, cbar=cbar )
+  plt.title(title, size=18, fontweight='bold')
+  plt.show()
+ 
+def plot_box(df:pd.DataFrame, x_col:str, title:str) -> None:
+  plt.figure(figsize=(12, 7))
+  sns.boxplot(data = df, x=x_col)
+  plt.title(title, size=20)
+  plt.xticks(rotation=75, fontsize=14)
+  plt.show()
+ 
+def plot_box_multi(df:pd.DataFrame, x_col:str, y_col:str, title:str) -> None:
+  plt.figure(figsize=(12, 7))
+  sns.boxplot(data = df, x=x_col, y=y_col)
+  plt.title(title, size=20)
+  plt.xticks(rotation=75, fontsize=14)
+  plt.yticks( fontsize=14)
+  plt.show()
+ 
+def plot_scatter(df: pd.DataFrame, x_col: str, y_col: str, title: str, hue: str, style: str) -> None:
+  plt.figure(figsize=(12, 7))
+  sns.scatterplot(data = df, x=x_col, y=y_col, hue=hue, style=style)
+  plt.title(title, size=20)
+  plt.xticks(fontsize=14)
+  plt.yticks( fontsize=14)
+  plt.show()
+ 
+pd.options.display.float_format = format_float
+
+handset_counts = df['Handset Type'].value_counts()
+
+top_10_handsets = handset_counts.head(10)
+
+print("Top 10 handsets ")
+
+print(top_10_handsets)
+value_counts = df['Handset Type'].value_counts()[:10]
+
+top_10_handsets = value_counts.index.tolist()
+ 
+top_10_df = pd.DataFrame(value_counts)
+
+top_10_df.plot(kind= 'bar',rot=80)
+
+plt.xlabel('Handset Type')
+
+plt.ylabel('Count')
+
+plt.title('Top 10 Handsets')
+
+plt.show(10)
+
+handset_manufacturer=df['Handset Manufacturer'].value_counts()
+
+top_3_handset_manufacturers=handset_manufacturer.head(3)
+
+print("The top  3 handset manufacturers ")
+
+print(top_3_handset_manufacturers)
+value_counts = df['Handset Manufacturer'].value_counts()[:3]
+
+top_3_manufacturers = value_counts.index.tolist()
+ 
+top_3_df = pd.DataFrame(value_counts)
+
+top_3_df.plot(kind='bar', rot=45)
+ 
+plt.xlabel('Handset Manufacturer')
+
+plt.ylabel('Count')
+
+plt.title('Top 3 Handset Manufacturers')
+
+plt.show()
+ 
+top3_handsetManufacturers=handset_manufacturer.head(3).index
+
+filtered_df = df[df['Handset Manufacturer'].isin(top3_handsetManufacturers)]
+
+columns_of_interest=['Handset Manufacturer', 'Handset Type']
+
+top_handsets_per_manufacturer = filtered_df.groupby(columns_of_interest).size().reset_index(name='count')
+
+top_handsets_per_manufacturer = top_handsets_per_manufacturer.sort_values(by=['Handset Manufacturer', 'count'], ascending=[True, False])
+
+top5_handsets_per_manufacturer = top_handsets_per_manufacturer.groupby('Handset Manufacturer').head(5)
+ 
+print("Top 5 handsets per top 3 handset manufacturers and their counts")
+
+print(top5_handsets_per_manufacturer)
+df_clean['Total UL (Bytes)'].min()
+plot_hist(df_clean, "Total UL (Bytes)", "blue")
+plot_hist(df_clean, "Total DL (Bytes)", "blue")
+plot_hist(df_clean, "UL TP > 300 Kbps (%)", "green")
+plot_hist(df_clean, "End ms", "red")
+df.head()
+
+aggregated_data = df.groupby("MSISDN/Number").agg({"Total DL (Bytes)": "sum"})
+
+aggregated_data['Total DL (GB)'] = aggregated_data['Total DL (Bytes)'] / 1073741824
+
+plt.figure(figsize=(10, 6))
+
+plt.plot(aggregated_data.index, aggregated_data['Total DL (GB)'])
+
+plt.xlabel('MSISDN/Number')
+
+plt.ylabel('Total Dowloaded GB')
+
+plt.title('Total DL (GB) per MSISDN/Number')
+
+plt.xticks(rotation=90)
+
+plt.grid(True)
+
+plt.show()
+df.head()
+
+aggregated_data = df.groupby("MSISDN/Number").agg({"Total UL (Bytes)": "sum"})
+
+aggregated_data['Total UL (GB)'] = aggregated_data['Total UL (Bytes)'] / 1073741824
+
+plt.figure(figsize=(10, 6))
+
+plt.plot(aggregated_data.index, aggregated_data['Total UL (GB)'])
+
+plt.xlabel('MSISDN/Number')
+
+plt.ylabel('Total UL (GB)')
+
+plt.title('Total UL (GB) per MSISDN/Number')
+
+plt.xticks(rotation=90)
+
+plt.grid(True)
+
+plt.show()
+df.head()
+
+aggregated_data = df.groupby("MSISDN/Number").agg({"count"})
+
+aggregated_data.head(10)
+
+aggregated_data.plot()
+
+plt.ylabel("No of Xdr Sessions")
+
+plt.xlabel("Users")
+
+plt.show() 

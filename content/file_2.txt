@@ -1,0 +1,717 @@
+%reload_ext autoreload
+
+%autoreload 2
+import os, sys
+ 
+rpath = os.path.abspath('..')
+
+if rpath not in sys.path:
+  sys.path.insert(0, rpath)
+ 
+import pandas as pd
+
+import numpy as np
+
+from src.dbdata_loader import load_data
+
+from src.dbdata_loader import write_to_sql
+
+import src.data_cleaner as cleaner
+
+import src.plotting as plotting
+
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+
+import matplotlib.pyplot as plt
+
+from sklearn.preprocessing import StandardScaler
+
+from sklearn.preprocessing import MinMaxScaler
+
+from sklearn.cluster import KMeans
+ 
+df = load_data(credentials_file='env_vars.txt')
+ 
+df.head()
+
+new_df=df.copy()
+new_df.info()
+ 
+unique_imeis_df = new_df.drop_duplicates(subset='IMEI')
+ 
+top_handsets = unique_imeis_df['Handset Type'].value_counts().head(10)
+
+print(f'The top 10 handsets used by customers based on unique IMEI values:\n{top_handsets}')
+ 
+top_manufacturers = new_df['Handset Manufacturer'].value_counts().head(3)
+
+print(f'the top 3 handset manufacturers \n {top_manufacturers}')
+top_handsets_per_manufacturer = []
+ 
+for manufacturer in top_manufacturers.index[:3]:
+  manufacturer_df = new_df[new_df['Handset Manufacturer'] == manufacturer]
+  unique_imeis_manufacturer_df = manufacturer_df.drop_duplicates(subset='IMEI')
+  top_handsets = unique_imeis_manufacturer_df['Handset Type'].value_counts().head(5)
+  top_handsets_per_manufacturer.append((manufacturer, top_handsets))
+ 
+for manufacturer, top_handsets in top_handsets_per_manufacturer:
+  print(f'The top 5 handsets for {manufacturer}:\n{top_handsets}\n')
+
+clean_df=cleaner.convert_bytes_to_megabytes(new_df,'Social Media DL (Bytes)', 'Social Media UL (Bytes)', 'Google DL (Bytes)', 'Google UL (Bytes)', 'Email DL (Bytes)', 'Email UL (Bytes)', 'Youtube DL (Bytes)', 'Youtube UL (Bytes)', 'Netflix DL (Bytes)', 'Netflix UL (Bytes)', 'Gaming DL (Bytes)', 'Gaming UL (Bytes)', 'Other DL (Bytes)', 'Other UL (Bytes)', 'Total UL (Bytes)', 'Total DL (Bytes)')
+
+new_df=clean_df.copy()
+
+clean_df=cleaner.convert_ms_to_s(new_df,'Start ms','End ms', 'Dur. (ms)','Avg RTT DL (ms)', 'Avg RTT UL (ms)','Activity Duration DL (ms)', 'Activity Duration UL (ms)')
+
+new_df=clean_df.copy()
+
+clean_df= cleaner.convert_kbps_to_mbps(new_df, 'Avg Bearer TP DL (kbps)', 'Avg Bearer TP UL (kbps)')
+
+new_df=clean_df.copy()
+ 
+column_mapping = {'DL TP < 50 Kbps (%)': 'DL TP < 0.05 mbps (%)', '50 Kbps < DL TP < 250 Kbps (%)': '0.05 mbps < DL TP < 0.25 mbps (%)', '250 Kbps < DL TP < 1 Mbps (%)': '0.25 mbps < DL TP < 1 Mbps (%)', 'UL TP < 10 Kbps (%)': 'UL TP < 0.01 mbps (%)', '10 Kbps < UL TP < 50 Kbps (%)': '0.01 mbps < UL TP < 0.05 mbps (%)', '50 Kbps < UL TP < 300 Kbps (%)': '0.05 mbps < UL TP < 0.3 mbps (%)', 'UL TP > 300 Kbps (%)': 'UL TP > 0.3 mbps (%)'}
+
+new_df = new_df.rename(columns=column_mapping)
+ 
+new_df.columns
+ 
+grouped_data = new_df.groupby(['MSISDN/Number', 'Bearer Id']).agg({
+  'Dur. (s)': 'sum',
+  'Social Media DL (MB)': 'sum',
+  'Social Media UL (MB)': 'sum',
+  'Google DL (MB)': 'sum',
+  'Google UL (MB)': 'sum',
+  'Email DL (MB)': 'sum',
+  'Email UL (MB)': 'sum',
+  'Youtube DL (MB)': 'sum',
+  'Youtube UL (MB)': 'sum',
+  'Netflix DL (MB)': 'sum',
+  'Netflix UL (MB)': 'sum',
+  'Gaming DL (MB)': 'sum',
+  'Gaming UL (MB)': 'sum',
+  'Other DL (MB)': 'sum',
+  'Other UL (MB)': 'sum',
+  'Total UL (MB)': 'sum',
+  'Total DL (MB)': 'sum'
+
+}).reset_index()
+ 
+grouped_data['Number of xDR sessions'] = grouped_data.groupby('MSISDN/Number')['Bearer Id'].transform('nunique')
+ 
+grouped_data = grouped_data.drop_duplicates(subset='MSISDN/Number')
+ 
+selected_columns = [
+  'MSISDN/Number', 'Bearer Id', 'Number of xDR sessions', 'Dur. (s)',
+  'Social Media DL (MB)', 'Social Media UL (MB)',
+  'Google DL (MB)', 'Google UL (MB)',
+  'Email DL (MB)', 'Email UL (MB)',
+  'Youtube DL (MB)', 'Youtube UL (MB)',
+  'Netflix DL (MB)', 'Netflix UL (MB)',
+  'Gaming DL (MB)', 'Gaming UL (MB)',
+  'Other DL (MB)', 'Other UL (MB)',
+  'Total UL (MB)', 'Total DL (MB)',
+
+]
+ 
+beh_selected_data = grouped_data[selected_columns]
+ 
+beh_selected_data = beh_selected_data.rename(columns={'Dur. (s)': 'Session duration (s)'})
+ 
+beh_selected_data.head()
+cleaner.percent_missing(beh_selected_data)
+cleaner.missing_values_table(beh_selected_data)
+
+beh_selected_data.describe()
+
+beh_selected_data.skew()
+
+beh_selected_data.kurt()
+
+beh_selected_data['Number of xDR sessions'].min()
+beh_selected_data.columns
+ 
+plotting.plot_hist(beh_selected_data.head(100), "Number of xDR sessions", "brown")
+
+plotting.plot_hist(beh_selected_data.head(100), "Session duration (s)", "orange")
+
+plotting.plot_hist(beh_selected_data.head(100), "Social Media DL (MB)", "green")
+
+plotting.plot_hist(beh_selected_data.head(100), "Social Media UL (MB)", "blue")
+
+plotting.plot_hist(beh_selected_data.head(100), "Google DL (MB)", "green")
+
+plotting.plot_hist(beh_selected_data.head(100), "Google UL (MB)", "blue")
+
+plotting.plot_hist(beh_selected_data.head(100), "Email DL (MB)", "green")
+
+plotting.plot_hist(beh_selected_data.head(100), "Email UL (MB)", "blue")
+
+plotting.plot_hist(beh_selected_data.head(100), "Youtube DL (MB)", "green")
+
+plotting.plot_hist(beh_selected_data.head(100), "Youtube UL (MB)", "blue")
+
+plotting.plot_hist(beh_selected_data.head(100), "Netflix DL (MB)", "green")
+
+plotting.plot_hist(beh_selected_data.head(100), "Netflix UL (MB)", "blue")
+
+plotting.plot_hist(beh_selected_data.head(100), "Gaming DL (MB)", "green")
+
+plotting.plot_hist(beh_selected_data.head(100), "Gaming UL (MB)", "blue")
+
+plotting.plot_hist(beh_selected_data.head(100), "Other DL (MB)", "green")
+
+plotting.plot_hist(beh_selected_data.head(100), "Other UL (MB)", "blue")
+
+plotting.plot_hist(beh_selected_data.head(100), "Total DL (MB)", "
+plotting.plot_hist(beh_selected_data.head(100), "Total UL (MB)", "
+plotting.plot_box(beh_selected_data.head(1000), "Number of xDR sessions", "Number of xDR sessions Outliers")
+
+plotting.plot_box(beh_selected_data.head(1000), "Session duration (s)", "Session duration (s) Outliers")
+
+plotting.plot_box(beh_selected_data.head(1000), "Social Media DL (MB)", "Social Media DL (MB) Outliers")
+
+plotting.plot_box(beh_selected_data.head(1000), "Social Media UL (MB)", "Social Media UL (MB) Outliers")
+
+plotting.plot_box(beh_selected_data.head(1000), "Google DL (MB)", "Google DL (MB) Outliers")
+
+plotting.plot_box(beh_selected_data.head(1000), "Google UL (MB)", "Google UL (MB) Outliers")
+
+plotting.plot_box(beh_selected_data.head(1000), "Email DL (MB)", "Email DL (MB) Outliers")
+
+plotting.plot_box(beh_selected_data.head(1000), "Email UL (MB)", "Email UL (MB) Outliers")
+
+plotting.plot_box(beh_selected_data.head(1000), "Youtube DL (MB)", "Youtube DL (MB) Outliers")
+
+plotting.plot_box(beh_selected_data.head(1000), "Youtube UL (MB)", "Youtube UL (MB) Outliers")
+
+plotting.plot_box(beh_selected_data.head(1000), "Netflix DL (MB)", "Netflix DL (MB) Outliers")
+
+plotting.plot_box(beh_selected_data.head(1000), "Netflix UL (MB)", "Netflix UL (MB) Outliers")
+
+plotting.plot_box(beh_selected_data.head(1000), "Gaming DL (MB)", "Gaming DL (MB) Outliers")
+
+plotting.plot_box(beh_selected_data.head(1000), "Gaming UL (MB)", "Gaming UL (MB) Outliers")
+
+plotting.plot_box(beh_selected_data.head(1000), "Other DL (MB)", "Other DL (MB) Outliers")
+
+plotting.plot_box(beh_selected_data.head(1000), "Other UL (MB)", "Other UL (MB) Outliers")
+
+plotting.plot_box(beh_selected_data.head(1000), "Total DL (MB)", "Total DL (MB) Outliers")
+
+plotting.plot_box(beh_selected_data.head(1000), "Total UL (MB)", "Total UL (MB) Outliers")
+
+beh_selected_data.columns
+beh_selected_data["Number of xDR sessions"].max()
+columns_to_fix = ['Number of xDR sessions',
+  'Session duration (s)', 'Social Media DL (MB)', 'Social Media UL (MB)',
+  'Google DL (MB)', 'Google UL (MB)', 'Email DL (MB)', 'Email UL (MB)',
+  'Youtube DL (MB)', 'Youtube UL (MB)', 'Netflix DL (MB)',
+  'Netflix UL (MB)', 'Gaming DL (MB)', 'Gaming UL (MB)', 'Other DL (MB)',
+  'Other UL (MB)', 'Total UL (MB)', 'Total DL (MB)']
+
+beh_selected_data = cleaner.fix_multi_outliers(beh_selected_data, columns_to_fix)
+beh_selected_data["Number of xDR sessions"].max()
+beh_selected_data.describe()
+ 
+plotting.plot_box(beh_selected_data.head(100), "Number of xDR sessions", "Number of xDR sessions Outliers")
+
+beh_selected_data.columns
+plotting.plot_scatter(beh_selected_data.head(1000), x_col="Social Media DL (MB)", y_col="Total DL (MB)", hue="Session duration (s)",
+  style="Number of xDR sessions", title="Social Media DL (MB) vs Total DL (MB)")
+ 
+plotting.plot_scatter(beh_selected_data.head(1000), x_col="Social Media UL (MB)", y_col="Total UL (MB)", hue="Session duration (s)",
+  style="Number of xDR sessions", title="Social Media UL (MB) vs Total UL (MB)")
+ 
+plotting.plot_scatter(beh_selected_data.head(1000), x_col="Google DL (MB)", y_col="Total DL (MB)", hue="Session duration (s)",
+  style="Number of xDR sessions", title="Google DL (MB) vs Total DL (MB)")
+ 
+plotting.plot_scatter(beh_selected_data.head(1000), x_col="Google UL (MB)", y_col="Total UL (MB)", hue="Session duration (s)",
+  style="Number of xDR sessions", title="Google UL (MB) vs Total UL (MB)")
+ 
+plotting.plot_scatter(beh_selected_data.head(1000), x_col="Email DL (MB)", y_col="Total DL (MB)", hue="Session duration (s)",
+  style="Number of xDR sessions", title="Email DL (MB) vs Total DL (MB)")
+ 
+plotting.plot_scatter(beh_selected_data.head(1000), x_col="Email UL (MB)", y_col="Total UL (MB)", hue="Session duration (s)",
+  style="Number of xDR sessions", title="Email UL (MB) vs Total UL (MB)")
+ 
+plotting.plot_scatter(beh_selected_data.head(1000), x_col="Youtube DL (MB)", y_col="Total DL (MB)", hue="Session duration (s)",
+  style="Number of xDR sessions", title="Youtube DL (MB) vs Total DL (MB)")
+ 
+plotting.plot_scatter(beh_selected_data.head(1000), x_col="Youtube UL (MB)", y_col="Total UL (MB)", hue="Session duration (s)",
+  style="Number of xDR sessions", title="Youtube DL (MB) vs Total UL (MB)")
+ 
+plotting.plot_scatter(beh_selected_data.head(1000), x_col="Netflix DL (MB)", y_col="Total DL (MB)", hue="Session duration (s)",
+  style="Number of xDR sessions", title="Netflix DL (MB) vs Total DL (MB)")
+ 
+plotting.plot_scatter(beh_selected_data.head(1000), x_col="Netflix UL (MB)", y_col="Total UL (MB)", hue="Session duration (s)",
+  style="Number of xDR sessions", title="Netflix UL (MB) vs Total UL (MB)")
+ 
+plotting.plot_scatter(beh_selected_data.head(1000), x_col="Gaming DL (MB)", y_col="Total DL (MB)", hue="Session duration (s)",
+  style="Number of xDR sessions", title="Gaming DL (MB) vs Total DL (MB)")
+ 
+plotting.plot_scatter(beh_selected_data.head(1000), x_col="Gaming UL (MB)", y_col="Total UL (MB)", hue="Session duration (s)",
+  style="Number of xDR sessions", title="Gaming UL (MB) vs Total UL (MB)")
+ 
+plotting.plot_scatter(beh_selected_data.head(1000), x_col="Other DL (MB)", y_col="Total DL (MB)", hue="Session duration (s)",
+  style="Number of xDR sessions", title="Other DL (MB) vs Total DL (MB)")
+ 
+plotting.plot_scatter(beh_selected_data.head(1000), x_col="Other UL (MB)", y_col="Total UL (MB)", hue="Session duration (s)",
+  style="Number of xDR sessions", title="Other UL (MB) Media UL (MB) vs Total UL (MB)")
+ 
+plotting.plot_scatter(beh_selected_data.head(1000), x_col="Total DL (MB)", y_col="Total UL (MB)", hue="Session duration (s)",
+  style="Number of xDR sessions", title="Total DL (MB) Media UL (MB) vs Total UL (MB)")
+beh_selected_data.columns
+
+total_duration_per_user = beh_selected_data.groupby('MSISDN/Number')['Session duration (s)'].sum()
+ 
+total_data_columns = ['Social Media DL (MB)', 'Social Media UL (MB)',
+  'Google DL (MB)', 'Google UL (MB)',
+  'Email DL (MB)', 'Email UL (MB)',
+  'Youtube DL (MB)', 'Youtube UL (MB)',
+  'Netflix DL (MB)', 'Netflix UL (MB)',
+  'Gaming DL (MB)', 'Gaming UL (MB)',
+  'Other DL (MB)', 'Other UL (MB)',
+  'Total UL (MB)', 'Total DL (MB)']
+ 
+beh_selected_data['Total Data (MB)'] = beh_selected_data[total_data_columns].sum(axis=1)
+ 
+user_data = pd.DataFrame({
+  'MSISDN/Number': total_duration_per_user.index,
+  'Total Duration (s)': total_duration_per_user.values,
+  'Total Data (MB)': beh_selected_data.groupby('MSISDN/Number')['Total Data (MB)'].sum().values
+
+})
+ 
+user_data['Duration Decile'] = pd.qcut(user_data['Total Duration (s)'], q=[0, 0.2, 0.4, 0.6, 0.8, 1], labels=False, duplicates='drop')
+
+user_data['Data Decile'] = pd.qcut(user_data['Total Data (MB)'], q=[0, 0.2, 0.4, 0.6, 0.8, 1], labels=False, duplicates='drop')
+ 
+user_data['Decile'] = user_data.apply(lambda row: f"Decile {row['Duration Decile']*20 + 1} ({row['Duration Decile']*20}% - {(row['Duration Decile']+1)*20}%)", axis=1)
+ 
+decile_data = user_data.groupby('Decile').agg({
+  'MSISDN/Number': 'count',
+  'Total Data (MB)': 'sum'
+
+}).reset_index()
+ 
+decile_data = decile_data.rename(columns={'MSISDN/Number': 'Number of Users', 'Total Data (MB)': 'Total Data (DL+UL) per Decile (MB)'})
+ 
+decile_data.set_index('Decile', inplace=True)
+ 
+decile_data.head()
+
+correlation_columns = [
+  'Social Media DL (MB)', 'Social Media UL (MB)',
+  'Google DL (MB)', 'Google UL (MB)', 'Email DL (MB)', 'Email UL (MB)',
+  'Youtube DL (MB)', 'Youtube UL (MB)', 'Netflix DL (MB)',
+  'Netflix UL (MB)', 'Gaming DL (MB)', 'Gaming UL (MB)', 'Other DL (MB)',
+  'Other UL (MB)'
+
+]
+ 
+correlation_data = beh_selected_data[correlation_columns]
+ 
+correlation_matrix = correlation_data.corr()
+ 
+print("Correlation Matrix:")
+
+print(correlation_matrix)
+ 
+print("\nInterpretation:")
+
+print("The correlation matrix shows the correlation coefficients between different data usage categories.")
+
+print("Values closer to 1 indicate a strong positive correlation, values closer to -1 indicate a strong negative correlation, and values near 0 indicate little to no correlation.")
+plotting.plot_heatmap(correlation_matrix,"correlation between the different applications")
+dfPair = beh_selected_data[['Session duration (s)', 'Social Media DL (MB)', 'Social Media UL (MB)',
+  'Google DL (MB)', 'Google UL (MB)', 'Email DL (MB)', 'Email UL (MB)',
+  'Youtube DL (MB)', 'Youtube UL (MB)', 'Netflix DL (MB)',
+  'Netflix UL (MB)', 'Gaming DL (MB)', 'Gaming UL (MB)', 'Other DL (MB)',
+  'Other UL (MB)']]
+sns.pairplot(dfPair.head(50), hue ='Session duration (s)', diag_kind = 'kde',
+  plot_kws = {'alpha': 0.6, 's': 80, 'edgecolor': 'k'},
+  height=4)
+beh_selected_data.dtypes
+
+cleaner.normalizer(beh_selected_data,columns_to_exclude=['MSISDN/Number','Bearer Id'])
+beh_selected_data.describe()
+beh_selected_data.columns
+new_df.columns
+
+eng_adf = pd.merge(new_df, beh_selected_data[['MSISDN/Number', 'Number of xDR sessions']],   on='MSISDN/Number', how='left')
+eng_adf.columns
+
+engagement_metrics = eng_adf.groupby('MSISDN/Number').agg({
+  'Number of xDR sessions': 'count',
+  'Dur. (s)': 'sum',
+  'Total DL (MB)': 'sum',
+  'Total UL (MB)': 'sum'
+
+}).reset_index()
+ 
+top_10_sessions_frequency = engagement_metrics.nlargest(10, 'Number of xDR sessions')[['MSISDN/Number', 'Number of xDR sessions']]
+
+top_10_session_duration = engagement_metrics.nlargest(10, 'Dur. (s)')[['MSISDN/Number', 'Dur. (s)']]
+
+top_10_total_dl_traffic = engagement_metrics.nlargest(10, 'Total DL (MB)')[['MSISDN/Number', 'Total DL (MB)']]
+
+top_10_total_ul_traffic = engagement_metrics.nlargest(10, 'Total UL (MB)')[['MSISDN/Number', 'Total UL (MB)']]
+ 
+print("Top 10 Customers by Sessions Frequency:")
+
+print(top_10_sessions_frequency)
+ 
+print("\nTop 10 Customers by Session Duration:")
+
+print(top_10_session_duration)
+ 
+print("\nTop 10 Customers by Total DL Traffic:")
+
+print(top_10_total_dl_traffic)
+ 
+print("\nTop 10 Customers by Total UL Traffic:")
+
+print(top_10_total_ul_traffic)
+engagement_metrics.head()
+
+unnormalized_engagement_metrics = engagement_metrics.copy()
+ 
+engagement_metrics_columns = ['Number of xDR sessions', 'Dur. (s)', 'Total DL (MB)', 'Total UL (MB)']
+ 
+normalized_engagement_metrics = cleaner.normalizer(engagement_metrics, columns_to_exclude=['MSISDN/Number'])
+ 
+normalized_engagement_metrics_data = normalized_engagement_metrics[engagement_metrics_columns]
+ 
+kmeans = KMeans(n_clusters=3, random_state=42)
+
+engagement_clusters = kmeans.fit_predict(normalized_engagement_metrics_data)
+ 
+engagement_metrics['Engagement Cluster'] = engagement_clusters
+ 
+print("Unnormalized Engagement Metrics:")
+
+print(unnormalized_engagement_metrics)
+ 
+print("\nNormalized Engagement Metrics with Clusters:")
+
+print(engagement_metrics[['MSISDN/Number', 'Number of xDR sessions', 'Dur. (s)', 'Total DL (MB)', 'Total UL (MB)', 'Engagement Cluster']])
+engagement_metrics.head()
+normalized_engagement_metrics.head()
+
+cluster_metrics = engagement_metrics.groupby('Engagement Cluster').agg({
+  'Number of xDR sessions': ['min', 'max', 'mean', 'sum'],
+  'Dur. (s)': ['min', 'max', 'mean', 'sum'],
+  'Total DL (MB)': ['min', 'max', 'mean', 'sum'],
+  'Total UL (MB)': ['min', 'max', 'mean', 'sum']
+
+}).reset_index()
+ 
+print("Metrics for Each Cluster:")
+
+print(cluster_metrics)
+cleaner.missing_values_table(eng_adf)
+
+ceng_adf=eng_adf.copy()
+
+ceng_adf = ceng_adf.dropna(subset=['MSISDN/Number'])
+
+eng_adf=ceng_adf.copy()
+ 
+user_columns = ['MSISDN/Number']
+
+applications_columns = [
+  'Social Media', 'Google', 'Email', 'Youtube',
+  'Netflix', 'Gaming', 'Other'
+
+]
+ 
+total_traffic_columns = [f"{app} Total (MB)" for app in applications_columns]
+ 
+total_traffic_per_application = pd.DataFrame()
+ 
+for app in applications_columns:
+  dl_column = f"{app} DL (MB)"
+  ul_column = f"{app} UL (MB)"
+  total_traffic_per_application[f"{app} Total (MB)"] = eng_adf[dl_column] + eng_adf[ul_column]
+ 
+total_traffic_per_application = pd.concat([eng_adf['MSISDN/Number'], total_traffic_per_application], axis=1)
+ 
+print("Total Traffic per Application per User:")
+
+print(total_traffic_per_application)
+ 
+total_traffic_per_application.columns
+
+traffic_columns = ['Social Media Total (MB)', 'Google Total (MB)', 'Email Total (MB)',
+  'Youtube Total (MB)', 'Netflix Total (MB)', 'Gaming Total (MB)', 'Other Total (MB)']
+ 
+top_10_tables = {}
+ 
+for column in traffic_columns:
+  top_10_users = total_traffic_per_application.nlargest(10, column)[['MSISDN/Number', column]]
+  top_10_tables[column] = top_10_users
+ 
+for column, table in top_10_tables.items():
+  print(f"\nTop 10 users for '{column}':")
+  print(table)
+ 
+total_usage = total_traffic_per_application[traffic_columns].sum()
+ 
+top_3_applications = total_usage.nlargest(3)
+ 
+plt.figure(figsize=(10, 6))
+ 
+top_3_applications.plot(kind='bar', color='skyblue')
+ 
+plt.title('Top 3 Most Used Applications')
+
+plt.xlabel('Application')
+
+plt.ylabel('Total Data Usage (MB)')
+ 
+plt.show()
+ 
+engagement_columns = ['Social Media Total (MB)', 'Google Total (MB)', 'Email Total (MB)',
+  'Youtube Total (MB)', 'Netflix Total (MB)', 'Gaming Total (MB)', 'Other Total (MB)']
+ 
+engagement_data = total_traffic_per_application[engagement_columns]
+ 
+inertia = []
+
+for k in range(1, 11):   kmeans = KMeans(n_clusters=k, random_state=42)
+  kmeans.fit(engagement_data)
+  inertia.append(kmeans.inertia_)
+ 
+plt.figure(figsize=(8, 6))
+
+plt.plot(range(1, 11), inertia, marker='o')
+
+plt.title('Elbow Method for Optimal k')
+
+plt.xlabel('Number of Clusters (k)')
+
+plt.ylabel('Sum of Squared Distances (Inertia)')
+
+plt.show()
+
+normalized_engagement_metrics_data = total_traffic_per_application[engagement_columns]
+ 
+inertia = []
+
+for k in range(1, 11):   kmeans = KMeans(n_clusters=k, random_state=42)
+  kmeans.fit(engagement_data)
+  inertia.append(kmeans.inertia_)
+ 
+plt.figure(figsize=(8, 6))
+
+plt.plot(range(1, 11), inertia, marker='o')
+
+plt.title('Elbow Method for Optimal k')
+
+plt.xlabel('Number of Clusters (k)')
+
+plt.ylabel('Sum of Squared Distances (Inertia)')
+
+plt.show()
+import pandas as pd
+import numpy as np
+import seaborn as sns
+import matplotlib.pyplot as plt
+from sklearn.preprocessing import MinMaxScaler
+ 
+def percent_missing(df):
+  totalCells = np.product(df.shape)
+  missingCount = df.isnull().sum()
+  totalMissing = missingCount.sum()
+  print("The dataset contains", round(
+  ((totalMissing/totalCells) * 100), 2), "%", "missing values.")
+ 
+def missing_values_table(df):
+  mis_val = df.isnull().sum()
+  mis_val_percent = 100 * df.isnull().sum() / len(df)
+  mis_val_dtype = df.dtypes
+  mis_val_table = pd.concat(
+  [mis_val, mis_val_percent, mis_val_dtype], axis=1)
+  mis_val_table_ren_columns = mis_val_table.rename(
+  columns={0: 'Missing Values', 1: '% of Total Values', 2: 'Dtype'})
+  mis_val_table_ren_columns = mis_val_table_ren_columns[
+  mis_val_table_ren_columns.iloc[:, 1] != 0].sort_values(
+  '% of Total Values', ascending=False).round(1)
+  print("Your selected dataframe has " + str(df.shape[1]) + " columns.\n"
+  "There are " + str(mis_val_table_ren_columns.shape[0]) +
+  " columns that have missing values.")
+  return mis_val_table_ren_columns
+ 
+def drop_columns_by_missing_percentage(df, percentage):
+  """
+  Drop columns in the DataFrame based on the given percentage threshold of missing values.
+  Parameters:
+  - df: DataFrame
+  The input DataFrame.
+  - percentage: float
+  The threshold percentage for dropping columns.
+  Returns:
+  - df_cleaned: DataFrame
+  The DataFrame with columns dropped based on the threshold.
+  """
+  missing_values_info = missing_values_table(df)
+  columns_to_drop = missing_values_info[missing_values_info['% of Total Values']
+  > percentage].index
+  df_cleaned = df.drop(columns=columns_to_drop)
+  print(
+  f"\nDropped {len(columns_to_drop)} columns based on the {percentage}% missing value threshold.")
+  print("Remaining columns:", df_cleaned.shape[1])
+  return df_cleaned
+ 
+def fill_missing_values(df, column_names, fill_method='mean'):
+  """
+  Fill missing values in specified columns of the DataFrame based on the provided fill method.
+  Parameters:
+  - df: DataFrame
+  The input DataFrame.
+  - column_names: list
+  List of column names with missing values to fill.
+  - fill_method: str
+  The fill method to use (default is 'mean'). Options: 'mean', 'median', 'mode', 'bfill', 'ffill', or a specific value.
+  Returns:
+  - df_filled: DataFrame
+  The DataFrame with missing values filled in the specified columns.
+  """
+  df_filled = df.copy()
+  if fill_method == 'mean':
+  fill_values = df_filled[column_names].mean()
+  elif fill_method == 'median':
+  fill_values = df_filled[column_names].median()
+  elif fill_method == 'mode':
+  fill_values = df_filled[column_names].mode().iloc[0]
+  elif fill_method == 'bfill':
+  fill_values = df_filled[column_names].bfill()
+  elif fill_method == 'ffill':
+  fill_values = df_filled[column_names].ffill()
+  else:
+  fill_values = fill_method
+  df_filled[column_names] = df_filled[column_names].fillna(fill_values)
+  print(
+  f"\nFilled missing values in columns {column_names} using '{fill_method}' method.")
+  return df_filled
+ 
+def get_numeric_columns(df):
+  numeric_cols = df.select_dtypes(include=['float64']).columns
+  return list(numeric_cols)
+ 
+def fix_multi_outliers(df, columns, lower_percentile=0.5, upper_percentile=95):
+  df = df.copy()
+  for col in columns:
+  if col not in ["Bearer Id", "IMSI", "MSISDN/Number", "IMEI"]:
+  lower_threshold = df[col].quantile(lower_percentile / 100)
+  upper_threshold = df[col].quantile(upper_percentile / 100)
+  df.loc[df[col] < lower_threshold, col] = df[col].median()
+  df.loc[df[col] > upper_threshold, col] = df[col].median()
+  return df
+ 
+def fix_outliers(df, columns):
+  for column in columns:
+  df[column] = np.where(df[column] > df[column].quantile(
+  0.95), df[column].median(), df[column])
+  return df[columns]
+ 
+def convert_bytes_to_megabytes(df, *bytes_columns):
+  """
+  Convert specified columns from bytes to megabytes and rename columns.
+  Parameters:
+  - df: DataFrame
+  The input DataFrame.
+  - *bytes_columns: str
+  Variable-length list of column names with bytes values.
+  """
+  df_result = df.copy()
+  megabyte = 1 * 10e+5   for col in bytes_columns:
+  df_result[col] = df_result[col] / megabyte
+  new_col_name = col.replace('Bytes', 'MB')
+  df_result.rename(columns={col: new_col_name}, inplace=True)
+  return df_result
+ 
+def convert_ms_to_s(df, *ms_columns):
+  """
+  Convert specified columns from milliseconds to seconds and rename columns.
+  Parameters:
+  - df: DataFrame
+  The input DataFrame.
+  - *ms_columns: str
+  Variable-length list of column names with milliseconds values.
+  """
+  df_result = df.copy()
+  for col in ms_columns:
+  df_result[col] = df_result[col] / 1000
+  new_col_name = col.replace('ms', 's')
+  df_result.rename(columns={col: new_col_name}, inplace=True)
+  return df_result
+ 
+def convert_kbps_to_mbps(df, *kbps_columns):
+  """
+  Convert specified columns from kilobits per second (kbps) to megabits per second (mbps)
+  and rename columns.
+  Parameters:
+  - df: DataFrame
+  The input DataFrame.
+  - *kbps_columns: str
+  Variable-length list of column names with kbps values.
+  Returns:
+  - DataFrame
+  A new DataFrame with specified columns converted to mbps and renamed.
+  """
+  df_result = df.copy()
+  for col in kbps_columns:
+  df_result[col] = df_result[col] / 1000
+  new_col_name = col.replace('kbps', 'mbps')
+  df_result.rename(columns={col: new_col_name}, inplace=True)
+  return df_result
+ 
+def normalizer(df, columns_to_exclude=[]):
+  normalized_df = df.copy()
+  columns_to_normalize = [
+  col for col in df.columns if col not in columns_to_exclude]
+  if columns_to_normalize:
+  minmax_scaler = MinMaxScaler()
+  normalized_values = minmax_scaler.fit_transform(
+  df[columns_to_normalize])
+  normalized_df[columns_to_normalize] = normalized_values
+  print("Min Value: ", normalized_values.min())
+  print("Max value: ", normalized_values.max())
+  return normalized_df
+import pandas as pd
+from sqlalchemy import create_engine
+import os
+ 
+def load_data(credentials_file='env_vars.txt', database_name='telecom', table_name='xdr_data'):
+  script_dir = os.path.dirname(os.path.abspath(__file__))
+  credentials_file_path = os.path.join(script_dir, '..', credentials_file)
+  user, password, host, port = read_db_credentials(credentials_file_path)
+  connection_params = {"host": host, "user": user,
+  "password": password, "port": port, "database": database_name}
+  engine = create_engine(
+  f"postgresql+psycopg2://{connection_params['user']}:{connection_params['password']}@{connection_params['host']}:{connection_params['port']}/{connection_params['database']}")
+  sql_query = f'SELECT * FROM {table_name}'
+  df = pd.read_sql(sql_query, con=engine)
+  return df
+ 
+def write_to_sql(df, table_name, credentials_file='env_vars.txt', database_name='telecom'):
+  script_dir = os.path.dirname(__file__)
+  credentials_file_path = os.path.join(script_dir, '..', credentials_file)
+  user, password, host, port = read_db_credentials(credentials_file_path)
+  connection_params = {"host": host, "user": user,
+  "password": password, "port": port, "database": database_name}
+  engine = create_engine(
+  f"postgresql+psycopg2://{connection_params['user']}:{connection_params['password']}@{connection_params['host']}:{connection_params['port']}/{connection_params['database']}")
+  df.to_sql(name=table_name, con=engine, index=False, if_exists='replace')
+ 
+def read_db_credentials(credentials_file):
+  with open(credentials_file, 'r') as file:
+  lines = file.readlines()
+  user = lines[0].strip().split('=')[1]
+  password = lines[1].strip().split('=')[1]
+  host = lines[2].strip().split('=')[1]
+  port = lines[3].strip().split('=')[1]
+  return user, password, host, port

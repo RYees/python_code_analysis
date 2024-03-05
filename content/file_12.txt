@@ -1,0 +1,517 @@
+import missingno as msno
+
+import pandas as pd
+
+import logging
+
+import sys
+
+import os
+ 
+sys.path.append(os.path.abspath(os.path.join("../script")))
+
+from utils import percent_missing,format_float, find_agg, missing_values_table,convert_bytes_to_megabytes,fix_missing_ffill,fix_missing_bfill
+import pandas as pd
+
+from sqlalchemy import create_engine
+ 
+database_name = 'week1'
+
+table_name= 'xdr_data'
+ 
+connection_params = { "host": "localhost", "user": "postgres", "password": "pgadmin",
+  "port": "5432", "database": database_name}
+ 
+engine = create_engine(f"postgresql+psycopg2://{connection_params['user']}:{connection_params['password']}@{connection_params['host']}:{connection_params['port']}/{connection_params['database']}")
+ 
+sql_query = 'SELECT * FROM xdr_data'
+ 
+df = pd.read_sql(sql_query, con= engine)
+ 
+df.info()
+
+i = 0
+
+for key, item in df.isnull().sum().items():
+  if item==0:
+  i+=1
+  print(key)
+
+print('the dataset contain {} columns with no missing values'.format(i))
+
+columns = []
+
+counts=[]
+
+i=0
+
+for key, item in df.isnull().sum().items():
+  if item != 0:
+  columns.append(key)
+  counts.append(item)
+  i+=1
+
+print('the dataset has {} columns with missing values'.format(i))
+
+pd.DataFrame({'column name':columns,'counts':counts})
+ 
+msno.bar(df)
+msno.matrix(df)
+
+msno.heatmap(df)
+msno.dendrogram(df)
+totalCells, missingCount, totalMissing = percent_missing(df)
+
+print("The Telcom dataset contains", round(
+  ((totalMissing/totalCells) * 100), 2), "%", "missing values.")
+mis_val_table_ren_columns = missing_values_table(df)
+
+mis_val_table_ren_columns
+
+import pandas as pd
+
+import numpy as np
+
+import logging
+ 
+class MissingInformation:
+  def __init__(self,df:pd.DataFrame):
+  self.df = df
+  logging.basicConfig(filename='../logfile.log', filemode='a',
+  encoding='utf-8', level=logging.DEBUG)
+  def missing_values_table(self,df:pd.DataFrame)->pd.DataFrame:
+  mis_val = df.isnull().sum()
+  mis_val_percent = 100 * df.isnull().sum() / len(df)
+  mis_val_dtype = df.dtypes
+  mis_val_table = pd.concat(
+  [mis_val, mis_val_percent, mis_val_dtype], axis=1)
+  mis_val_table_ren_columns = mis_val_table.rename(
+  columns={0: 'Missing Values', 1: '% of Total Values', 2: 'Dtype'})
+  mis_val_table_ren_columns = mis_val_table_ren_columns[
+  mis_val_table_ren_columns.iloc[:, 1] != 0].sort_values(
+  '% of Total Values', ascending=False).round(1)
+  logging.info("Your selected dataframe has " + str(df.shape[1]) + " columns.\n"
+  "There are " + str(mis_val_table_ren_columns.shape[0]) +
+  " columns that have missing values.")
+  return mis_val_table_ren_columns
+  def percent_missing(self,df:pd.DataFrame):
+  totalCells = np.product(df.shape)
+  missingCount = df.isnull().sum()
+  totalMissing = missingCount.sum()
+  return totalCells, missingCount, totalMissing
+import logging
+
+import pandas as pd
+
+import numpy as np
+ 
+import logging
+
+import re
+
+class DataFrameInformation:
+  def __init__(self,data:pd.DataFrame):
+  self.data = data
+  logging.basicConfig(filename='../logfile.log', filemode='a',
+  encoding='utf-8', level=logging.DEBUG)
+  def get_skewness(self,data:pd.DataFrame):
+  skewness = data.skew(axis=0, skipna=True)
+  df_skewness = pd.DataFrame(skewness)
+  df_skewness = df_skewness.rename(
+  columns={0: 'skewness'})
+  return df_skewness
+  def get_skewness_missing_count(self,data:pd.DataFrame):
+  df_skewness = self.get_skewness(data)
+  minfo = MissingInformation(data)
+  mis_val_table_ren_columns = minfo.missing_values_table(data)
+  df1 = pd.concat([df_skewness, mis_val_table_ren_columns], axis=1)
+  df1['Dtype'] = df1['Dtype'].fillna('float64')
+  df1['% of Total Values'] = df1['% of Total Values'].fillna(0.0)
+  df1['Missing Values'] = df1['Missing Values'].fillna(0)
+  df1 = df1.sort_values(by='Missing Values', ascending=False)
+  return df1
+  def get_column_with_string(self,df: pd.DataFrame, text):
+  return [col for col in df.columns if re.findall(text, col) != []]
+  def get_dataframe_information(self,df: pd.DataFrame):
+  columns = []
+  counts = []
+  i = 0
+  for key, item in df.isnull().sum().items():
+  if item != 0:
+  columns.append(key)
+  counts.append(item)
+  i += 1
+  logging.info(
+  'the dataset contain {} columns with missing values'.format(i))
+  return pd.DataFrame({'column name': columns, 'counts': counts})
+
+import numpy as np
+
+numeric_columns = df.select_dtypes(include=np.number)
+
+skewness = numeric_columns.skew(axis=0, skipna=True)
+ 
+df_skewness = pd.DataFrame({'skewness': skewness})
+
+df_skewness
+
+df_skewness.plot(kind='bar')
+df1 = pd.concat([df_skewness, mis_val_table_ren_columns], axis=1)
+
+df1['Dtype'] = df1['Dtype'].fillna('float64')
+
+df1['% of Total Values'] = df1['% of Total Values'].fillna(0.0)
+
+df1['Missing Values'] = df1['Missing Values'].fillna(0)
+
+df1.sort_values(by='Missing Values', ascending=False)
+df['Nb of sec with Vol UL < 1250B'].plot(kind='kde')
+ 
+from scipy.stats.mstats import winsorize
+
+class CleanData:
+  def __init__(self,df:pd.DataFrame):
+  self.df = df
+  logging.basicConfig(filename='../logfile.log', filemode='a',
+  encoding='utf-8', level=logging.DEBUG)
+  def convert_dtype(self, df: pd.DataFrame, columns, dtype):
+  for col in columns:
+  df[col] = df[col].astype(dtype=dtype)
+  return df
+  def format_float(self,value):
+  return f'{value:,.2f}'
+  def convert_bytes_to_megabytes(self, df:pd.DataFrame, columns):
+  megabyte = 1*10e+5
+  for col in columns:
+  df[col] = df[col] / megabyte
+  return df
+  def convert_ms_to_sec(self, df:pd.DataFrame, columns):   s = 10e+3
+  for col in columns:
+  df[col] = df[col] / s
+  return df   def fix_missing_ffill(self, df: pd.DataFrame,col):
+  df[col] = df[col].fillna(method='ffill')
+  return df[col]
+  def fix_missing_bfill(self, df: pd.DataFrame, col):
+  df[col] = df[col].fillna(method='bfill')
+  return df[col]
+  def drop_column(self, df: pd.DataFrame, columns) -> pd.DataFrame:
+  for col in columns:
+  df = df.drop([col], axis=1)
+  return df
+  def drop_missing_count_greaterthan_20p(self,data:pd.DataFrame):
+  data_info = DataFrameInformation(data)
+  df = data_info.get_skewness_missing_count(data)
+  not_fill = df[(df['% of Total Values'] >= 20.0)].index.tolist()
+  df_clean = self.drop_column(data, not_fill)
+  return df_clean
+  def fill_mode(self, df: pd.DataFrame, columns) -> pd.DataFrame:
+  for col in columns:
+  df[col] = df[col].fillna(df[col].mode()[0])
+  return df
+  def fix_outlier(self,df:pd.DataFrame, columns):
+  for column in columns:
+  df[column] = np.where(df[column] > df[column].quantile(0.95), df[column].median(), df[column])
+  return df
+  def handle_outliers(self, df: pd.DataFrame,lower,upper):
+  selected_columns = df.select_dtypes(include='float64').columns
+  for col in selected_columns:
+  df[col] = winsorize(df[col], (lower, upper))
+  return df
+df_clean = df.copy()
+
+data_cleaner = CleanData(df_clean)
+
+df_clean['End'] = fix_missing_ffill(df_clean, 'End')
+
+df_clean['Start'] = fix_missing_ffill(df_clean, 'Start')
+ 
+df_clean['Handset Manufacturer'] = df_clean['Handset Manufacturer'].fillna(
+  df_clean['Handset Manufacturer'].mode()[0])
+
+df_clean['Handset Type'] = df_clean['Handset Type'].fillna(
+  df_clean['Handset Type'].mode()[0])
+
+df_clean['Last Location Name'] = df_clean['Last Location Name'].fillna(
+  df_clean['Last Location Name'].mode()[0])
+ 
+drop_column = mis_val_table_ren_columns[mis_val_table_ren_columns['% of Total Values']>15].index
+
+print(drop_column.tolist())
+df_clean = df.drop(drop_column.tolist(),axis=1)
+
+df_clean.head()
+df_clean['Nb of sec with Vol DL < 6250B'] = fix_missing_bfill(
+  df_clean, 'Nb of sec with Vol DL < 6250B')
+
+missing_percentage = (df.isnull().sum() / len(df)) * 100
+ 
+fill_mode = missing_percentage[(missing_percentage < 20.0) & (missing_percentage >= 0.4)].index.tolist()
+
+not_fill_mode = ['IMEI', 'IMSI', 'MSISDN/Number']
+ 
+fill_mode_columns = [x for x in fill_mode if x not in not_fill_mode]
+ 
+columns_to_fill = [col for col in fill_mode_columns if col in df_clean.columns]
+ 
+df_clean[columns_to_fill] = df_clean[columns_to_fill].fillna(df_clean[columns_to_fill].mode().iloc[0])
+ 
+print(df_clean[columns_to_fill].isnull().sum())  def cap_outliers(series):
+  q1 = series.quantile(0.25)
+  q3 = series.quantile(0.75)
+  iqr = q3 - q1
+  lower_bound = q1 - 1.5 * iqr
+  upper_bound = q3 + 1.5 * iqr
+  return series.clip(lower=lower_bound, upper=upper_bound)
+missing_info = MissingInformation(df_clean)
+
+mis_val_table_after_clean = missing_info.missing_values_table(df_clean)
+
+mis_val_table_after_clean
+df_clean.dropna(inplace=True)
+
+mis_val_table_after_clean = missing_info.missing_values_table(df_clean)
+
+mis_val_table_after_clean
+df_clean.info()
+df_clean
+
+df_clean.to_csv('../Data/clean_data.csv',index=False)
+df_clean = pd.read_csv('../Data/clean_data.csv')
+
+df_clean.shape
+import pandas as pd
+
+import numpy as np
+
+import matplotlib.pyplot as plt  
+import seaborn as sns 
+clean_data = pd.read_csv('../Data/clean_data.csv')
+
+clean_data.head()
+
+clean_data.columns
+handset_count = clean_data['Handset Type'].value_counts()
+
+print(len(handset_count), "users")
+
+print("Number of posts per user")
+
+handset_count[:10].plot(kind='bar', color=['teal', 'green', 'blue','purple','pink'])
+handset_manufacturer = clean_data['Handset Manufacturer'].value_counts()
+
+print(len(handset_manufacturer), "users")
+
+print("Number of posts per user")
+
+handset_manufacturer[:3].plot(
+  kind='bar', color=['teal', 'green', 'blue'])
+ 
+manufacturer_counts = clean_data['Handset Manufacturer'].value_counts()
+ 
+top_3_manufacturers = manufacturer_counts.head(3).index
+ 
+filtered_df = clean_data[clean_data['Handset Manufacturer'].isin(top_3_manufacturers)]
+ 
+handset_counts = filtered_df.groupby(['Handset Manufacturer','Handset Type']).size()
+ 
+top_5_handsets = handset_counts.groupby('Handset Manufacturer').nlargest(5)
+ 
+top_5_handsets.unstack().plot(kind='bar', figsize=(10,6))
+
+plt.title('top 5 handsets per manufacturer')
+
+plt.xlabel('manufacturer')
+
+plt.ylabel('freqency')
+
+plt.xticks(rotation=0)
+
+plt.legend(title = 'handset model')
+
+plt.show()
+handset_man= clean_data[clean_data['Handset Manufacturer'].isin(['Apple','Sumsung','Huawei'])]
+
+handset_man.groupby('Handset Manufacturer')['Handset Type'].value_counts()[:10].plot.bar(
+  figsize=(12, 10), fontsize=15)
+
+aggregated_data = clean_data.groupby('MSISDN/Number').agg({
+  'Dur. (ms)': 'count',   'Dur. (ms)': 'sum',   'Total UL (Bytes)': 'sum',
+  'Total DL (Bytes)': 'sum',
+  'Social Media DL (Bytes)': 'sum',
+  'Social Media UL (Bytes)': 'sum',
+  'Google DL (Bytes)': 'sum',
+  'Google UL (Bytes)': 'sum',
+  'Email DL (Bytes)': 'sum',
+  'Email UL (Bytes)': 'sum',
+  'Youtube DL (Bytes)': 'sum',
+  'Youtube UL (Bytes)': 'sum',
+  'Netflix DL (Bytes)': 'sum',
+  'Netflix UL (Bytes)': 'sum',
+  'Gaming DL (Bytes)': 'sum',
+  'Gaming UL (Bytes)': 'sum',
+  'Other DL (Bytes)': 'sum',
+  'Other UL (Bytes)': 'sum'
+
+}).reset_index()
+
+aggregated_data.head()  
+summary_stats = clean_data.describe()
+
+summary_stats
+
+dispersion_params = clean_data[['Total UL (Bytes)', 'Total DL (Bytes)', 'Social Media DL (Bytes)',   'Google DL (Bytes)', 'Email DL (Bytes)', 'Youtube DL (Bytes)',
+  'Netflix DL (Bytes)', 'Gaming DL (Bytes)', 'Other DL (Bytes)']].std()
+
+dispersion_params
+
+clean_data[['Total UL (Bytes)', 'Total DL (Bytes)', 'Social Media DL (Bytes)',   'Google DL (Bytes)', 'Email DL (Bytes)', 'Youtube DL (Bytes)',
+  'Netflix DL (Bytes)', 'Gaming DL (Bytes)', 'Other DL (Bytes)']].hist(figsize=(10, 10))
+
+plt.tight_layout()
+
+plt.show()
+
+app_vs_total_data = clean_data[['Total UL (Bytes)', 'Total DL (Bytes)', 'Social Media DL (Bytes)',   'Google DL (Bytes)', 'Email DL (Bytes)', 'Youtube DL (Bytes)',
+  'Netflix DL (Bytes)', 'Gaming DL (Bytes)', 'Other DL (Bytes)']].corr()
+
+app_vs_total_data
+
+clean_data['Total_Session_duration'] = clean_data['Dur. (ms)'].groupby(clean_data['MSISDN/Number']).transform('sum')
+
+clean_data['Decile_Class'] = pd.qcut(clean_data['Total_Session_duration'], q=5, labels=False)
+ 
+total_data_per_decile = clean_data.groupby('Decile_Class')[['Total UL (Bytes)', 'Total DL (Bytes)']].sum()
+
+total_data_per_decile
+
+correlation_matrix = clean_data[['Social Media DL (Bytes)', 'Google DL (Bytes)', 'Email DL (Bytes)',   'Youtube DL (Bytes)', 'Netflix DL (Bytes)', 'Gaming DL (Bytes)',   'Other DL (Bytes)']].corr()
+
+correlation_matrix
+import sklearn
+
+from sklearn.decomposition import PCA
+ 
+pca_data = clean_data[['Social Media DL (Bytes)', 'Google DL (Bytes)', 'Email DL (Bytes)',   'Youtube DL (Bytes)', 'Netflix DL (Bytes)', 'Gaming DL (Bytes)',   'Other DL (Bytes)']]
+ 
+pca_data_standardized = (pca_data - pca_data.mean()) / pca_data.std()
+ 
+pca = PCA(n_components=2)
+
+pca.fit(pca_data_standardized)
+ 
+components = pca.components_
+
+explained_variance = pca.explained_variance_ratio_
+ 
+print("Principal Components:")
+
+print(components)
+
+print("Explained Variance Ratio:")
+
+print(explained_variance)
+import pandas as pd
+
+import numpy as np
+
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+
+from sklearn.preprocessing import MinMaxScaler
+
+from sklearn.cluster import KMeans
+df = pd.read_csv('../Data/clean_data.csv')
+
+session_frequency = df['MSISDN/Number'].value_counts()
+
+session_frequency
+
+average_session_duration = df.groupby('MSISDN/Number')['Dur. (ms)'].mean()
+
+average_session_duration
+
+df['Total_Traffic'] = df['Total UL (Bytes)'] + df['Total DL (Bytes)']
+
+total_traffic_per_user = df.groupby('MSISDN/Number')['Total_Traffic'].sum()
+
+total_traffic_per_user
+ 
+engagement_metrics = pd.DataFrame({
+  'Session_Frequency': session_frequency,
+  'Average_Session_Duration': average_session_duration,
+  'Total_Traffic': total_traffic_per_user
+
+}).reset_index()
+ 
+engagement_metrics.head()
+
+engagement_metrics.columns = ['Session_Frequency', 'Average_Session_Duration', 'Total_Traffic']
+top_10_session_frequency = engagement_metrics.nlargest(10, 'Session_Frequency')
+
+top_10_session_frequency
+top_10_avg_duration = engagement_metrics.nlargest(10, 'Average_Session_Duration')
+
+top_10_avg_duration
+top_10_total_traffic = engagement_metrics.nlargest(10, 'Total_Traffic')
+
+top_10_total_traffic
+
+scaler = MinMaxScaler()
+
+normalized_metrics = scaler.fit_transform(engagement_metrics.drop('MSISDN/Number', axis=1))
+
+normalized_metrics
+
+kmeans = KMeans(n_clusters=3, n_init=10, random_state=42)
+
+engagement_metrics['Cluster'] = kmeans.fit_predict(normalized_metrics)
+ 
+cluster_stats = engagement_metrics.groupby('Cluster').agg({
+  'Session_Frequency': ['min', 'max', 'mean', 'sum'],
+  'Average_Session_Duration': ['min', 'max', 'mean', 'sum'],
+  'Total_Traffic': ['min', 'max', 'mean', 'sum']
+
+}).reset_index()
+
+cluster_stats
+
+app_traffic = df.groupby('MSISDN/Number')[['Social Media DL (Bytes)', 'Google DL (Bytes)',   'Email DL (Bytes)', 'Youtube DL (Bytes)',
+  'Netflix DL (Bytes)', 'Gaming DL (Bytes)',   'Other DL (Bytes)']].sum()
+
+app_traffic
+
+app_traffic['Total_App_Traffic'] = app_traffic.sum(axis=1)
+top_10_social_media = app_traffic.nlargest(10, 'Social Media DL (Bytes)')
+
+top_10_social_media
+top_10_google = app_traffic.nlargest(10, 'Google DL (Bytes)')
+
+top_10_google
+top_10_youtube = app_traffic.nlargest(10, 'Youtube DL (Bytes)')
+
+top_10_youtube  
+total_app_traffic = app_traffic.drop('Total_App_Traffic', axis=1).sum()
+ 
+top_3_apps = total_app_traffic.nlargest(3)
+
+top_3_apps.plot(kind='bar', xlabel='Applications', ylabel='Total Traffic', title='Top 3 Most Used Applications')
+
+plt.show()
+
+inertia_values = []
+
+for k in range(1, 11):
+  kmeans = KMeans(n_clusters=k, random_state=42)
+  kmeans.fit(normalized_metrics)
+  inertia_values.append(kmeans.inertia_)
+ 
+plt.plot(range(1, 11), inertia_values, marker='o')
+
+plt.xlabel('Number of Clusters (k)')
+
+plt.ylabel('Inertia')
+
+plt.title('Elbow Method for Optimal k')
+
+plt.show()

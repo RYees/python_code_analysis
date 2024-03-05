@@ -1,0 +1,568 @@
+import os
+
+from langchain.chat_models import ChatOpenAI
+ 
+os.environ["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY")  
+chat = ChatOpenAI(
+  openai_api_key=os.getenv("OPENAI_API_KEY"),
+  model='gpt-3.5-turbo'
+
+)
+ 
+from langchain.schema import (
+  SystemMessage,
+  HumanMessage,
+  AIMessage
+
+)
+ 
+messages = [
+  SystemMessage(content="You are a helpful assistant."),
+  HumanMessage(content="Hi AI, how are you today?"),
+  AIMessage(content="I'm great thank you. How can I help you?"),
+  HumanMessage(content="I'd like to understand string theory.")
+
+]
+ 
+res = chat(messages)
+
+res
+print(res.content)
+
+messages.append(res)
+ 
+prompt = HumanMessage(
+  content="Why do physicists believe it can produce a 'unified theory'?"
+
+)
+ 
+messages.append(prompt)
+ 
+res = chat(messages)
+ 
+print(res.content)
+ 
+messages.append(res)
+ 
+prompt = HumanMessage(
+  content="What is so special about Llama 2?"
+
+)
+ 
+messages.append(prompt)
+ 
+res = chat(messages)
+print(res.content)
+ 
+messages.append(res)
+ 
+prompt = HumanMessage(
+  content="Can you tell me about the LLMChain in LangChain?"
+
+)
+ 
+messages.append(prompt)
+ 
+res = chat(messages)
+print(res.content)
+llmchain_information = [
+  "A LLMChain is the most common type of chain. It consists of a PromptTemplate, a model (either an LLM or a ChatModel), and an optional output parser. This chain takes multiple input variables, uses the PromptTemplate to format them into a prompt. It then passes that to the model. Finally, it uses the OutputParser (if provided) to parse the output of the LLM into a final format.",
+  "Chains is an incredibly generic concept which returns to a sequence of modular components (or other chains) combined in a particular way to accomplish a common use case.",
+  "LangChain is a framework for developing applications powered by language models. We believe that the most powerful and differentiated applications will not only call out to a language model via an api, but will also: (1) Be data-aware: connect a language model to other sources of data, (2) Be agentic: Allow a language model to interact with its environment. As such, the LangChain framework is designed with the objective in mind to enable those types of applications."
+
+]
+ 
+source_knowledge = "\n".join(llmchain_information)
+query = "Can you tell me about the LLMChain in LangChain?"
+ 
+augmented_prompt = f"""Using the contexts below, answer the query.
+ 
+Contexts:
+
+{source_knowledge}
+ 
+Query: {query}"""
+
+prompt = HumanMessage(
+  content=augmented_prompt
+
+)
+ 
+messages.append(prompt)
+ 
+res = chat(messages)
+print(res.content)
+ 
+from datasets import load_dataset
+ 
+dataset = load_dataset(
+  "jamescalam/llama-2-arxiv-papers-chunked",
+  split="train"
+
+)
+ 
+dataset
+dataset[0]
+ 
+import pinecone
+ 
+pinecone.init(
+  api_key=os.environ.get('PINECONE_API_KEY') or '3306f52a-a64a-46dd-b81a-0d073fb5a072',
+  environment=os.environ.get('PINECONE_ENVIRONMENT') or 'gcp-starter'
+
+)
+import time
+ 
+index_name = 'llama-2-rag'
+ 
+if index_name not in pinecone.list_indexes():
+  pinecone.create_index(
+  index_name,
+  dimension=1536,
+  metric='cosine'
+  )
+  while not pinecone.describe_index(index_name).status['ready']:
+  time.sleep(1)
+ 
+index = pinecone.Index(index_name)
+index.describe_index_stats()
+from langchain.embeddings.openai import OpenAIEmbeddings
+ 
+embed_model = OpenAIEmbeddings(model="text-embedding-ada-002")
+texts = [
+  'this is the first chunk of text',
+  'then another second chunk of text is here'
+
+]
+ 
+res = embed_model.embed_documents(texts)
+
+len(res), len(res[0])
+ 
+from tqdm.auto import tqdm  
+data = dataset.to_pandas()  
+batch_size = 100
+ 
+for i in tqdm(range(0, len(data), batch_size)):
+  i_end = min(len(data), i+batch_size)
+  batch = data.iloc[i:i_end]
+  ids = [f"{x['doi']}-{x['chunk-id']}" for i, x in batch.iterrows()]
+  texts = [x['chunk'] for _, x in batch.iterrows()]
+  embeds = embed_model.embed_documents(texts)
+  metadata = [
+  {'text': x['chunk'],
+  'source': x['source'],
+  'title': x['title']} for i, x in batch.iterrows()
+  ]
+  index.upsert(vectors=zip(ids, embeds, metadata))
+index.describe_index_stats()
+from langchain.vectorstores import Pinecone
+ 
+text_field = "text"  
+vectorstore = Pinecone(
+  index, embed_model.embed_query, text_field
+
+)
+query = "What is so special about Llama 2?"
+ 
+vectorstore.similarity_search(query, k=3)
+def augment_prompt(query: str):
+  results = vectorstore.similarity_search(query, k=3)
+  source_knowledge = "\n".join([x.page_content for x in results])
+  augmented_prompt = f"""Using the contexts below, answer the query.
+  Contexts:
+  {source_knowledge}
+  Query: {query}"""
+  return augmented_prompt
+print(augment_prompt(query))
+
+prompt = HumanMessage(
+  content=augment_prompt(query)
+
+)
+ 
+messages.append(prompt)
+ 
+res = chat(messages)
+ 
+print(res.content)
+prompt = HumanMessage(
+  content="what safety measures were used in the development of llama 2?"
+
+)
+ 
+res = chat(messages + [prompt])
+
+print(res.content)
+prompt = HumanMessage(
+  content=augment_prompt(
+  "what safety measures were used in the development of llama 2?"
+  )
+
+)
+ 
+res = chat(messages + [prompt])   auth_config = weaviate.AuthApiKey(api_key=env_manager['vectordb_keys']['VECTORDB_API_KEY'])
+ 
+print(res.content)
+![Alt text](PromptlyTech.png?raw=true "PromptlyTech_1") 
+![Alt text](PromptlyTech_1.png?raw=true "PromptlyTech_2") 
+Welcome to the PromptlyTech repository! We specialize in bridging the gap between cutting-edge Language Models (LLMs) and real-world businesses, making AI accessible and impactful for everyone. 
+We revolutionize how businesses interact with LLMs by addressing the complexities of prompt engineering. Our solutions unlock: 
+- **Enhanced Decision-Making:** Gain data-driven insights and accurate predictions to fuel strategic choices.
+- **Optimized Operations:** Automate tasks, streamline workflows, and boost efficiency across your organization.
+- **Elevated Customer Experience:** Deliver personalized interactions, answer questions instantly, and build stronger customer relationships. 
+We offer flexible and scalable LLM integration solutions designed to fit your unique needs and evolve with your growth. Whether you're in finance, healthcare, marketing, or any other industry, we have the expertise to help you harness the power of LLMs. 
+This repository contains the code for both the frontend/rag_chatbot and backend components of your LLM integration. 
+To get started with this project, clone the repository using the following command: 
+1. **Clone Repo:** 
+```bash
+git clone https://github.com/amitchew/week_6
+``` 
+2. **Project Setup:** 
+- **Client (Frontend):**  - [Frontend Repository](https://github.com/amitchew/week_6/tree/master/FrontEnd/rag_chatbot) 
+- **Server (Backend):**  - [Backend Repository](https://github.com/amitchew/week_6/tree/master/backend)
+import { useState } from "react";
+
+import Message from "./components/Message";
+import Input from "./components/Input";
+import History from "./components/History";
+import Clear from "./components/Clear";
+
+import "./App.css";
+
+export default function App() {
+  const [input, setInput] = useState("");
+  const [messages, setMessages] = useState([]);
+  const [history, setHistory] = useState([]);
+  const [accuracy, setAccuracy] = useState([]);
+  const [Classification, setClassification] = useState([]);
+  const handleSubmit = async () => {
+  const prompt = {
+  role: "user",
+  content: input
+  };
+  setMessages([...messages, prompt]);
+  await fetch("https://localhost:3001/chat/", {
+  method: "POST",
+  headers: {
+  Authorization: `Bearer ${process.env.REACT_APP_OPENAI_API_KEY}`,
+  "Content-Type": "application/json"
+  },
+  body: JSON.stringify({
+  model: "gpt-3.5-turbo",
+  messages: [...messages, prompt]
+  })
+  })
+  .then((data) => data.json())
+  .then((data) => {
+  console.log(data);
+  const res = data.choices[0].message.content;
+  setMessages((messages) => [
+  ...messages,
+  {
+  role: "assistant",
+  content: res
+  }
+  ]);
+  setAccuracy((accuracy) => [
+  accuracy = data.choices[0]?.message?.accuracy || " ",
+  ]);
+  setClassification((classification) => [
+  classification = data.choices[0]?.message?.classification || " ",
+  ]);
+  setHistory((history) => [...history, { question: input, answer: res }]);
+  setInput("");
+  });
+  };
+  const clear = () => {
+  setMessages([]);
+  setHistory([]);
+  setAccuracy([]);
+  setClassification([]);
+  };
+  return (
+  <div className="App">
+  <div className="Column">
+  <h3 className="Title">PromptlyTech RAG</h3>
+  <div className="Content">
+  {messages.map((el, i) => {
+  return <Message key={i} role={el.role} content={el.content} />;
+  })}
+  </div>
+  <Input
+  value={input}
+  onChange={(e) => setInput(e.target.value)}
+  onClick={input ? handleSubmit : undefined}
+  />
+  </div>
+  <div className="Column">
+  {/* <h3 className="Title">History</h3> */}
+  <h6 className="Title">Accuracy {accuracy} %</h6>
+  <h6 className="Title">Classification {Classification} </h6>
+  <div className="Content">
+  {history.map((el, i) => {
+  return (
+  <History
+  key={i}
+  question={el.question}
+  onClick={() =>
+  setMessages([
+  { role: "user", content: history[i].question },
+  { role: "assistant", content: history[i].answer }
+  ])
+  }
+  />
+  );
+  })}
+  </div>
+  <Clear onClick={clear} />
+  </div>
+  </div>
+  );
+}
+from flask import Flask, request
+ 
+app = Flask(__name__)
+
+@app.route("/", methods=['GET', 'POST'])
+def hello_world():
+  request_data = request.get_json()
+  if request.method == 'POST':
+  prompt = request_data['prompt']
+  return prompt
+import { BrowserRouter, Route, Routes } from "react-router-dom";
+import PromptPage from "./Pages/promptPage";
+function App() {
+  return (
+  <>
+  {/* <BrowserRouter basename="crm"> */}
+  <BrowserRouter>
+  <div className="fixed left-0 top-0 w-screen z-20">
+  {/* <TopNav /> */}
+  </div>
+  <div className="flex h-screen  overflow-auto scrollbar-w-thin">
+  {/* <div className={`${!showSidebar && "hidden"} lg:block z-50`}> */}
+  <div className="fixed top-3 left-0 h-screen z-10 mt-16 w-48">
+  {/* <CustomerSideBar /> */}
+  </div>
+  <div
+  className={`flex lg:pl-64"
+  pr-5 w-full pt-20 h-screen flex-col`}
+  >
+  <Routes>
+  <Route index element={<PromptPage />} />
+  </Routes>
+  </div>
+  </div>
+  </BrowserRouter>
+  </>
+  )
+
+}
+ 
+export default App;
+interface Props {
+  onHide: () => void,
+  add: boolean
+}
+
+const PromptPage: React.FC = () => {
+  return <>TEst</>
+}
+
+export default PromptPage;
+import { createSlice, PayloadAction } from "@reduxjs/toolkit";
+import { api } from "../utils/api";
+
+export class Prompt {
+  id: number = 0;
+  name: string = "";
+  shortName: string = "";
+  description: string = "";
+}
+export class SearchParams {
+  first = 0;
+  rows = 7;
+  searchText = "";
+  sortColumn = "";
+  sortDirection: number | null | undefined = 1;
+}
+interface ResStatus {
+  status: number;
+  msg: string;
+}
+interface State {
+  prompts: Prompt[];
+  prompt: Prompt;
+  searchParams: SearchParams;
+  resStatus: ResStatus;
+  loading: boolean;
+}
+
+const initialState: State = {
+  prompts: [],
+  prompt: {
+  id: 0,
+  name: "",
+  shortName: "",
+  description: "",
+  },
+  searchParams: {
+  first: 0,
+  rows: 7,
+  searchText: "",
+  sortColumn: "",
+  sortDirection: 1,
+  },
+  resStatus: {
+  status: -1,
+  msg: "",
+  },
+  loading: false,
+};
+const PromptSlice = createSlice({
+  name: "prompt",
+  initialState,
+  reducers: {
+  getPrompts: (
+  state: State,
+  action: PayloadAction<Prompt[]>
+  ) => {
+  state.prompts = action.payload;
+  },
+  addPrompt: (state: State, action: PayloadAction<Prompt>) => {
+  state.prompt = action.payload;
+  },
+  setPrompt: (state: State, action: PayloadAction<Prompt>) => {
+  state.prompt = action.payload;
+  },
+  addResStatus: (state: State, action: PayloadAction<ResStatus>) => {
+  state.resStatus = action.payload;
+  },
+  setSearchParams: (state: State, action: PayloadAction<SearchParams>) => {
+  state.searchParams = action.payload;
+  },
+  setLoading: (state: State, action: PayloadAction<boolean>) => {
+  state.loading = action.payload;
+  },
+  },
+});
+export const {
+  getPrompts,
+  addPrompt,
+  setLoading,
+  addResStatus,
+  setSearchParams,
+  setPrompt,
+} = PromptSlice.actions;
+export default PromptSlice.reducer;
+
+const setResStatus = (resStatus: ResStatus) => async (dispatch: any) => {
+  dispatch(addResStatus(resStatus));
+  setTimeout(() => {
+  dispatch(addResStatus({ status: -1, msg: "" }));
+  }, 1000);
+};
+
+export const fetchPrompts =
+  (searchParams: SearchParams): any =>
+  async (dispatch: any) => {
+  try {
+  dispatch(setLoading(true));
+  const { first, rows, searchText, sortColumn, sortDirection } =
+  searchParams;
+  const response = await api.get(
+  `/prompts?f=${first}&r=${rows}&st=${searchText}&sc=${sortColumn}&sd=${sortDirection}&`
+  );
+  let feedData = response.data;
+  dispatch(getPrompts(feedData));
+  dispatch(setLoading(false));
+  } catch (error: any) {
+  dispatch(setLoading(false));
+  dispatch(
+  setResStatus({
+  status: error.response.status,
+  msg: error.response.data.msg,
+  })
+  );
+  }
+  };
+
+export const createPrompt =
+  (prompt: Prompt, searchParams: SearchParams): any =>
+  async (dispatch: any) => {
+  try {
+  dispatch(setLoading(true));
+  const response = await api.post("/prompts", prompt);
+  dispatch(
+  setResStatus({
+  status: response.status,
+  msg: "Prompt created successfully",
+  })
+  );
+  dispatch(fetchPrompts(searchParams));
+  dispatch(setLoading(false));
+  dispatch(addPrompt(response.data));
+  } catch (error: any) {
+  dispatch(setLoading(false));
+  dispatch(
+  setResStatus({
+  status: error.response.status,
+  msg: error.response.data.msg,
+  })
+  );
+  }
+  };
+
+export const updatePrompt =
+  (prompt: Prompt, searchParams: SearchParams): any =>
+  async (dispatch: any) => {
+  try {
+  dispatch(setLoading(true));
+  const response = await api.put(
+  `/prompts/${prompt.id}`,
+  prompt,
+  );
+  dispatch(fetchPrompts(searchParams));
+  dispatch(setLoading(false));
+  dispatch(
+  setResStatus({
+  status: response.status,
+  msg: "Prompt updated sucessfuly",
+  })
+  );
+  } catch (error: any) {
+  dispatch(setLoading(false));
+  dispatch(
+  setResStatus({
+  status: error.response.status,
+  msg: error.response.data.msg,
+  })
+  );
+  }
+  };
+
+export const deletePrompt =
+  (prompt: Prompt): any =>
+  async (dispatch: any) => {
+  try {
+  dispatch(setLoading(true));
+  const response = await api.delete(`/prompts/${prompt.id}`,);
+  dispatch(setLoading(false));
+  dispatch(
+  setResStatus({
+  status: response.status,
+  msg: "Prompt deleted successfully",
+  })
+  );
+  dispatch(fetchPrompts(new SearchParams()));
+  } catch (error: any) {
+  dispatch(setLoading(false));
+  dispatch(
+  setResStatus({
+  status: error.response.status,
+  msg: error.response.data.msg,
+  })
+  );
+  }
+  };

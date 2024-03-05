@@ -1,0 +1,6 @@
+Repository Structure: '
+' ├── week1py.py
+├── week 1.ipynb
+└── README.md
+ '
+' []

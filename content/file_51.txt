@@ -1,0 +1,22 @@
+Repository Structure: '
+' ├── DashBoard
+│   ├── dash_board_for_telecom.sql
+│   ├── dashboard.py
+│   ├── app.py
+│   └── requirements.txt
+├── .gitignore
+├── notebook
+│   ├── final.txt
+│   ├── Data
+│   ├── MSISDNNumber,Satisfaction Score,Cluster_csv_buffer.txt
+│   └── final_solution_all_tasks.ipynb
+├── data_cleaning.ipynb
+├── README.md
+├── .devcontainer
+└── all_task_2_to_5_in_one_python_file
+  ├── Data
+  ├── .gitignore
+  ├── all_task_2_to_5_solution.ipynb
+  └── script
+ '
+'  

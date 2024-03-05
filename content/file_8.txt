@@ -1,0 +1,900 @@
+import pandas as pd
+
+import numpy as np
+
+import psycopg2
+
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+
+from psycopg2 import sql
+
+from sqlalchemy import create_engine
+
+from sklearn.preprocessing import StandardScaler
+
+from sklearn.decomposition import PCA
+
+connection_params = {
+  "host": "localhost",
+  "user": "postgres",
+  "password": "post33
+  "port": "5432"
+
+}
+
+db_name = 'telecom'
+
+connection_params["database"] = db_name
+
+engine = create_engine(f"postgresql+psycopg2://{connection_params['user']}:{connection_params['password']}@{connection_params['host']}:{connection_params['port']}/{connection_params['database']}")
+
+db_conn = engine.connect()
+
+df = pd.read_sql("select * from \"xdr_data\"", db_conn);
+
+df
+df.isna().sum()
+
+percent_missing = df.isna().sum() * 100 / len(df)
+
+missing_percent = pd.DataFrame({'column_name': df.columns,'percent_missing': percent_missing})
+
+missing_percent.sort_values('percent_missing', inplace=True)
+
+missing_percent
+
+columns_to_remove = missing_percent[missing_percent['percent_missing'] >= 30].index.tolist()
+
+columns_to_remove
+
+columns_to_remove = [col for col in columns_to_remove if col not in ['TCP UL Retrans. Vol (Bytes)',
+  'TCP DL Retrans. Vol (Bytes)']]
+ 
+clean_df = df.drop(columns_to_remove,axis=1)
+
+clean_df.isna().sum()
+clean_df['TCP DL Retrans. Vol (Bytes)'] = clean_df['TCP DL Retrans. Vol (Bytes)'].fillna(method='bfill')
+
+clean_df['TCP UL Retrans. Vol (Bytes)'] = clean_df['TCP UL Retrans. Vol (Bytes)'].fillna(method='bfill')
+
+clean_df['Avg RTT DL (ms)'] = clean_df['Avg RTT DL (ms)'].fillna(method='ffill')
+
+clean_df['Avg RTT UL (ms)'] = clean_df['Avg RTT UL (ms)'].fillna(method='ffill')
+
+clean_df.isna().sum()
+
+clean_df['Handset Type'] = clean_df['Handset Type'].fillna('undefined')
+
+clean_df['Handset Manufacturer'] = clean_df['Handset Manufacturer'].fillna('undefined')
+
+clean_df.isna().sum()
+
+clean_df.dropna(inplace=True)
+
+clean_df = clean_df.drop_duplicates()
+
+clean_df.rename(columns={'Dur. (ms)': 'Dur (s)', 'Dur. (ms).1': 'Dur (ms)'}, inplace=True)
+
+clean_df.drop(['Dur (s)'], axis=1, inplace=True)
+
+clean_df.isna().sum()
+clean_df.dtypes
+
+clean_df['Bearer Id'] = clean_df['Bearer Id'].astype("int64")
+
+clean_df['MSISDN/Number'] = clean_df['MSISDN/Number'].astype("int64")
+
+clean_df
+
+clean_df['Last Location Name'] = clean_df['Last Location Name'].astype("string")
+
+clean_df['Handset Type'] = clean_df['Handset Type'].astype("string")
+
+clean_df['Handset Manufacturer'] = clean_df['Handset Manufacturer'].astype("string")
+
+clean_df.dtypes
+clean_df.hist(bins=60,figsize=(20,10))
+clean_df.columns
+clean_df['Handset Type'].value_counts()
+pd.DataFrame(clean_df['Handset Type'].value_counts()[:10]).plot(kind='bar',figsize=(20,10))
+clean_df['Handset Manufacturer'].value_counts()
+pd.DataFrame(clean_df['Handset Manufacturer'].value_counts()[:10]).plot(kind='bar',figsize=(20,10))
+samsung_manu = clean_df[clean_df['Handset Manufacturer'] == 'Samsung']
+
+pd.DataFrame(samsung_manu['Handset Type'].value_counts()[:5]).plot(kind='bar',figsize=(20,10))
+apple_manu = clean_df[clean_df['Handset Manufacturer'] == 'Apple']
+
+pd.DataFrame(apple_manu['Handset Type'].value_counts()[:5]).plot(kind='bar',figsize=(20,10))
+huawei_manu = clean_df[clean_df['Handset Manufacturer'] == 'Huawei']
+
+pd.DataFrame(huawei_manu['Handset Type'].value_counts()[:5]).plot(kind='bar',figsize=(20,10))
+clean_df.columns
+
+def fix_outliers(df: pd.DataFrame):
+  for col in df.select_dtypes('float64').columns.tolist():
+  Q1 = df[col].quantile(0.25)
+  Q3 = df[col].quantile(0.75)
+  IQR = Q3 - Q1
+  lower = Q1 - (IQR * 1.5)
+  upper = Q3 + (IQR * 1.5)
+  df[col] = np.where(df[col] > upper, upper, df[col])
+  df[col] = np.where(df[col] < lower, lower, df[col])
+  return df
+ 
+def hist(df:pd.DataFrame, column:str, color:str='orange')->None:
+  sns.displot(data=df, x=column, color=color, kde=True, height=6, aspect=2)
+  plt.title(f'Distribution of {column}', size=20, fontweight='bold')
+  plt.show()
+
+def scatter(df: pd.DataFrame, x_col: str, y_col: str) -> None:
+  plt.figure(figsize=(12, 7))
+  sns.scatterplot(data = df, x=x_col, y=y_col)
+  plt.title(f'{x_col} Vs. {y_col}\n', size=20)
+  plt.xticks(fontsize=14)
+  plt.yticks( fontsize=14)
+  plt.show()
+clean_df = fix_outliers(clean_df)
+ 
+clean_df['Dur (ms)'].plot(kind='box',figsize=(20,10))
+ 
+hist(clean_df, 'Dur (ms)', 'blue')
+clean_df['Data_Volume_Gaming (Bytes)'] = clean_df['Gaming DL (Bytes)'] +  clean_df['Gaming UL (Bytes)']
+
+clean_df['Data_Volume_Social (Bytes)'] = clean_df['Social Media DL (Bytes)'] +  clean_df['Social Media UL (Bytes)']
+
+clean_df['Data_Volume_Google (Bytes)'] = clean_df['Google DL (Bytes)'] +  clean_df['Google UL (Bytes)']
+
+clean_df['Data_Volume_Email (Bytes)'] = clean_df['Email DL (Bytes)'] +  clean_df['Email UL (Bytes)']
+
+clean_df['Data_Volume_Youtube (Bytes)'] = clean_df['Youtube DL (Bytes)'] +  clean_df['Youtube UL (Bytes)']
+
+clean_df['Data_Volume_Netflix (Bytes)'] = clean_df['Netflix DL (Bytes)'] +  clean_df['Netflix UL (Bytes)']  
+clean_df['Data_Volume_Other (Bytes)'] = clean_df['Other DL (Bytes)'] +  clean_df['Other UL (Bytes)']
+
+clean_df['Data_Volume_Total (Bytes)'] = clean_df['Total DL (Bytes)'] +  clean_df['Total UL (Bytes)']
+
+agg = clean_df.groupby('MSISDN/Number')[['Data_Volume_Gaming (Bytes)','Data_Volume_Social (Bytes)','Data_Volume_Google (Bytes)'\
+  ,'Data_Volume_Email (Bytes)','Data_Volume_Youtube (Bytes)','Data_Volume_Netflix (Bytes)'\
+  ,'Data_Volume_Other (Bytes)','Data_Volume_Total (Bytes)','Dur (ms)']].aggregate('sum')
+
+agg_df = pd.DataFrame(agg)
+
+agg_df['count'] = clean_df['MSISDN/Number'].value_counts()
+
+agg_df
+hist(clean_df, 'Data_Volume_Gaming (Bytes)')
+hist(clean_df, 'Data_Volume_Social (Bytes)')
+hist(clean_df, 'Data_Volume_Google (Bytes)')
+hist(clean_df, 'Data_Volume_Email (Bytes)')
+hist(clean_df, 'Data_Volume_Youtube (Bytes)')
+hist(clean_df, 'Data_Volume_Netflix (Bytes)')
+hist(clean_df, 'Data_Volume_Other (Bytes)')
+scatter(clean_df.sample(10000), 'Data_Volume_Gaming (Bytes)', 'Data_Volume_Total (Bytes)')
+scatter(clean_df.sample(10000), 'Data_Volume_Social (Bytes)', 'Data_Volume_Total (Bytes)')
+scatter(clean_df.sample(10000), 'Data_Volume_Google (Bytes)', 'Data_Volume_Total (Bytes)')
+scatter(clean_df.sample(10000), 'Data_Volume_Email (Bytes)', 'Data_Volume_Total (Bytes)')
+scatter(clean_df.sample(10000), 'Data_Volume_Youtube (Bytes)', 'Data_Volume_Total (Bytes)')
+scatter(clean_df.sample(10000), 'Data_Volume_Netflix (Bytes)', 'Data_Volume_Total (Bytes)')
+scatter(clean_df.sample(10000), 'Data_Volume_Other (Bytes)', 'Data_Volume_Total (Bytes)')
+def heatmap(df:pd.DataFrame, title:str, cmap='Reds')->None:
+  plt.figure(figsize=(13, 7))
+  sns.heatmap(df, annot=True, cmap=cmap, vmin=0, vmax=1, fmt='.2f', linewidths=.7, cbar=True )
+  plt.title(title, size=18, fontweight='bold')
+  plt.show()
+df_corr = clean_df[[
+  'Data_Volume_Gaming (Bytes)', 'Data_Volume_Social (Bytes)', 'Data_Volume_Google (Bytes)',
+  'Data_Volume_Email (Bytes)', 'Data_Volume_Youtube (Bytes)', 'Data_Volume_Netflix (Bytes)',
+  'Data_Volume_Other (Bytes)']
+
+].corr()
+
+df_corr
+heatmap(df_corr, "Correlation of Data Volume of Applications")
+df_float = clean_df.select_dtypes(include=[float])
+
+df_int = clean_df.select_dtypes(include=[int])
+
+df = clean_df
+
+number_array = df_float.columns.to_list() + df_int.columns.to_list()
+
+number_array
+
+features = number_array
+ 
+x = df.loc[:, features].values
+ 
+x = StandardScaler().fit_transform(x)
+number = 20
+
+number_array = range(0,number)
+
+pca = PCA(n_components=number)
+
+principalComponents = pca.fit_transform(x)
+
+principalDf = pd.DataFrame(data = principalComponents
+  , columns = number_array)
+
+principalDf
+pca.explained_variance_ratio_.sum()
+number = 30
+
+number_array = range(0,number)
+
+pca = PCA(n_components=number)
+
+principalComponents = pca.fit_transform(x)
+
+principalDf = pd.DataFrame(data = principalComponents
+  , columns = number_array)
+
+principalDf
+
+pca.explained_variance_ratio_
+pca.explained_variance_ratio_.sum()
+number = 40
+
+number_array = range(0,number)
+
+pca = PCA(n_components=number)
+
+principalComponents = pca.fit_transform(x)
+
+principalDf = pd.DataFrame(data = principalComponents
+  , columns = number_array)
+
+principalDf
+
+pca.explained_variance_ratio_
+pca.explained_variance_ratio_.sum()
+
+number = 2
+
+number_array = range(0,number)
+
+pca = PCA(n_components=number)
+
+principalComponents = pca.fit_transform(x)
+
+principalDf = pd.DataFrame(data = principalComponents
+  , columns = ["1","2"])
+
+principalDf
+pca.explained_variance_ratio_
+pca.explained_variance_ratio_.sum()
+df.columns
+try:
+  print('writing to the database')
+  frame = clean_df.to_sql(
+  "clean_df", con=engine, if_exists='replace')
+  print('successful')
+
+except Exception as e:
+  print("Error writing to database: ", e)
+import pandas as pd
+
+import numpy as np
+
+import psycopg2
+
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+
+from psycopg2 import sql
+
+from sqlalchemy import create_engine
+
+from sklearn.preprocessing import StandardScaler
+
+from sklearn.decomposition import PCA
+
+connection_params = {
+  "host": "localhost",
+  "user": "postgres",
+  "password": "post33
+  "port": "5432"
+
+}
+
+db_name = 'telecom'
+
+connection_params["database"] = db_name
+
+engine = create_engine(f"postgresql+psycopg2://{connection_params['user']}:{connection_params['password']}@{connection_params['host']}:{connection_params['port']}/{connection_params['database']}")
+
+db_conn = engine.connect()
+
+df = pd.read_sql("select * from \"xdr_data\"", db_conn);
+
+df
+df.isna().sum()
+
+percent_missing = df.isna().sum() * 100 / len(df)
+
+missing_percent = pd.DataFrame({'column_name': df.columns,'percent_missing': percent_missing})
+
+missing_percent.sort_values('percent_missing', inplace=True)
+
+missing_percent
+
+columns_to_remove = missing_percent[missing_percent['percent_missing'] >= 30].index.tolist()
+
+columns_to_remove
+
+clean_df = df.drop(columns_to_remove,axis=1)
+
+clean_df.isna().sum()
+
+clean_df['Avg RTT DL (ms)'] = clean_df['Avg RTT DL (ms)'].fillna(method='ffill')
+
+clean_df['Avg RTT UL (ms)'] = clean_df['Avg RTT UL (ms)'].fillna(method='ffill')
+
+clean_df.isna().sum()
+
+clean_df['Handset Type'] = clean_df['Handset Type'].fillna('undefined')
+
+clean_df['Handset Manufacturer'] = clean_df['Handset Manufacturer'].fillna('undefined')
+
+clean_df.isna().sum()
+
+clean_df.dropna(inplace=True)
+
+clean_df = clean_df.drop_duplicates()
+
+clean_df.drop(['Dur. (ms).1'], axis=1, inplace=True)
+
+clean_df.isna().sum()
+clean_df.dtypes
+ 
+clean_df['Bearer Id'] = clean_df['Bearer Id'].astype("int64")
+
+clean_df['MSISDN/Number'] = clean_df['MSISDN/Number'].astype("int64")
+
+clean_df
+
+clean_df['Last Location Name'] = clean_df['Last Location Name'].astype("string")
+
+clean_df['Handset Type'] = clean_df['Handset Type'].astype("string")
+
+clean_df['Handset Manufacturer'] = clean_df['Handset Manufacturer'].astype("string")
+
+clean_df.dtypes
+clean_df.hist(bins=60,figsize=(20,10))
+clean_df.columns
+clean_df['Handset Type'].value_counts()
+pd.DataFrame(clean_df['Handset Type'].value_counts()[:10]).plot(kind='bar',figsize=(20,10))
+clean_df['Handset Manufacturer'].value_counts()
+pd.DataFrame(clean_df['Handset Manufacturer'].value_counts()[:10]).plot(kind='bar',figsize=(20,10))
+samsung_manu = clean_df[clean_df['Handset Manufacturer'] == 'Samsung']
+
+pd.DataFrame(samsung_manu['Handset Type'].value_counts()[:5]).plot(kind='bar',figsize=(20,10))
+apple_manu = clean_df[clean_df['Handset Manufacturer'] == 'Apple']
+
+pd.DataFrame(apple_manu['Handset Type'].value_counts()[:5]).plot(kind='bar',figsize=(20,10))
+huawei_manu = clean_df[clean_df['Handset Manufacturer'] == 'Huawei']
+
+pd.DataFrame(huawei_manu['Handset Type'].value_counts()[:5]).plot(kind='bar',figsize=(20,10))
+clean_df.columns
+
+def fix_outliers(df: pd.DataFrame):
+  for col in df.select_dtypes('float64').columns.tolist():
+  Q1 = df[col].quantile(0.25)
+  Q3 = df[col].quantile(0.75)
+  IQR = Q3 - Q1
+  lower = Q1 - (IQR * 1.5)
+  upper = Q3 + (IQR * 1.5)
+  df[col] = np.where(df[col] > upper, upper, df[col])
+  df[col] = np.where(df[col] < lower, lower, df[col])
+  return df
+ 
+def hist(df:pd.DataFrame, column:str, color:str='orange')->None:
+  sns.displot(data=df, x=column, color=color, kde=True, height=6, aspect=2)
+  plt.title(f'Distribution of {column}', size=20, fontweight='bold')
+  plt.show()
+
+def scatter(df: pd.DataFrame, x_col: str, y_col: str) -> None:
+  plt.figure(figsize=(12, 7))
+  sns.scatterplot(data = df, x=x_col, y=y_col)
+  plt.title(f'{x_col} Vs. {y_col}\n', size=20)
+  plt.xticks(fontsize=14)
+  plt.yticks( fontsize=14)
+  plt.show()
+clean_df = fix_outliers(clean_df)
+ 
+clean_df['Dur. (ms)'].plot(kind='box',figsize=(20,10))
+ 
+hist(clean_df, 'Dur. (ms)', 'blue')
+clean_df['Data_Volume_Gaming (Bytes)'] = clean_df['Gaming DL (Bytes)'] +  clean_df['Gaming UL (Bytes)']
+
+clean_df['Data_Volume_Social (Bytes)'] = clean_df['Social Media DL (Bytes)'] +  clean_df['Social Media UL (Bytes)']
+
+clean_df['Data_Volume_Google (Bytes)'] = clean_df['Google DL (Bytes)'] +  clean_df['Google UL (Bytes)']
+
+clean_df['Data_Volume_Email (Bytes)'] = clean_df['Email DL (Bytes)'] +  clean_df['Email UL (Bytes)']
+
+clean_df['Data_Volume_Youtube (Bytes)'] = clean_df['Youtube DL (Bytes)'] +  clean_df['Youtube UL (Bytes)']
+
+clean_df['Data_Volume_Netflix (Bytes)'] = clean_df['Netflix DL (Bytes)'] +  clean_df['Netflix UL (Bytes)']  
+clean_df['Data_Volume_Other (Bytes)'] = clean_df['Other DL (Bytes)'] +  clean_df['Other UL (Bytes)']
+
+clean_df['Data_Volume_Total (Bytes)'] = clean_df['Total DL (Bytes)'] +  clean_df['Total UL (Bytes)']
+
+agg = clean_df.groupby('MSISDN/Number')[['Data_Volume_Gaming (Bytes)','Data_Volume_Social (Bytes)','Data_Volume_Google (Bytes)'\
+  ,'Data_Volume_Email (Bytes)','Data_Volume_Youtube (Bytes)','Data_Volume_Netflix (Bytes)'\
+  ,'Data_Volume_Other (Bytes)','Data_Volume_Total (Bytes)','Dur. (ms)']].aggregate('sum')
+
+agg_df = pd.DataFrame(agg)
+
+agg_df['count'] = clean_df['MSISDN/Number'].value_counts()
+
+agg_df
+hist(clean_df, 'Data_Volume_Gaming (Bytes)')
+hist(clean_df, 'Data_Volume_Social (Bytes)')
+hist(clean_df, 'Data_Volume_Google (Bytes)')
+hist(clean_df, 'Data_Volume_Email (Bytes)')
+hist(clean_df, 'Data_Volume_Youtube (Bytes)')
+hist(clean_df, 'Data_Volume_Netflix (Bytes)')
+hist(clean_df, 'Data_Volume_Other (Bytes)')
+scatter(clean_df.sample(10000), 'Data_Volume_Gaming (Bytes)', 'Data_Volume_Total (Bytes)')
+scatter(clean_df.sample(10000), 'Data_Volume_Social (Bytes)', 'Data_Volume_Total (Bytes)')
+scatter(clean_df.sample(10000), 'Data_Volume_Google (Bytes)', 'Data_Volume_Total (Bytes)')
+scatter(clean_df.sample(10000), 'Data_Volume_Email (Bytes)', 'Data_Volume_Total (Bytes)')
+scatter(clean_df.sample(10000), 'Data_Volume_Youtube (Bytes)', 'Data_Volume_Total (Bytes)')
+scatter(clean_df.sample(10000), 'Data_Volume_Netflix (Bytes)', 'Data_Volume_Total (Bytes)')
+scatter(clean_df.sample(10000), 'Data_Volume_Other (Bytes)', 'Data_Volume_Total (Bytes)')
+def heatmap(df:pd.DataFrame, title:str, cmap='Reds')->None:
+  plt.figure(figsize=(13, 7))
+  sns.heatmap(df, annot=True, cmap=cmap, vmin=0, vmax=1, fmt='.2f', linewidths=.7, cbar=True )
+  plt.title(title, size=18, fontweight='bold')
+  plt.show()
+df_corr = clean_df[[
+  'Data_Volume_Gaming (Bytes)', 'Data_Volume_Social (Bytes)', 'Data_Volume_Google (Bytes)',
+  'Data_Volume_Email (Bytes)', 'Data_Volume_Youtube (Bytes)', 'Data_Volume_Netflix (Bytes)',
+  'Data_Volume_Other (Bytes)']
+
+].corr()
+
+df_corr
+heatmap(df_corr, "Correlation of Data Volume of Applications")
+df_float = clean_df.select_dtypes(include=[float])
+
+df_int = clean_df.select_dtypes(include=[int])
+
+df = clean_df
+
+number_array = df_float.columns.to_list() + df_int.columns.to_list()
+
+number_array
+
+features = number_array
+ 
+x = df.loc[:, features].values
+ 
+x = StandardScaler().fit_transform(x)
+pca.explained_variance_ratio_.sum()
+number = 20
+
+number_array = range(0,number)
+
+pca = PCA(n_components=number)
+
+principalComponents = pca.fit_transform(x)
+
+principalDf = pd.DataFrame(data = principalComponents
+  , columns = number_array)
+
+principalDf
+pca.explained_variance_ratio_
+pca.explained_variance_ratio_.sum()
+number = 40
+
+number_array = range(0,number)
+
+pca = PCA(n_components=number)
+
+principalComponents = pca.fit_transform(x)
+
+principalDf = pd.DataFrame(data = principalComponents
+  , columns = number_array)
+
+principalDf
+
+pca.explained_variance_ratio_
+pca.explained_variance_ratio_.sum()
+
+number = 2
+
+number_array = range(0,number)
+
+pca = PCA(n_components=number)
+
+principalComponents = pca.fit_transform(x)
+
+principalDf = pd.DataFrame(data = principalComponents
+  , columns = ["1","2"])
+
+principalDf
+pca.explained_variance_ratio_
+pca.explained_variance_ratio_.sum()
+import pandas as pd
+
+import numpy as np
+
+import psycopg2
+
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+
+import pickle
+
+from psycopg2 import sql
+
+from sqlalchemy import create_engine
+ 
+from sklearn.cluster import KMeans
+
+from sklearn.preprocessing import StandardScaler, normalize
+
+import plotly.io as pio
+
+import plotly.express as px
+
+import plotly.graph_objects as go
+
+from plotly.subplots import make_subplots
+connection_params = {
+  "host": "localhost",
+  "user": "postgres",
+  "password": "post33
+  "port": "5432"
+
+}
+
+db_name = 'telecom'
+
+connection_params["database"] = db_name
+
+engine = create_engine(f"postgresql+psycopg2://{connection_params['user']}:{connection_params['password']}@{connection_params['host']}:{connection_params['port']}/{connection_params['database']}")
+
+db_conn = engine.connect()
+
+df = pd.read_sql("select * from \"clean_df\"", db_conn);
+
+df.info()
+user_experience_df = df[[
+  'MSISDN/Number',
+  'Avg RTT DL (ms)',
+  'Avg RTT UL (ms)',
+  'Avg Bearer TP DL (kbps)',
+  'Avg Bearer TP UL (kbps)',
+  'TCP DL Retrans. Vol (Bytes)',
+  'TCP UL Retrans. Vol (Bytes)',
+  'Handset Type']]
+
+user_experience_df
+ 
+user_experience_df['Avg RTT Total (ms)'] = user_experience_df['Avg RTT DL (ms)'] + user_experience_df['Avg RTT UL (ms)']
+
+user_experience_df['Avg Bearer TP Total (kbps)'] = user_experience_df['Avg Bearer TP DL (kbps)'] + user_experience_df['Avg Bearer TP UL (kbps)']
+
+user_experience_df['TCP Retrans. Vol Total (Bytes)'] = user_experience_df['TCP DL Retrans. Vol (Bytes)'] + user_experience_df['TCP UL Retrans. Vol (Bytes)']
+
+user_experience_df_agg = user_experience_df.groupby(
+  'MSISDN/Number').agg({
+  'Avg RTT Total (ms)': 'sum',
+  'Avg Bearer TP Total (kbps)': 'sum',
+  'TCP Retrans. Vol Total (Bytes)': 'sum',
+  'Handset Type': [lambda x: x.mode()[0]]})
+
+user_experience_df_agg.head()
+user_experience_df_agg_new = pd.DataFrame(columns=[
+  "Avg RTT Total (ms)",
+  "Avg Bearer TP Total (kbps)",
+  "TCP Retrans. Vol Total (Bytes)",
+  "Handset Type"])
+ 
+user_experience_df_agg_new["Avg RTT Total (ms)"] = user_experience_df_agg["Avg RTT Total (ms)"]['sum']
+
+user_experience_df_agg_new["Avg Bearer TP Total (kbps)"] = user_experience_df_agg["Avg Bearer TP Total (kbps)"]['sum']
+
+user_experience_df_agg_new["TCP Retrans. Vol Total (Bytes)"] = user_experience_df_agg["TCP Retrans. Vol Total (Bytes)"]['sum']
+
+user_experience_df_agg_new["Handset Type"] = user_experience_df_agg["Handset Type"]['<lambda>']
+
+user_experience_df_agg_new.head()
+telco_tcp = user_experience_df_agg_new.sort_values('TCP Retrans. Vol Total (Bytes)', ascending=False)
+
+top_10 = telco_tcp.head(10)['TCP Retrans. Vol Total (Bytes)']
+
+bottom_10 = telco_tcp.tail(10)['TCP Retrans. Vol Total (Bytes)']
+
+most_10 = user_experience_df_agg_new['TCP Retrans. Vol Total (Bytes)'].value_counts().head(10)
+def plotly_multi_hist(sr, rows, cols, title_text, subplot_titles):
+  fig = make_subplots(rows=rows, cols=cols, subplot_titles=subplot_titles)
+  for i in range(rows):
+  for j in range(cols):
+  x = ["-> " + str(i) for i in sr[i+j].index]
+  fig.add_trace(go.Bar(x=x, y=sr[i+j].values ), row=i+1, col=j+1)
+  fig.update_layout(showlegend=False, title_text=title_text)
+  fig.show()
+pio.renderers.default = "notebook"
+
+plotly_multi_hist([top_10, bottom_10, most_10], 1, 3,
+  "TCP values", ['Top 10', 'Bottom 10', 'Most 10'])
+telco_rtt = user_experience_df_agg_new.sort_values('Avg RTT Total (ms)', ascending=False)
+
+top_10 = telco_rtt.head(10)['Avg RTT Total (ms)']
+
+bottom_10 = telco_rtt.tail(10)['Avg RTT Total (ms)']
+
+most_10 = user_experience_df_agg_new['Avg RTT Total (ms)'].value_counts().head(10)
+plotly_multi_hist([top_10, bottom_10, most_10], 1, 3,
+  "RTT values", ['Top 10', 'Bottom 10', 'Most 10'])
+telco_tp = user_experience_df_agg_new.sort_values('Avg Bearer TP Total (kbps)', ascending=False)
+
+top_10 = telco_tp.head(10)['Avg Bearer TP Total (kbps)']
+
+bottom_10 = telco_tp.tail(10)['Avg Bearer TP Total (kbps)']
+
+most_10 = user_experience_df_agg_new['Avg Bearer TP Total (kbps)'].value_counts().head(10)
+plotly_multi_hist([top_10, bottom_10, most_10], 1, 3,
+  "TP values", ['Top 10', 'Bottom 10', 'Most 10'])
+handset_type_df = user_experience_df_agg_new.groupby('Handset Type').mean()
+
+handset_type_df.head()
+handset_tp_df = handset_type_df.sort_values(
+  'Avg Bearer TP Total (kbps)', ascending=False)
+
+handset_tp_df.head()
+handset_tcp_df = handset_tp_df.sort_values(
+  'TCP Retrans. Vol Total (Bytes)', ascending=False)
+
+handset_tcp_df.head()
+user_experience_df_agg_new.boxplot()
+def replace_outliers_with_fences(df,columns):
+  for col in columns:
+  Q1, Q3 = df[col].quantile(0.25), df[col].quantile(0.75)
+  IQR = Q3 - Q1
+  cut_off = IQR * 1.5
+  lower, upper = Q1 - cut_off, Q3 + cut_off
+  df[col] = np.where(df[col] > upper, upper, df[col])
+  df[col] = np.where(df[col] < lower, lower, df[col])
+  return df
+user_experience_df_agg_new = user_experience_df_agg_new[["Avg RTT Total (ms)",
+  "Avg Bearer TP Total (kbps)",
+  "TCP Retrans. Vol Total (Bytes)"]]
+
+replace_outliers_with_fences(user_experience_df_agg_new,["Avg RTT Total (ms)",
+  "Avg Bearer TP Total (kbps)",
+  "TCP Retrans. Vol Total (Bytes)"])
+user_experience_df_agg_new.boxplot()
+scaler_instance = StandardScaler()
+
+scaled_data = scaler_instance.fit_transform(user_experience_df_agg_new)
+
+scaled_data
+normalized_data = normalize(scaled_data)
+
+normalized_data
+kmeans = KMeans(n_clusters=3, random_state=1).fit(normalized_data)
+
+kmeans.labels_
+user_experience_df_agg_new.insert(0, 'cluster', kmeans.labels_)
+
+user_experience_df_agg_new
+user_experience_df_agg_new['cluster'].value_counts()
+fig = px.scatter(user_experience_df_agg_new, x='TCP Retrans. Vol Total (Bytes)', y='Avg Bearer TP Total (kbps)',
+  color='cluster', size='Avg RTT Total (ms)')
+
+fig.show()
+cluster0 = user_experience_df_agg_new[user_experience_df_agg_new["cluster"]==0]
+
+cluster0[["Avg RTT Total (ms)",
+  "Avg Bearer TP Total (kbps)",
+  "TCP Retrans. Vol Total (Bytes)"]].describe()
+
+cluster1 = user_experience_df_agg_new[user_experience_df_agg_new["cluster"]==1]
+
+cluster1[["Avg RTT Total (ms)",
+  "Avg Bearer TP Total (kbps)",
+  "TCP Retrans. Vol Total (Bytes)"]].describe()
+
+cluster2 = user_experience_df_agg_new[user_experience_df_agg_new["cluster"]==2]
+
+cluster2[["Avg RTT Total (ms)",
+  "Avg Bearer TP Total (kbps)",
+  "TCP Retrans. Vol Total (Bytes)"]].describe()
+ 
+try:
+  print('writing to the database')
+  frame = user_experience_df_agg_new.to_sql(
+  "user_experience", con=engine, if_exists='replace')
+  print('successful')
+
+except Exception as e:
+  print("Error writing to database: ", e)
+
+with open("../models/user_experience.pkl", "wb") as f:
+  pickle.dump(kmeans, f)
+import pandas as pd
+
+import numpy as np
+
+import psycopg2
+
+import matplotlib.pyplot as plt
+
+import pickle
+
+import seaborn as sns
+
+from psycopg2 import sql
+
+from sqlalchemy import create_engine
+ 
+from sklearn.cluster import KMeans
+
+from sklearn.preprocessing import StandardScaler, normalize
+
+import plotly.io as pio
+
+import plotly.express as px
+
+import plotly.graph_objects as go
+
+from plotly.subplots import make_subplots
+
+connection_params = {
+  "host": "localhost",
+  "user": "postgres",
+  "password": "post33
+  "port": "5432"
+
+}
+
+db_name = 'telecom'
+
+connection_params["database"] = db_name
+
+engine = create_engine(f"postgresql+psycopg2://{connection_params['user']}:{connection_params['password']}@{connection_params['host']}:{connection_params['port']}/{connection_params['database']}")
+
+db_conn = engine.connect()
+
+df = pd.read_sql("select * from \"clean_df\"", db_conn);
+
+df.info()
+user_engagement_df = df[['MSISDN/Number', 'Bearer Id', 'Dur (ms)', 'Data_Volume_Total (Bytes)']]
+
+user_engagement_df
+user_engagement_df = user_engagement_df.groupby(
+  'MSISDN/Number').agg({'Bearer Id': 'count', 'Dur (ms)': 'sum', 'Data_Volume_Total (Bytes)': 'sum'})
+
+user_engagement_df = user_engagement_df.rename(
+  columns={'Bearer Id': 'xDR Sessions'})
+
+user_engagement_df.head()
+
+user_engagement_df.nlargest(10, 'xDR Sessions')
+user_engagement_df.nlargest(10, 'Dur (ms)')
+user_engagement_df.nlargest(10, 'Data_Volume_Total (Bytes)')
+user_engagement_df.boxplot();
+def replace_outliers_with_fences(df,columns):
+  for col in columns:
+  Q1, Q3 = df[col].quantile(0.25), df[col].quantile(0.75)
+  IQR = Q3 - Q1
+  cut_off = IQR * 1.5
+  lower, upper = Q1 - cut_off, Q3 + cut_off
+  df[col] = np.where(df[col] > upper, upper, df[col])
+  df[col] = np.where(df[col] < lower, lower, df[col])
+  return df
+user_engagement_df = replace_outliers_with_fences(user_engagement_df,['xDR Sessions', 'Dur (ms)', 'Data_Volume_Total (Bytes)'])
+user_engagement_df.boxplot()
+scaler_instance = StandardScaler()
+
+scaled_data = scaler_instance.fit_transform(user_engagement_df)
+
+scaled_data
+normalized_data = normalize(scaled_data)
+
+normalized_data
+kmeans = KMeans(n_clusters=3, random_state=1).fit(normalized_data)
+
+kmeans.labels_
+user_engagement_df.insert(0, 'cluster', kmeans.labels_)
+
+user_engagement_df
+user_engagement_df['cluster'].value_counts()
+pio.renderers.default = "notebook"
+
+fig = px.scatter(user_engagement_df, x='Data_Volume_Total (Bytes)', y='Dur (ms)',
+  color='cluster', size='xDR Sessions')
+
+fig.show()
+sns.pairplot(
+  user_engagement_df[['cluster','xDR Sessions', 'Dur (ms)', 'Data_Volume_Total (Bytes)']],
+  hue = 'cluster', diag_kind = 'kde',
+  plot_kws = {'alpha': 0.6, 's': 80, 'edgecolor': 'k'},
+  height=3
+
+);
+cluster0 = user_engagement_df[user_engagement_df["cluster"]==0]
+
+cluster0[['xDR Sessions', 'Dur (ms)', 'Data_Volume_Total (Bytes)']].describe()
+cluster1 = user_engagement_df[user_engagement_df["cluster"]==1]
+
+cluster1[['xDR Sessions', 'Dur (ms)', 'Data_Volume_Total (Bytes)']].describe()
+cluster2 = user_engagement_df[user_engagement_df["cluster"]==2]
+
+cluster2[['xDR Sessions', 'Dur (ms)', 'Data_Volume_Total (Bytes)']].describe()
+user_app_engagement_df = df[['MSISDN/Number', 'Data_Volume_Gaming (Bytes)', 'Data_Volume_Social (Bytes)',
+  'Data_Volume_Google (Bytes)', 'Data_Volume_Email (Bytes)', 'Data_Volume_Youtube (Bytes)',
+  'Data_Volume_Netflix (Bytes)', 'Data_Volume_Other (Bytes)']]
+user_app_engagement_df = user_app_engagement_df.groupby(
+  'MSISDN/Number').sum()
+
+user_app_engagement_df.head()
+gaming = user_app_engagement_df.nlargest(10, "Data_Volume_Gaming (Bytes)")['Data_Volume_Gaming (Bytes)']
+
+social_media = user_app_engagement_df.nlargest(10, "Data_Volume_Social (Bytes)")['Data_Volume_Social (Bytes)']
+
+google = user_app_engagement_df.nlargest(10, "Data_Volume_Google (Bytes)")['Data_Volume_Google (Bytes)']
+
+email = user_app_engagement_df.nlargest(10, "Data_Volume_Email (Bytes)")['Data_Volume_Email (Bytes)']
+
+youtube = user_app_engagement_df.nlargest(10, "Data_Volume_Youtube (Bytes)")['Data_Volume_Youtube (Bytes)']
+
+social_media = user_app_engagement_df.nlargest(10, "Data_Volume_Netflix (Bytes)")['Data_Volume_Netflix (Bytes)']
+
+other = user_app_engagement_df.nlargest(10, "Data_Volume_Other (Bytes)")['Data_Volume_Other (Bytes)']
+from scipy.spatial.distance import cdist
+
+def choose_kmeans(df: pd.DataFrame, num: int):
+  distortions = []
+  inertias = []
+  K = range(1, num)
+  for k in K:
+  kmeans = KMeans(n_clusters=k, random_state=0).fit(df)
+  distortions.append(sum(
+  np.min(cdist(df, kmeans.cluster_centers_, 'euclidean'), axis=1)) / df.shape[0])
+  inertias.append(kmeans.inertia_)
+  return (distortions, inertias)
+distortions, inertias =  choose_kmeans(normalized_data, 20)
+fig = make_subplots(
+  rows=1, cols=2, subplot_titles=("Distortion", "Inertia")
+
+)
+
+fig.add_trace(go.Scatter(x=np.array(range(1, 20)), y=distortions), row=1, col=1)
+
+fig.add_trace(go.Scatter(x=np.array(range(1, 20)), y=inertias), row=1, col=2)
+
+fig.update_layout(title_text="The Elbow Method", height=500)
+
+fig.show()
+kmeans = KMeans(n_clusters=6, random_state=6).fit(normalized_data)
+
+kmeans.labels_
+user_engagement_df["cluster"]= kmeans.labels_
+
+user_engagement_df
+fig = px.scatter(user_engagement_df, x='Data_Volume_Total (Bytes)', y='Dur (ms)',
+  color='cluster', size='xDR Sessions')
+
+fig.show()
+
+try:
+  print('writing to the database')
+  frame = user_engagement_df.to_sql(
+  "user_engagement", con=engine, if_exists='replace')
+  print('successful')
+
+except Exception as e:
+  print("Error writing to database: ", e)
+
+with open("../models/user_engagement.pkl", "wb") as f:
+  pickle.dump(kmeans, f)

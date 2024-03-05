@@ -1,0 +1,604 @@
+import pandas as pd
+
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+
+import numpy as np
+
+from sklearn.cluster import KMeans
+
+from sklearn.decomposition import PCA
+
+from sklearn.preprocessing import StandardScaler
+
+from scipy.stats import pearsonr
+
+from sklearn.metrics import pairwise_distances_argmin_min
+
+from sklearn.metrics import silhouette_score
+ 
+%run db_connection.ipynb
+import warnings
+
+warnings.filterwarnings('ignore')
+df = pd.read_sql(sql_query, con= engine)
+df.shape
+df.info()
+df.isnull().sum().sum()
+df.isnull().sum().sort_values(ascending=False)
+
+def percent_missing(df):
+  totalCells = np.product(df.shape)
+  missingCount = df.isnull().sum()
+  totalMissing = missingCount.sum()
+  print("The telecom dataset contains", round(((totalMissing/totalCells) * 100), 2), "%", "missing values.")
+ 
+percent_missing(df)
+
+df.isnull().sum().sort_values(ascending=False)/150001*100
+
+def fix_missing_bymode(df, col):
+  df[col] = df[col].fillna(df[col].mode()[0])
+  return df[col]
+ 
+def fix_missing_bfill(df, col):
+  df[col] = df[col].fillna(method='bfill')
+  return df[col]
+df_clean['Start'] = fix_missing_bymode(df, 'Start')
+
+df_clean['End '] = fix_missing_bymode(df, 'End')
+
+df_clean['Last Location Name'] = fix_missing_bymode(df, 'Last Location Name')
+
+df_clean['Handset Manufacturer'] = fix_missing_bymode(df, 'Handset Manufacturer')
+
+df_clean['Handset Type'] = fix_missing_bymode(df, 'Handset Type')
+
+df_clean.fillna(method='ffill', inplace=True)
+df_clean2 = df
+
+df_clean2.fillna(method='ffill', inplace=True)
+df_clean.isnull().sum()
+
+df_clean = df.drop(['Nb of sec with 37500B < Vol UL', 'Nb of sec with 6250B < Vol UL < 37500B',   'Nb of sec with 125000B < Vol DL',   'Nb of sec with 31250B < Vol DL < 125000B','Nb of sec with 1250B < Vol UL < 6250B',
+  'Nb of sec with 6250B < Vol DL < 31250B',
+  'HTTP UL (Bytes)','HTTP DL (Bytes)'], axis=1)
+
+df_clean.shape
+selected_numeric_vars = [
+  'Dur. (ms)', 'Avg RTT DL (ms)', 'Avg RTT UL (ms)', 'Avg Bearer TP DL (kbps)',
+  'Avg Bearer TP UL (kbps)', 'TCP DL Retrans. Vol (Bytes)', 'TCP UL Retrans. Vol (Bytes)',
+  'Activity Duration DL (ms)', 'Activity Duration UL (ms)', 'Social Media DL (Bytes)',
+  'Social Media UL (Bytes)', 'Google DL (Bytes)', 'Google UL (Bytes)',
+  'Email DL (Bytes)', 'Email UL (Bytes)', 'Youtube DL (Bytes)', 'Youtube UL (Bytes)',
+  'Netflix DL (Bytes)', 'Netflix UL (Bytes)', 'Gaming DL (Bytes)', 'Gaming UL (Bytes)',
+  'Other DL (Bytes)', 'Other UL (Bytes)', 'Total UL (Bytes)', 'Total DL (Bytes)']
+lami - check this line
+
+sns.pairplot(df[selected_numeric_vars])
+
+plt.suptitle('Pair Plot of Selected Numeric Variables', y=1.02)
+
+plt.show()
+
+print("This takes too much time")
+lami - check this line
+ 
+correlation_matrix = df[selected_numeric_vars].corr()
+
+sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm')
+
+plt.title('Correlation Heatmap of Selected Numeric Variables')
+
+plt.show()
+df_headset_type = df_clean['Handset Type'].value_counts(ascending=False)
+
+df_headset_type.iloc[:10]
+df_headset_type.iloc[:10].plot.bar(x="Total Handset Used", y="Handset Type", title="Top 10 Handset Type Widely used by user")
+df_headset_m = df_clean['Handset Manufacturer'].value_counts(ascending=False)
+
+df_headset_m.iloc[:3]
+df_headset_m.iloc[:3].plot(kind="bar")
+
+plt.xlabel("Handset Manufacturer")
+
+plt.ylabel("Total Handset Used")
+
+plt.title("Top 3 Handset used by Manufacturer")
+
+handset_df = df_clean[['Handset Manufacturer', 'Handset Type']]
+ 
+manufacturer_handset_counts = handset_df.groupby(['Handset Manufacturer', 'Handset Type']).size().reset_index(name='Count')
+ 
+top_3_manufacturers = manufacturer_handset_counts.groupby('Handset Manufacturer')['Count'].sum().nlargest(3).index
+ 
+top_3_manufacturer_handsets = manufacturer_handset_counts[manufacturer_handset_counts['Handset Manufacturer'].isin(top_3_manufacturers)]
+ 
+top_5_handsets_per_manufacturer = top_3_manufacturer_handsets.groupby('Handset Manufacturer').apply(lambda x: x.nlargest(5, 'Count')).reset_index(drop=True)
+ 
+plt.figure(figsize=(12, 8))
+
+sns.barplot(x='Count', y='Handset Type', hue='Handset Manufacturer', data=top_5_handsets_per_manufacturer, palette='viridis')
+
+plt.title('Top 5 Handsets per Top 3 Manufacturers')
+
+plt.xlabel('Count')
+
+plt.ylabel('Handset Type')
+
+plt.show()
+user_aggregated = df_clean.groupby('MSISDN/Number').agg({
+  'MSISDN/Number': 'count',   'Dur. (ms).1': 'sum',   'Total DL (Bytes)': 'sum',   'Total UL (Bytes)': 'sum',   'Social Media DL (Bytes)': 'sum',   'Social Media UL (Bytes)': 'sum',   'Google DL (Bytes)': 'sum',   'Google UL (Bytes)': 'sum',   'Email DL (Bytes)': 'sum',   'Email UL (Bytes)': 'sum',   'Youtube DL (Bytes)': 'sum',   'Youtube UL (Bytes)': 'sum',   'Netflix DL (Bytes)': 'sum',   'Netflix UL (Bytes)': 'sum',   'Gaming DL (Bytes)': 'sum',   'Gaming UL (Bytes)': 'sum',   'Other DL (Bytes)': 'sum',   'Other UL (Bytes)': 'sum'  
+})
+ 
+user_aggregated = user_aggregated.rename(columns={
+  'MSISDN/Number': 'Number_of_xDR_sessions',
+  'Dur. (ms).1': 'Session_duration',
+  'Total DL (Bytes)': 'Total_DL_data',
+  'Total UL (Bytes)': 'Total_UL_data',
+  'Social Media DL (Bytes)': 'Social_Media_DL_data',
+  'Social Media UL (Bytes)': 'Social_Media_UL_data',
+  'Google DL (Bytes)': 'Google_DL_data',
+  'Google UL (Bytes)': 'Google_UL_data',
+  'Email DL (Bytes)': 'Email_DL_data',
+  'Email UL (Bytes)': 'Email_UL_data',
+  'Youtube DL (Bytes)': 'Youtube_DL_data',
+  'Youtube UL (Bytes)': 'Youtube_UL_data',
+  'Netflix DL (Bytes)': 'Netflix_DL_data',
+  'Netflix UL (Bytes)': 'Netflix_UL_data',
+  'Gaming DL (Bytes)': 'Gaming_DL_data',
+  'Gaming UL (Bytes)': 'Gaming_UL_data',
+  'Other DL (Bytes)': 'Other_DL_data',
+  'Other UL (Bytes)': 'Other_UL_data'
+
+})
+ 
+user_aggregated.sort_values(by="Number_of_xDR_sessions", ascending=False).head()
+
+columns = ['Bearer Id','Dur. (ms)', 'Social Media DL (Bytes)','Social Media UL (Bytes)','Google DL (Bytes)',
+  'Google UL (Bytes)','Email DL (Bytes)','Email UL (Bytes)','Youtube DL (Bytes)','Youtube UL (Bytes)',
+  'Netflix DL (Bytes)','Netflix UL (Bytes)','Gaming DL (Bytes)','Gaming UL (Bytes)','Other DL (Bytes)',
+  'Total UL (Bytes)','Total DL (Bytes)']
+
+df_user_aggregation = df_clean[columns]
+df_user_aggregation.shape
+df_user_aggregation.describe()
+ 
+quantitative_variables = [
+  'Dur. (ms)', 'Avg RTT DL (ms)', 'Avg RTT UL (ms)',
+  'Avg Bearer TP DL (kbps)', 'Avg Bearer TP UL (kbps)',
+  'TCP DL Retrans. Vol (Bytes)', 'TCP UL Retrans. Vol (Bytes)',
+  'DL TP < 50 Kbps (%)', '50 Kbps < DL TP < 250 Kbps (%)',
+  '250 Kbps < DL TP < 1 Mbps (%)', 'DL TP > 1 Mbps (%)',
+  'UL TP < 10 Kbps (%)', '10 Kbps < UL TP < 50 Kbps (%)',
+  '50 Kbps < UL TP < 300 Kbps (%)', 'UL TP > 300 Kbps (%)',
+  'HTTP DL (Bytes)', 'HTTP UL (Bytes)',
+  'Activity Duration DL (ms)', 'Activity Duration UL (ms)',
+  'Nb of sec with 125000B < Vol DL', 'Nb of sec with 1250B < Vol UL < 6250B',
+  'Nb of sec with 31250B < Vol DL < 125000B', 'Nb of sec with 37500B < Vol UL',
+  'Nb of sec with 6250B < Vol DL < 31250B', 'Nb of sec with 6250B < Vol UL < 37500B',
+  'Nb of sec with Vol DL < 6250B', 'Nb of sec with Vol UL < 1250B',
+  'Social Media DL (Bytes)', 'Social Media UL (Bytes)',
+  'Google DL (Bytes)', 'Google UL (Bytes)', 'Email DL (Bytes)',
+  'Email UL (Bytes)', 'Youtube DL (Bytes)', 'Youtube UL (Bytes)',
+  'Netflix DL (Bytes)', 'Netflix UL (Bytes)', 'Gaming DL (Bytes)',
+  'Gaming UL (Bytes)', 'Other DL (Bytes)', 'Other UL (Bytes)',
+  'Total UL (Bytes)', 'Total DL (Bytes)']
+ 
+dispersion_params = df[quantitative_variables].agg([
+  'mean', 'median', 'std', 'min', 'max', lambda x: x.quantile(0.75) - x.quantile(0.25)])
+ 
+dispersion_params
+ 
+quantitative_variables_to_plot = ['Dur. (ms)', 'Avg Bearer TP DL (kbps)', 'TCP DL Retrans. Vol (Bytes)',
+  'Social Media DL (Bytes)', 'Youtube DL (Bytes)', 'Total UL (Bytes)']
+ 
+for variable in quantitative_variables_to_plot:
+  plt.figure(figsize=(8, 5))
+  plt.hist(df[variable], bins=30, color='skyblue', edgecolor='black')
+  plt.title(f'Histogram of {variable}')
+  plt.xlabel(variable)
+  plt.ylabel('Frequency')
+  plt.show()
+ 
+selected_columns = [
+  'Social Media DL (Bytes)', 'Social Media UL (Bytes)',
+  'Google DL (Bytes)', 'Google UL (Bytes)',
+  'Email DL (Bytes)', 'Email UL (Bytes)',
+  'Youtube DL (Bytes)', 'Youtube UL (Bytes)',
+  'Netflix DL (Bytes)', 'Netflix UL (Bytes)',
+  'Gaming DL (Bytes)', 'Gaming UL (Bytes)',
+  'Other DL (Bytes)', 'Other UL (Bytes)',
+  'Total UL (Bytes)', 'Total DL (Bytes)'
+
+]
+
+selected_data = df[selected_columns]
+ 
+correlation_matrix = selected_data.corr()
+ 
+total_correlations = correlation_matrix[['Total UL (Bytes)', 'Total DL (Bytes)']]
+ 
+print(total_correlations)
+ 
+applications = ['Social Media', 'Google', 'Email', 'Youtube', 'Netflix', 'Gaming', 'Other']
+ 
+for app in applications:
+  plt.figure(figsize=(10, 6))
+  sns.scatterplot(x=f'{app} DL (Bytes)', y='Total DL (Bytes)', data=df_clean, label=f'{app} DL')
+  sns.scatterplot(x=f'{app} UL (Bytes)', y='Total UL (Bytes)', data=df_clean, label=f'{app} UL')
+  plt.title(f'Relationship between {app} and Total DL+UL Data')
+  plt.xlabel(f'Total {app} Data')
+  plt.ylabel('Total DL+UL Data')
+  plt.legend()
+  plt.show()
+ 
+all_app_columns = ['Social Media DL (Bytes)', 'Social Media UL (Bytes)', 'Google DL (Bytes)', 'Google UL (Bytes)',   'Email DL (Bytes)', 'Email UL (Bytes)', 'Youtube DL (Bytes)', 'Youtube UL (Bytes)','Netflix DL (Bytes)',   'Netflix UL (Bytes)', 'Gaming DL (Bytes)', 'Gaming UL (Bytes)', 'Other DL (Bytes)', 'Other UL (Bytes)',   'Total UL (Bytes)', 'Total DL (Bytes)']
+ 
+df_clean['Dur. (ms)'] = df_clean['Dur. (ms)'] / 1000
+ 
+user_summary = df_clean.groupby('MSISDN/Number').agg({
+  'Dur. (ms)': 'sum',
+  'Total UL (Bytes)': 'sum',
+  'Total DL (Bytes)': 'sum'
+
+}).reset_index()
+ 
+user_summary['Duration Decile'] = pd.qcut(user_summary['Dur. (ms)'], q=[0, 0.2, 0.4, 0.6, 0.8, 1], labels=False, duplicates='drop')
+ 
+data_per_decile = user_summary.groupby('Duration Decile').agg({
+  'Total UL (Bytes)': 'sum',
+  'Total DL (Bytes)': 'sum'
+
+}).reset_index()
+ 
+data_per_decile
+plt.figure(figsize=(10, 6))
+ 
+plt.bar(data_per_decile['Duration Decile'], data_per_decile['Total DL (Bytes)'], label='Total DL Data', alpha=0.7)
+
+plt.bar(data_per_decile['Duration Decile'], data_per_decile['Total UL (Bytes)'], label='Total UL Data')
+ 
+plt.xlabel('Decile Class')
+
+plt.ylabel('Total Data (Bytes)')
+
+plt.title('Total UL and DL Data per Decile Class')
+
+plt.legend()
+
+plt.show()
+ 
+selected_columns = [
+  'Social Media DL (Bytes)', 'Social Media UL (Bytes)',
+  'Google DL (Bytes)', 'Google UL (Bytes)',
+  'Email DL (Bytes)', 'Email UL (Bytes)',
+  'Youtube DL (Bytes)', 'Youtube UL (Bytes)',
+  'Netflix DL (Bytes)', 'Netflix UL (Bytes)',
+  'Gaming DL (Bytes)', 'Gaming UL (Bytes)',
+  'Other DL (Bytes)', 'Other UL (Bytes)'
+
+]
+ 
+selected_data = df[selected_columns]
+ 
+correlation_matrix = selected_data.corr()
+ 
+print(correlation_matrix)
+ 
+sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', fmt='.2f', linewidths=0.5)
+
+plt.show()
+ 
+selected_columns_PCA = ['Dur. (ms)', 'Avg RTT DL (ms)', 'Avg RTT UL (ms)',
+  'Avg Bearer TP DL (kbps)', 'Avg Bearer TP UL (kbps)',
+  'Social Media DL (Bytes)', 'Social Media UL (Bytes)',
+  'Google DL (Bytes)', 'Google UL (Bytes)',
+  'Email DL (Bytes)', 'Email UL (Bytes)',
+  'Youtube DL (Bytes)', 'Youtube UL (Bytes)',
+  'Netflix DL (Bytes)', 'Netflix UL (Bytes)',
+  'Gaming DL (Bytes)', 'Gaming UL (Bytes)',
+  'Other DL (Bytes)', 'Other UL (Bytes)',
+  'Total UL (Bytes)', 'Total DL (Bytes)']
+ 
+data_for_pca = df_clean[selected_columns_PCA]
+ 
+scaler = StandardScaler()
+
+scaled_data = scaler.fit_transform(data_for_pca)
+ 
+pca = PCA()
+
+pca_result = pca.fit_transform(scaled_data)
+ 
+explained_variance_ratio = pca.explained_variance_ratio_
+ 
+cumulative_explained_variance = explained_variance_ratio.cumsum()
+
+plt.plot(range(1, len(cumulative_explained_variance) + 1), cumulative_explained_variance, marker='o')
+
+plt.xlabel('Number of Principal Components')
+
+plt.ylabel('Cumulative Explained Variance')
+
+plt.title('Cumulative Explained Variance vs. Number of Principal Components')
+
+plt.show()
+ 
+sessions_df = df_clean[['MSISDN/Number', 'Start', 'End']]
+ 
+sessions_df['Start'] = pd.to_datetime(sessions_df['Start'])
+
+sessions_df['End'] = pd.to_datetime(sessions_df['End'])
+ 
+sessions_df['Session_Duration_Minutes'] = (sessions_df['End'] - sessions_df['Start']).dt.total_seconds() / 60
+ 
+session_frequency = sessions_df.groupby('MSISDN/Number')['Start'].count().reset_index()
+
+session_frequency.columns = ['MSISDN/Number', 'Session_Frequency']
+ 
+session_frequency.sort_values(by="Session_Frequency", ascending=False).head(10)
+sessions_df = df[['MSISDN/Number', 'Start', 'End']]
+ 
+sessions_df['Start'] = pd.to_datetime(sessions_df['Start'])
+
+sessions_df['End'] = pd.to_datetime(sessions_df['End'])
+ 
+sessions_df['Session_Duration_Minutes'] = (sessions_df['End'] - sessions_df['Start']).dt.total_seconds() / 60
+ 
+print(sessions_df[['MSISDN/Number', 'Session_Duration_Minutes']])
+ 
+plt.figure(figsize=(10, 6))
+
+sns.histplot(sessions_df['Session_Duration_Minutes'], bins=30, kde=False, color='skyblue')
+
+plt.title('Session Duration Distribution')
+
+plt.xlabel('Session Duration (Minutes)')
+
+plt.ylabel('Number of Sessions')
+
+plt.show()
+sessions_df = df[['MSISDN/Number', 'Total DL (Bytes)', 'Total UL (Bytes)']]
+ 
+sessions_df['Total_Traffic_Bytes'] = sessions_df['Total DL (Bytes)'] + sessions_df['Total UL (Bytes)']
+ 
+print(sessions_df[['MSISDN/Number', 'Total_Traffic_Bytes']])
+ 
+plt.figure(figsize=(10, 6))
+
+sns.histplot(sessions_df['Total_Traffic_Bytes'], bins=30, kde=False, color='skyblue')
+
+plt.title('Total Traffic Distribution')
+
+plt.xlabel('Total Traffic (Bytes)')
+
+plt.ylabel('Number of Sessions')
+
+plt.show()
+df_clean_2 = df.drop(['Nb of sec with 37500B < Vol UL','Nb of sec with 6250B < Vol UL < 37500B'], axis=1)
+
+df_clean_2.shape
+df_clean_2.isnull().sum().sort_values(ascending=False)/150001*100
+
+network_data = df[['MSISDN/Number', 'TCP DL Retrans. Vol (Bytes)', 'TCP UL Retrans. Vol (Bytes)',
+  'Avg RTT DL (ms)', 'Avg RTT UL (ms)', 'Handset Type', 'Avg Bearer TP DL (kbps)',
+  'Avg Bearer TP UL (kbps)']]
+ 
+user_aggregated_network = network_data.groupby('MSISDN/Number').agg({
+  'TCP DL Retrans. Vol (Bytes)': lambda x: x.mean(),
+  'TCP UL Retrans. Vol (Bytes)': lambda x: x.mean(),
+  'Avg RTT DL (ms)': lambda x: x.mean(),
+  'Avg RTT UL (ms)': lambda x: x.mean(),
+  'Handset Type': lambda x: x.mode().iloc[0] if not x.mode().empty else None,
+  'Avg Bearer TP DL (kbps)': lambda x: x.mean(),
+  'Avg Bearer TP UL (kbps)': lambda x: x.mean()
+
+})
+ 
+user_aggregated_network = user_aggregated_network.rename(columns={
+  'TCP DL Retrans. Vol (Bytes)': 'Avg_TCP_Retrans_DL',
+  'TCP UL Retrans. Vol (Bytes)': 'Avg_TCP_Retrans_UL',
+  'Avg RTT DL (ms)': 'Avg_RTT_DL',
+  'Avg RTT UL (ms)': 'Avg_RTT_UL',
+  'Avg Bearer TP DL (kbps)': 'Avg_Throughput_DL',
+  'Avg Bearer TP UL (kbps)': 'Avg_Throughput_UL'
+
+})
+ 
+network_data['Avg_TCP_Retrans_DL'] = user_aggregated_network['Avg_TCP_Retrans_DL'].fillna(user_aggregated_network['Avg_TCP_Retrans_DL'].mean())
+
+network_data['Avg_TCP_Retrans_UL'] = user_aggregated_network['Avg_TCP_Retrans_UL'].fillna(user_aggregated_network['Avg_TCP_Retrans_UL'].mean())
+
+network_data['Avg_RTT_DL'] = user_aggregated_network['Avg_RTT_DL'].fillna(user_aggregated_network['Avg_RTT_DL'].mean())
+
+network_data['Avg_RTT_UL'] = user_aggregated_network['Avg_RTT_UL'].fillna(user_aggregated_network['Avg_RTT_UL'].mean())
+
+network_data['Handset Type'] = user_aggregated_network['Handset Type'].fillna(user_aggregated_network['Handset Type'].mode().iloc[0] if not user_aggregated_network['Handset Type'].mode().empty else None)
+
+network_data['Avg_Throughput_DL'] = user_aggregated_network['Avg_Throughput_DL'].fillna(user_aggregated_network['Avg_Throughput_DL'].mean())
+
+network_data['Avg_Throughput_UL'] = user_aggregated_network['Avg_Throughput_UL'].fillna(user_aggregated_network['Avg_Throughput_UL'].mean())
+
+user_aggregated_network.head()
+ 
+tcp_column = 'Avg Bearer TP DL (kbps)'
+
+rtt_column = 'Avg RTT DL (ms)'
+
+throughput_column = 'TCP DL Retrans. Vol (Bytes)'
+ 
+top_tcp = df_clean_t4.nlargest(10, tcp_column)[[tcp_column]]
+
+top_rtt = df_clean_t4.nlargest(10, rtt_column)[[rtt_column]]
+
+top_throughput = df_clean_t4.nlargest(10, throughput_column)[[throughput_column]]
+ 
+bottom_tcp = df_clean_t4.nsmallest(10, tcp_column)[[tcp_column]]
+
+bottom_rtt = df_clean_t4.nsmallest(10, rtt_column)[[rtt_column]]
+
+bottom_throughput = df_clean_t4.nsmallest(10, throughput_column)[[throughput_column]]
+ 
+most_frequent_tcp = df_clean_t4[tcp_column].value_counts().nlargest(10).reset_index()
+
+most_frequent_rtt = df_clean_t4[rtt_column].value_counts().nlargest(10).reset_index()
+
+most_frequent_throughput = df_clean_t4[throughput_column].value_counts().nlargest(10).reset_index()
+ 
+most_frequent_tcp.columns = [tcp_column, 'Frequency']
+
+most_frequent_rtt.columns = [rtt_column, 'Frequency']
+
+most_frequent_throughput.columns = [throughput_column, 'Frequency']
+ 
+print("Top TCP Values:")
+
+print(top_tcp)
+ 
+print("\nBottom TCP Values:")
+
+print(bottom_tcp)
+ 
+print("\nMost Frequent TCP Values:")
+
+print(most_frequent_tcp)
+ 
+print("\nTop RTT Values:")
+
+print(top_rtt)
+ 
+print("\nBottom RTT Values:")
+
+print(bottom_rtt)
+ 
+print("\nMost Frequent RTT Values:")
+
+print(most_frequent_rtt)
+ 
+print("\nTop Throughput Values:")
+
+print(top_throughput)
+ 
+print("\nBottom Throughput Values:")
+
+print(bottom_throughput)
+ 
+print("\nMost Frequent Throughput Values:")
+
+print(most_frequent_throughput)
+ 
+throughput_tcp_data = df[['Handset Type', 'Avg Bearer TP DL (kbps)', 'Avg Bearer TP UL (kbps)',
+  'TCP DL Retrans. Vol (Bytes)', 'TCP UL Retrans. Vol (Bytes)']]
+ 
+average_throughput_per_handset = throughput_tcp_data.groupby('Handset Type').agg({
+  'Avg Bearer TP DL (kbps)': 'mean',
+  'Avg Bearer TP UL (kbps)': 'mean',
+  'TCP DL Retrans. Vol (Bytes)': 'mean',
+  'TCP UL Retrans. Vol (Bytes)': 'mean'
+
+})
+
+average_throughput_per_handset
+df_clean.dropna(inplace=True)
+ 
+experience_columns = ['Avg RTT DL (ms)', 'Avg RTT UL (ms)', 'Avg Bearer TP DL (kbps)', 'Avg Bearer TP UL (kbps)',
+  'TCP DL Retrans. Vol (Bytes)', 'TCP UL Retrans. Vol (Bytes)',
+  'Social Media DL (Bytes)', 'Social Media UL (Bytes)',
+  'Google DL (Bytes)', 'Google UL (Bytes)', 'Email DL (Bytes)', 'Email UL (Bytes)',
+  'Youtube DL (Bytes)', 'Youtube UL (Bytes)',
+  'Netflix DL (Bytes)', 'Netflix UL (Bytes)',
+  'Gaming DL (Bytes)', 'Gaming UL (Bytes)',
+  'Other DL (Bytes)', 'Other UL (Bytes)']
+ 
+experience_data = df_clean[experience_columns]
+ 
+scaler = StandardScaler()
+
+experience_data_scaled = scaler.fit_transform(experience_data)
+ 
+kmeans = KMeans(n_clusters=3, random_state=42)
+
+df_clean['Cluster'] = kmeans.fit_predict(experience_data_scaled)
+ 
+cluster_description = df_clean.groupby('Cluster')[experience_columns].mean()
+ 
+print("Cluster Descriptions:")
+
+print(cluster_description)
+
+engagement_experience_metrics = df_clean[['Avg Bearer TP DL (kbps)', 'Avg Bearer TP UL (kbps)',
+  'TCP DL Retrans. Vol (Bytes)', 'TCP UL Retrans. Vol (Bytes)']]
+ 
+engagement_experience_metrics = engagement_experience_metrics.fillna(engagement_experience_metrics.mean())
+ 
+scaler = StandardScaler()
+
+scaled_metrics = scaler.fit_transform(engagement_experience_metrics)
+ 
+engagement_scores = pairwise_distances_argmin_min(scaled_metrics, kmeans.cluster_centers_[0].reshape(1, -1))[1]
+
+experience_scores = pairwise_distances_argmin_min(scaled_metrics, cluster_centers.iloc[cluster_centers['Avg Bearer TP DL (kbps)'].idxmin()].values.reshape(1, -1))[1]
+ 
+df_clean['Engagement Score'] = engagement_scores
+
+df_clean['Experience Score'] = experience_scores
+ 
+print(df_clean[['MSISDN/Number', 'Engagement Score', 'Experience Score']])
+
+df_clean['Satisfaction Score'] = df_clean[['Engagement Score', 'Experience Score']].mean(axis=1)
+ 
+top_satisfied_customers = df_clean.sort_values(by='Satisfaction Score', ascending=False).head(10)
+
+print("Top 10 Satisfied Customers:")
+
+print(top_satisfied_customers[['MSISDN/Number', 'Satisfaction Score']])
+from sklearn.model_selection import train_test_split
+
+from sklearn.linear_model import LinearRegression
+
+from sklearn.metrics import mean_squared_error, r2_score
+
+from sklearn.preprocessing import StandardScaler
+ 
+features = ['Avg Bearer TP DL (kbps)', 'Avg Bearer TP UL (kbps)',
+  'TCP DL Retrans. Vol (Bytes)', 'TCP UL Retrans. Vol (Bytes)']
+ 
+df_clean[features] = df_clean[features].fillna(df_clean[features].mean())
+ 
+X_train, X_test, y_train, y_test = train_test_split(df_clean[features], df_clean['Satisfaction Score'], test_size=0.2, random_state=42)
+ 
+scaler = StandardScaler()
+
+X_train_scaled = scaler.fit_transform(X_train)
+
+X_test_scaled = scaler.transform(X_test)
+ 
+model = LinearRegression()
+ 
+model.fit(X_train_scaled, y_train)
+ 
+y_pred = model.predict(X_test_scaled)
+ 
+mse = mean_squared_error(y_test, y_pred)
+
+r2 = r2_score(y_test, y_pred)
+
+engagement_experience_scores = df_clean[['Engagement Score', 'Experience Score']]
+ 
+engagement_experience_scores = engagement_experience_scores.fillna(engagement_experience_scores.mean())
+ 
+scaler = StandardScaler()
+
+scaled_scores = scaler.fit_transform(engagement_experience_scores)
+ 
+kmeans_2 = KMeans(n_clusters=2, random_state=42)
+
+df_clean['Cluster_2'] = kmeans_2.fit_predict(scaled_scores)
+
+cluster_aggregated_scores = df_clean.groupby('Cluster_2').agg({
+  'Satisfaction Score': 'mean',
+  'Experience Score': 'mean'
+
+}).reset_index()

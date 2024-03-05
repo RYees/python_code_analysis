@@ -1,0 +1,258 @@
+import sys, os
+
+import pandas as pd
+
+sys.path.append(os.path.abspath(os.path.join('..')))
+
+from utils.preprocessing import MyPreprocessing
+parsed_dir = "../data/parsed"
+
+cleaned_dir = "../data/cleaned"
+
+file_name = "አዲስ ነገር መረጃ"
+
+preprocess = MyPreprocessing()
+df = pd.read_csv(f"{parsed_dir}/{file_name}.csv", index_col='id')
+
+df.head()
+df.shape
+df = df.dropna()
+
+df.head()
+df.shape
+df = df.replace('\n', ' ', regex=True)
+
+df.head()
+
+df['hashtags'] = df['text'].apply(lambda x: preprocess.extract_hashtags(x))
+
+df.head()
+
+df['text'] = df['text'].str.replace(r'\
+df.head()
+
+df['emojis'] = df['text'].apply(preprocess.extract_emojis)
+
+df.tail()
+
+df['text'] = df['text'].apply(preprocess.remove_emojis)
+ 
+letters = [
+  [['ሐ', 'ሑ', 'ሒ', 'ሓ', 'ሔ', 'ሖ'], ['ሀ', 'ሁ', 'ሂ', 'ሃ', 'ሄ', 'ህ', 'ሆ']],
+  [['ኀ', 'ኁ', 'ኂ', 'ኃ', 'ኄ', 'ኅ', 'ኆ'], ['ሀ', 'ሁ', 'ሂ', 'ሃ', 'ሄ', 'ህ', 'ሆ']],
+  [['ሠ', 'ሡ', 'ሢ', 'ሣ', 'ሤ', 'ሦ', 'ሦ', 'ሧ'], ['ሰ', 'ሱ', 'ሲ', 'ሳ', 'ሴ', 'ስ', 'ሶ', 'ሷ']],
+  [['ዐ', 'ዑ', 'ዒ', 'ዓ', 'ዔ', 'ዕ', 'ዖ'], ['አ', 'ኡ', 'ኢ', 'ኣ', 'ኤ', 'እ', 'ኦ']],
+  [['ጸ', 'ጹ', 'ጺ', 'ጻ', 'ጼ', 'ጽ', 'ጾ'], ['ፀ', 'ፁ', 'ፂ', 'ፃ', 'ፄ', 'ፅ', 'ፆ']]
+
+]
+
+for letter in letters:
+  for i in range(len(letter[0])):
+  df['text'] = df['text'].str.replace(letter[0][i], letter[1][i])
+ 
+df['symbols'] = df['text'].apply(preprocess.extract_symbols)
+
+df.tail()
+df['text'] = df['text'].apply(preprocess.remove_symbols)
+
+df.tail()
+df['links'] = df['text'].apply(preprocess.extract_urls)
+
+df.tail()
+df['text'] = df['text'].str.replace(preprocess.url_pattern, '', regex=True).str.strip()
+
+df.tail()
+df['mentions'] = df['text'].apply(preprocess.extract_mentions)
+
+df.tail()
+df['text'] = df['text'].str.replace(preprocess.mention_pattern, '', regex=True).str.strip()
+
+df.tail()
+df['text'] = df['text'].str.replace('\s+', ' ', regex=True).str.strip()
+df['text'] = df['text'].replace(r'!+', '!', regex=True)
+
+df['text'] = df['text'].replace(r'\.+', '', regex=True)
+df.tail()
+df.to_csv(f"{cleaned_dir}/{file_name}.csv")
+df['text'].to_csv(f"{cleaned_dir}/{file_name}.txt", index=False, header=False)
+import sys, os
+
+import pandas as pd
+
+sys.path.append(os.path.abspath(os.path.join('..')))
+
+from utils.preprocessing import MyPreprocessing
+raw_dir = "../data/raw"
+
+parsed_dir = "../data/parsed"
+
+file_name = "አዲስ ነገር መረጃ"
+
+preprocess = MyPreprocessing()
+data = preprocess.read_file(f'{raw_dir}/{file_name}.json')
+parsed_message = preprocess.parse_messages(data['messages'])
+ 
+df = pd.DataFrame(parsed_message)
+
+df.set_index('id', inplace=True)
+
+df.head()
+df.shape
+df.to_csv(f'{parsed_dir}/{file_name}.csv')
+import sys, os
+
+import pandas as pd
+
+from gensim.models import Word2Vec
+
+sys.path.append(os.path.abspath(os.path.join('..')))
+
+from utils.preprocessing import MyPreprocessing
+cleaned_dir = "../data/cleaned"
+
+final_dir = "../data/final"
+
+file_name = "TIKVAH"
+
+preprocess = MyPreprocessing()
+df = pd.read_csv(f"{cleaned_dir}/{file_name}.csv", index_col='id')
+
+df.head()
+df.shape
+
+tokenized_corpus = [str(sentence).lower().split() for sentence in df['text']]
+
+embedding_size = 100 
+window_size = 5 
+min_count = 5 
+model = Word2Vec(sentences=tokenized_corpus, vector_size=embedding_size, window=window_size, min_count=min_count, workers=4)
+
+vector = model.wv['ኢትዮጵያ'] 
+vector
+
+similar_words = model.wv.most_similar('ኢትዮጵያ', topn=5)
+
+similar_words
+
+model.save(f'{final_dir}/{file_name}_word2vec_model.bin')
+import sys, os
+
+import pandas as pd
+
+sys.path.append(os.path.abspath(os.path.join('../scripts')))
+
+from util import Util
+cleaned_dir = "../data/cleaned"
+
+final_dir = "../data/final"
+
+file_name = "TIKVAH-ETHIOPIA"
+
+util = Util()
+df = pd.read_csv(f"{cleaned_dir}/{file_name}.csv", index_col='id')
+
+df.head()
+
+from functools import reduce
+
+import operator
+ 
+def term_freq(x):
+  word_lists = [str(text).split() for text in x.tolist()]
+  words = reduce(operator.add, word_lists)
+  return words
+
+from collections import Counter
+ 
+def counting(x, y):
+  counter = Counter(x)
+  most_occurrences = counter.most_common()
+  count_df = pd.DataFrame(most_occurrences, columns = ['Word', 'Count'])
+  return count_df
+
+df_frequency = counting(term_freq(df['text']), 2)
+
+df_frequency.head()
+df_frequency.to_csv(f"{final_dir}/{file_name}_frequency.csv")
+import re
+ 
+def list_and_tokenize(data):
+  return str(data).split()
+
+import collections
+ 
+def count_n_grams(lines, min_length=2, max_length=4):
+  lengths = range(min_length, max_length + 1)
+  n_grams = {length: collections.Counter() for length in lengths}
+  queue = collections.deque(maxlen=max_length)
+  def add_queue():
+  current = tuple(queue)
+  for length in lengths:
+  if len(current) >= length:
+  n_grams[length][current[:length]] += 1
+  for line in lines:
+  for word in list_and_tokenize(line):
+  queue.append(word)
+  if len(queue) >= max_length:
+  add_queue()
+  while len(queue) > min_length:
+  queue.popleft()
+  add_queue()
+  return n_grams
+bigram_to_df = pd.DataFrame({'2-grams': [], '2-grams freq': []})
+
+trigram_to_df = pd.DataFrame({'3-grams': [], '3-grams freq': []})
+
+quadgram_to_df = pd.DataFrame({'4-grams': [], '4-grams freq': []})
+ 
+bigram = {'2-grams': [], '2-grams freq': []}
+
+trigram = {'3-grams': [], '3-grams freq': []}
+
+quadgram = {'4-grams': [], '4-grams freq': []}
+ 
+def print_most_freq_ng(n_grams, num=30):
+  global bigram_to_df, trigram_to_df, quadgram_to_df
+  for n in sorted(n_grams):
+  for gram, count in n_grams[n].most_common(num):
+  if n == 2:
+  bigram['2-grams'].append(gram)
+  bigram['2-grams freq'].append(count)
+  elif n == 3:
+  trigram['3-grams'].append(gram)
+  trigram['3-grams freq'].append(count)
+  else:
+  quadgram['4-grams'].append(gram)
+  quadgram['4-grams freq'].append(count)
+  bigram_to_df = pd.DataFrame({'2-grams': bigram['2-grams'], '2-grams freq': bigram['2-grams freq']})
+  trigram_to_df = pd.DataFrame({'3-grams': trigram['3-grams'], '3-grams freq': trigram['3-grams freq']})
+  quadgram_to_df = pd.DataFrame({'4-grams': quadgram['4-grams'], '4-grams freq': quadgram['4-grams freq']})
+print_most_freq_ng(count_n_grams(df['text']))
+
+n_gram_df = pd.concat([bigram_to_df, trigram_to_df, quadgram_to_df], axis=1)
+ 
+n_gram_df
+n_gram_df.to_csv(f"{final_dir}/{file_name}_n_gram.csv")
+import os  
+from huggingface_hub import hf_hub_download
+HUGGING_FACE_API_KEY = os.environ.get("HUGGING_FACE_API_KEY")
+model_id = "iocuydi/llama-2-amharic-3784m"
+
+filenames = [
+  ".gitattributes", "adapter_config.json", "adapter_model.bin", "config.json", "generation_config.json",   "inference_demo.py", "special_tokens_map.json", "tokenizer.json", "tokenizer.model", "tokenizer_config.json"
+
+]
+for filename in filenames:
+  downloaded_model_path = hf_hub_download(
+  repo_id = model_id,
+  filename = filename,
+  token = HUGGING_FACE_API_KEY
+  )
+  print(downloaded_model_path)
+from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline, AutoModelForSeq2SeqLM
+ 
+tokenizer = AutoTokenizer.from_pretrained(model_id, legacy=False)
+
+model = AutoModelForSeq2SeqLM.from_pretrained(model_id)
+
+pipeline = pipeline ("Text-Generation", model=model, device=-1, tokenizer=tokenizer, max_length=1000 )

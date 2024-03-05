@@ -1,0 +1,416 @@
+import numpy as np
+
+import matplotlib.pyplot as plt
+
+%matplotlib inline
+
+import math
+
+import seaborn as sns
+
+import plotly.io as pio
+
+from plotly import *
+
+import plotly.express as px
+
+from plotly.subplots import make_subplots
+
+import plotly.graph_objects as go  
+import pandas as pd
+
+from IPython.display import Image
+
+from sklearn import preprocessing
+
+from sklearn.cluster import KMeans
+
+from scipy.spatial.distance import cdist
+
+from sklearn.preprocessing import StandardScaler, normalize
+
+import os,sys
+
+import kaleido
+
+sys.path.insert(0,'../scripts/')
+ 
+from process import *
+df = pd.read_csv("telecom2.csv", na_values=['?',"n.a.","NA","n/a", "na", None])
+
+df.drop("Unnamed: 0",axis=1,inplace=True)
+ 
+df.head(5)
+ 
+users_data = df.groupby('MSISDN/Number')
+ 
+users_sessions= users_data['Bearer Id'].count()
+
+users_sessions.head(10)
+ 
+users_sessions= users_data['Dur. (ms)'].sum()
+
+users_sessions
+
+df["Total Uploads"]=df["Google UL (Bytes)"]+df["Email UL (Bytes)"]+df["Social Media UL (Bytes)"]+df["Youtube UL (Bytes)"]+df["Netflix UL (Bytes)"]+df["Gaming UL (Bytes)"]+df["Other UL (Bytes)"]
+
+df["Total Downloads"]=df["Google DL (Bytes)"]+df["Email DL (Bytes)"]+df["Social Media DL (Bytes)"]+df["Youtube DL (Bytes)"]+df["Netflix DL (Bytes)"]+df["Gaming DL (Bytes)"]+df["Other DL (Bytes)"]
+
+df['Total UL and DL']=df['Total DL (Bytes)']+df["Total UL (Bytes)"]
+ 
+df["Youtube_Total_Data"]=df["Youtube DL (Bytes)"]+df["Youtube UL (Bytes)"]
+
+df["Google_Total_Data"]=df["Google DL (Bytes)"]+df["Google UL (Bytes)"]
+
+df["Email_Total_Data"]=df["Email DL (Bytes)"]+df["Email UL (Bytes)"]
+
+df["Social_Media_Total_Data"]=df["Social Media DL (Bytes)"]+df["Social Media UL (Bytes)"]
+
+df["Netflix_Total_Data"]=df["Netflix DL (Bytes)"]+df["Netflix UL (Bytes)"]
+
+df["Gaming_Total_Data"]=df["Gaming DL (Bytes)"]+df["Gaming UL (Bytes)"]
+
+df["Other_Total_Data"]=df["Other DL (Bytes)"]+df["Other UL (Bytes)"]
+
+users = df[['MSISDN/Number', 'Bearer Id', 'Dur. (ms).1', 'Total UL and DL']].copy().rename(columns={'Dur. (ms).1': 'time_duration'})
+
+users
+
+users = users.groupby('MSISDN/Number').agg({'Bearer Id': 'count', 'time_duration': 'sum', 'Total UL and DL': 'sum'})
+
+users = users.rename(columns={'Bearer Id': 'sessions'})
+
+users.head(10)
+
+users.nlargest(10, 'time_duration')
+ 
+users.nlargest(10, 'time_duration')
+
+sessions = users.nlargest(10, "sessions")['sessions']
+
+duration = users.nlargest(10, "time_duration")['time_duration']
+
+data_volume = users.nlargest(10, "Total UL and DL")['Total UL and DL']
+ 
+mult_hist([sessions, duration, data_volume], 1,3, "User metrix", ['sessions', 'time_duration','Total UL and DL'])
+users.boxplot()
+scaler = StandardScaler()
+
+scaled_array = scaler.fit_transform(users)
+
+pd.DataFrame(scaled_array).head(5)
+ 
+data_normalized = normalize(scaled_array)
+
+pd.DataFrame(data_normalized).head(5)
+ 
+data_normalized
+kmeans = KMeans(n_clusters=3, random_state=0).fit(data_normalized)
+
+kmeans.labels_
+users.insert(0, 'Cluster', kmeans.labels_)
+
+users.head(5)
+fig = px.scatter(users, x='Total UL and DL', y="time_duration", color='Cluster', size='sessions')
+
+Image(pio.to_image(fig, format='png', width=1200))
+ 
+cluster1 = users[users["Cluster"]==0]
+
+cluster1.describe()
+cluster1 = users[users["Cluster"]==1]
+
+cluster1.describe()
+ 
+apps_df = df.groupby('MSISDN/Number').agg({'Gaming_Total_Data': 'sum', 'Youtube_Total_Data': 'sum', 'Netflix_Total_Data': 'sum',\
+  'Google_Total_Data': 'sum', 'Email_Total_Data': 'sum', 'Social_Media_Total_Data': 'sum', 'Other_Total_Data': 'sum'})
+
+apps_df.head(10)
+Gaming_Data = apps_df.nlargest(10, "Gaming_Total_Data")['Gaming_Total_Data']
+
+Youtube_Data = apps_df.nlargest(10, "Youtube_Total_Data")['Youtube_Total_Data']
+
+Netflix_Data = apps_df.nlargest(10, "Netflix_Total_Data")['Netflix_Total_Data']
+
+Google_Data = apps_df.nlargest(10, "Google_Total_Data")['Google_Total_Data']
+
+Email_Data = apps_df.nlargest(10, "Email_Total_Data")['Email_Total_Data']
+
+Social_Media = apps_df.nlargest(10, "Social_Media_Total_Data")['Social_Media_Total_Data']
+
+Other_Data = apps_df.nlargest(10, "Other_Total_Data")['Other_Total_Data']
+ 
+mult_hist([Gaming_Data, Youtube_Data, Netflix_Data], 1,
+  3, "User metrix", ["Gaming_Data", "Youtube_Data", "Netflix_Data"])
+ 
+top_3 = apps_df.sum()
+
+type(top_3)
+ 
+top_3
+import matplotlib.pyplot as plt
+ 
+applications = ['Gaming', 'Youtube', 'Netflix', 'Google', 'Email', 'Social Media', 'Other']
+
+data_values = [63910124731666, 3362537620065, 3360563670772, 1159544186717, 335503000148, 271478798103, 63770726326023]
+ 
+sorted_data = sorted(zip(applications, data_values), key=lambda x: x[1], reverse=True)
+ 
+top_applications = [app for app, _ in sorted_data[:3]]
+
+top_values = [value for _, value in sorted_data[:3]]
+ 
+plt.figure(figsize=(8, 6))
+ 
+plt.bar(top_applications, top_values, color=['blue', 'green', 'orange'])
+
+plt.title('Top 3 Most Used Applications')
+
+plt.xlabel('Applications')
+
+plt.ylabel('Total Data (in bytes)')
+ 
+for i, value in enumerate(top_values):
+  plt.text(i, value + 0.002 * max(top_values), f'{value:,}', ha='center')
+ 
+plt.show()
+ 
+def choose_kmeans(df: pd.DataFrame, num: int):
+  distortions = []
+  inertias = []
+  K = range(1, num)
+  for k in K:
+  kmeans = KMeans(n_clusters=k, random_state=0).fit(df)
+  distortions.append(sum(
+  np.min(cdist(df, kmeans.cluster_centers_, 'euclidean'), axis=1)) / df.shape[0])
+  inertias.append(kmeans.inertia_)
+  return (distortions, inertias)
+
+distortions, inertias = choose_kmeans(data_normalized, 1)
+fig = make_subplots(
+  rows=1, cols=2, subplot_titles=("Distortion", "Inertia")
+
+)
+
+fig.add_trace(go.Scatter(x=np.array(range(1, 15)), y=distortions), row=1, col=1)
+
+fig.add_trace(go.Scatter(x=np.array(range(1, 15)), y=inertias), row=1, col=2)
+
+fig.update_layout(title_text="The Elbow Method")
+ 
+Image(pio.to_image(fig, format='png', width=1200))
+ 
+kmeans = KMeans(n_clusters=4, random_state=0).fit(data_normalized)
+
+users["cluster"]= kmeans.labels_
+
+users
+import pandas as pd
+
+import numpy as np
+
+import matplotlib.pyplot as plt
+
+%matplotlib inline
+
+import math
+
+import seaborn as sns
+
+import plotly.io as pio
+
+from plotly import *
+
+import plotly.express as px
+
+from plotly.subplots import make_subplots
+
+import plotly.graph_objects as go  
+import pandas as pd
+
+from IPython.display import Image
+
+from sklearn import preprocessing
+
+from sklearn.cluster import KMeans
+
+from scipy.spatial.distance import cdist
+
+from sklearn.preprocessing import StandardScaler, normalize
+
+import os,sys
+
+import kaleido
+
+sys.path.insert('./script/')
+ 
+from process import *
+df = pd.read_csv("../data_csv/telecom2.csv", na_values=['?',"n.a.","NA","n/a", "na", None])
+
+df.drop("Unnamed: 0",axis=1,inplace=True)
+ 
+df.head(5)
+ 
+users_data = df.groupby('MSISDN/Number')
+ 
+users_sessions= users_data['Bearer Id'].count()
+
+users_sessions.head(10)
+ 
+users_sessions= users_data['Dur. (ms)'].sum()
+
+users_sessions
+
+df["Total Uploads"]=df["Google UL (Bytes)"]+df["Email UL (Bytes)"]+df["Social Media UL (Bytes)"]+df["Youtube UL (Bytes)"]+df["Netflix UL (Bytes)"]+df["Gaming UL (Bytes)"]+df["Other UL (Bytes)"]
+
+df["Total Downloads"]=df["Google DL (Bytes)"]+df["Email DL (Bytes)"]+df["Social Media DL (Bytes)"]+df["Youtube DL (Bytes)"]+df["Netflix DL (Bytes)"]+df["Gaming DL (Bytes)"]+df["Other DL (Bytes)"]
+
+df['Total UL and DL']=df['Total DL (Bytes)']+df["Total UL (Bytes)"]
+ 
+df["Youtube_Total_Data"]=df["Youtube DL (Bytes)"]+df["Youtube UL (Bytes)"]
+
+df["Google_Total_Data"]=df["Google DL (Bytes)"]+df["Google UL (Bytes)"]
+
+df["Email_Total_Data"]=df["Email DL (Bytes)"]+df["Email UL (Bytes)"]
+
+df["Social_Media_Total_Data"]=df["Social Media DL (Bytes)"]+df["Social Media UL (Bytes)"]
+
+df["Netflix_Total_Data"]=df["Netflix DL (Bytes)"]+df["Netflix UL (Bytes)"]
+
+df["Gaming_Total_Data"]=df["Gaming DL (Bytes)"]+df["Gaming UL (Bytes)"]
+
+df["Other_Total_Data"]=df["Other DL (Bytes)"]+df["Other UL (Bytes)"]
+
+users = df[['MSISDN/Number', 'Bearer Id', 'Dur. (ms).1', 'Total UL and DL']].copy().rename(columns={'Dur. (ms).1': 'time_duration'})
+
+users
+
+users = users.groupby('MSISDN/Number').agg({'Bearer Id': 'count', 'time_duration': 'sum', 'Total UL and DL': 'sum'})
+
+users = users.rename(columns={'Bearer Id': 'sessions'})
+
+users.head(10)
+
+users.nlargest(10, 'time_duration')
+ 
+users.nlargest(10, 'time_duration')
+
+sessions = users.nlargest(10, "sessions")['sessions']
+
+duration = users.nlargest(10, "time_duration")['time_duration']
+
+data_volume = users.nlargest(10, "Total UL and DL")['Total UL and DL']
+ 
+mult_hist([sessions, duration, data_volume], 1,3, "User metrix", ['sessions', 'time_duration','Total UL and DL'])
+users.boxplot()
+scaler = StandardScaler()
+
+scaled_array = scaler.fit_transform(users)
+
+pd.DataFrame(scaled_array).head(5)
+ 
+data_normalized = normalize(scaled_array)
+
+pd.DataFrame(data_normalized).head(5)
+ 
+data_normalized
+kmeans = KMeans(n_clusters=3, random_state=0).fit(data_normalized)
+
+kmeans.labels_
+users.insert(0, 'Cluster', kmeans.labels_)
+
+users.head(5)
+fig = px.scatter(users, x='Total UL and DL', y="time_duration", color='Cluster', size='sessions')
+
+Image(pio.to_image(fig, format='png', width=1200))
+ 
+cluster1 = users[users["Cluster"]==0]
+
+cluster1.describe()
+cluster1 = users[users["Cluster"]==1]
+
+cluster1.describe()
+ 
+apps_df = df.groupby('MSISDN/Number').agg({'Gaming_Total_Data': 'sum', 'Youtube_Total_Data': 'sum', 'Netflix_Total_Data': 'sum',\
+  'Google_Total_Data': 'sum', 'Email_Total_Data': 'sum', 'Social_Media_Total_Data': 'sum', 'Other_Total_Data': 'sum'})
+
+apps_df.head(10)
+Gaming_Data = apps_df.nlargest(10, "Gaming_Total_Data")['Gaming_Total_Data']
+
+Youtube_Data = apps_df.nlargest(10, "Youtube_Total_Data")['Youtube_Total_Data']
+
+Netflix_Data = apps_df.nlargest(10, "Netflix_Total_Data")['Netflix_Total_Data']
+
+Google_Data = apps_df.nlargest(10, "Google_Total_Data")['Google_Total_Data']
+
+Email_Data = apps_df.nlargest(10, "Email_Total_Data")['Email_Total_Data']
+
+Social_Media = apps_df.nlargest(10, "Social_Media_Total_Data")['Social_Media_Total_Data']
+
+Other_Data = apps_df.nlargest(10, "Other_Total_Data")['Other_Total_Data']
+ 
+mult_hist([Gaming_Data, Youtube_Data, Netflix_Data], 1,
+  3, "User metrix", ["Gaming_Data", "Youtube_Data", "Netflix_Data"])
+ 
+top_3 = apps_df.sum()
+
+type(top_3)
+ 
+top_3
+import matplotlib.pyplot as plt
+ 
+applications = ['Gaming', 'Youtube', 'Netflix', 'Google', 'Email', 'Social Media', 'Other']
+
+data_values = [63910124731666, 3362537620065, 3360563670772, 1159544186717, 335503000148, 271478798103, 63770726326023]
+ 
+sorted_data = sorted(zip(applications, data_values), key=lambda x: x[1], reverse=True)
+ 
+top_applications = [app for app, _ in sorted_data[:3]]
+
+top_values = [value for _, value in sorted_data[:3]]
+ 
+plt.figure(figsize=(8, 6))
+ 
+plt.bar(top_applications, top_values, color=['blue', 'green', 'orange'])
+
+plt.title('Top 3 Most Used Applications')
+
+plt.xlabel('Applications')
+
+plt.ylabel('Total Data (in bytes)')
+ 
+for i, value in enumerate(top_values):
+  plt.text(i, value + 0.002 * max(top_values), f'{value:,}', ha='center')
+ 
+plt.show()
+ 
+def choose_kmeans(df: pd.DataFrame, num: int):
+  distortions = []
+  inertias = []
+  K = range(1, num)
+  for k in K:
+  kmeans = KMeans(n_clusters=k, random_state=0).fit(df)
+  distortions.append(sum(
+  np.min(cdist(df, kmeans.cluster_centers_, 'euclidean'), axis=1)) / df.shape[0])
+  inertias.append(kmeans.inertia_)
+  return (distortions, inertias)
+
+distortions, inertias = choose_kmeans(data_normalized, 1)
+fig = make_subplots(
+  rows=1, cols=2, subplot_titles=("Distortion", "Inertia")
+
+)
+
+fig.add_trace(go.Scatter(x=np.array(range(1, 15)), y=distortions), row=1, col=1)
+
+fig.add_trace(go.Scatter(x=np.array(range(1, 15)), y=inertias), row=1, col=2)
+
+fig.update_layout(title_text="The Elbow Method")
+ 
+Image(pio.to_image(fig, format='png', width=1200))
+ 
+kmeans = KMeans(n_clusters=4, random_state=0).fit(data_normalized)
+
+users["cluster"]= kmeans.labels_
+
+users

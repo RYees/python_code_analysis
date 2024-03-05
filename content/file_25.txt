@@ -1,0 +1,159 @@
+import pandas as pd
+
+import numpy as np
+
+import seaborn as sns
+
+import matplotlib.pyplot as plt
+import pandas as pd
+
+from sqlalchemy import create_engine
+ 
+database_name = 'week1'
+
+table_name = 'xdr_data'
+ 
+connection_params = {
+  "host": "localhost",
+  "user": "postgres",
+  "password": "lhtdss",
+  "port": "5432",
+  "database": database_name
+
+}
+ 
+engine = create_engine(f"postgresql+psycopg2://{connection_params['user']}:{connection_params['password']}@{connection_params['host']}:{connection_params['port']}/{connection_params['database']}")
+ 
+sql_query = 'SELECT * FROM xdr_data '
+ 
+telecom = pd.read_sql(sql_query, con=engine)
+
+telecom.head(7)
+
+telecom.columns.tolist()
+ 
+print(f" There are {telecom.shape[0]} rows and {telecom.shape[1]} columns")
+
+def percent_missing(m):
+  totalCells = np.prod(m.shape)
+  missingCount = m.isnull().sum()
+  totalMissing = missingCount.sum()
+  print("The Diabetes dataset contains", round(((totalMissing/totalCells) * 100), 2), "%", "missing values.")
+ 
+percent_missing(df)
+
+telecom.isna().sum()  
+telecom[[   'Bearer Id',
+  'Handset Manufacturer',
+  'Handset Type', 'Start',
+  'Start ms',
+  'End',
+  'End ms',
+  'Dur. (ms)',
+  'Social Media DL (Bytes)',
+  'Social Media UL (Bytes)',
+  'Google DL (Bytes)',
+  'Google UL (Bytes)',
+  'Email DL (Bytes)',
+  'Email UL (Bytes)',
+  'Youtube DL (Bytes)',
+  'Youtube UL (Bytes)',
+  'Netflix DL (Bytes)',
+  'Netflix UL (Bytes)',
+  'Gaming DL (Bytes)',
+  'Gaming UL (Bytes)',
+  'Other DL (Bytes)',
+  'Other UL (Bytes)',
+  'Total UL (Bytes)',
+  'Total DL (Bytes)' ]].isna().sum()
+ 
+telecom.nunique()
+telecom.dtypes
+
+telecom[[   'Bearer Id',
+  'Handset Manufacturer',
+  'Handset Type', 'Start',
+  'Start ms',
+  'End',
+  'End ms',
+  'Dur. (ms)',
+  'Social Media DL (Bytes)',
+  'Social Media UL (Bytes)',
+  'Google DL (Bytes)',
+  'Google UL (Bytes)',
+  'Email DL (Bytes)',
+  'Email UL (Bytes)',
+  'Youtube DL (Bytes)',
+  'Youtube UL (Bytes)',
+  'Netflix DL (Bytes)',
+  'Netflix UL (Bytes)',
+  'Gaming DL (Bytes)',
+  'Gaming UL (Bytes)',
+  'Other DL (Bytes)',
+  'Other UL (Bytes)',
+  'Total UL (Bytes)',
+  'Total DL (Bytes)' ]].head(20)
+
+def plot_top_values_histogram(column, top_n=10):
+  value_counts = column.value_counts()
+  top_values = value_counts.head(top_n)
+  plt.bar(top_values.index, top_values.values)
+  if top_n >= 5:
+  plt.xticks(rotation=45, ha='right')
+  plt.xlabel('Unique Values')
+  plt.ylabel('Count')
+  plt.title(f'Histogram of Top {top_n} Values Counts for {column.name}')
+  plt.show()
+ 
+telecom[["Handset Manufacturer", "Handset Type"]].nunique()
+value_counts = telecom["Handset Type"].value_counts()
+ 
+top_ten_values = value_counts.head(10)
+
+print(top_ten_values)
+plot_top_values_histogram(telecom['Handset Type'], top_n=10)
+value_counts = telecom["Handset Manufacturer"].value_counts()
+
+top_three_values = value_counts.head(3)
+ 
+print(top_three_values)
+plot_top_values_histogram(telecom['Handset Manufacturer'], top_n=3)
+ 
+manufacturer_column = 'Handset Manufacturer'
+
+handset_column = 'Handset Type'
+ 
+grouped_data = telecom.groupby(manufacturer_column)[handset_column].value_counts()
+ 
+top_manufacturers = telecom[manufacturer_column].value_counts().head(3).index
+ 
+top_handsets_per_manufacturer = {}
+ 
+for manufacturer in top_manufacturers:
+  top_handsets = grouped_data[manufacturer].head(5)
+  top_handsets_per_manufacturer[manufacturer] = top_handsets
+ 
+for manufacturer, top_handsets in top_handsets_per_manufacturer.items():
+  print(f"Top 5 handsets for {manufacturer}:\n{top_handsets}\n")
+ 
+def plot_hist(df:pd.DataFrame, column:str, color:str)->None:
+  sns.displot(data=df, x=column, color=color, kde=True, height=7, aspect=2)
+  plt.title(f'Distribution of {column}', size=20, fontweight='bold')
+  plt.show()
+plot_hist(telecom,'top_3_Handset_Manufacturers','blue' )
+value_counts_df = value_counts.reset_index()
+ 
+value_counts_df.columns = ['Unique_Values', 'Count']
+ 
+print(value_counts_df.head(7))
+
+unique_values = telecom["Handset Manufacturer"].unique().value_counts()
+ 
+print(unique_values)
+
+%load_ext sql
+%sql postgresql://postgres:lhtdss@localhost:5432/week1
+%sql SELECT * FROM xdr_data LIMIT 10
+%%sql SELECT "Bearer Id"
+
+FROM xdr_data LIMIT 10

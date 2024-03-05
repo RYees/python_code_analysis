@@ -1,0 +1,263 @@
+import pandas.io.sql as sqlio
+import psycopg2
+from psycopg2 import sql
+from sqlalchemy import create_engine
+import pandas as pd
+
+def db_connection_sqlalchemy():
+  database_name='telecom'
+  table_name='xdr_data'
+  connection_params={
+  "host":"localhost",
+  "user":"postgres",
+  "password":"admin",
+  "port":"5432",
+  "database":database_name
+  }
+  engine = create_engine(f"postgresql+psycopg2://{connection_params['user']}:{connection_params['password']}@{connection_params['host']}:{connection_params['port']}/{connection_params['database']}")
+  return engine
+
+def db_read_table_sqlalchemy(engine,table_name):
+  sql_query=f'SELECT * FROM {table_name}'
+  df = pd.read_sql(sql_query, con= engine)
+  return df  
+def db_connection_psycopg():
+  pgconn=psycopg2.connect(
+  dbname="telecom",
+  user="postgres",
+  password="admin",
+  host="localhost",
+  port="5432"
+  )
+  return pgconn  
+def db_read_table_psycopg(pgconn,table_name):
+  sql_query=f'SELECT * FROM {table_name}'
+  df=sqlio.read_sql_query(sql_query,pgconn)
+  return df
+import pandas as pd
+
+from script import db_connection
+ 
+alchemyConn=db_connection.db_connection_sqlalchemy()
+ 
+pgconn=db_connection.db_connection_psycopg()
+
+print(alchemyConn)
+
+print(pgconn)
+
+dfa = db_connection.db_read_table_sqlalchemy(alchemyConn, 'xdr_data')
+
+dfa.head()
+
+dfa = db_connection.db_read_table_psycopg(pgconn, 'xdr_data')
+
+dfa.head()
+
+df.info()
+import pandas as pd
+
+import numpy as np
+
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+
+import sys
+
+sys.path.append('../')
+ 
+import warnings
+
+warnings.filterwarnings('ignore')
+
+from script import db_connection
+ 
+alchemyConn=db_connection.db_connection_sqlalchemy()
+ 
+pgconn=db_connection.db_connection_psycopg()
+
+print(alchemyConn)
+
+print(pgconn)
+
+dfa = db_connection.db_read_table_sqlalchemy(alchemyConn, 'xdr_data')
+
+dfa.head()
+
+dfg = db_connection.db_read_table_psycopg(pgconn, 'xdr_data')
+
+dfg.head()
+
+dfa.info()
+
+dfa.nunique()
+
+dfa.Start.unique()
+
+dfa.Start.nunique()
+
+dfa.isnull().sum()
+
+(dfa.isnull().sum()/(len(dfa)))*100
+
+dfa.describe().T
+
+dfa['Total UL (Bytes)'].describe().T
+
+dfa.describe(include='all').T
+ 
+def percent_missing(dfa):
+  totalCells = np.product(dfa.shape)
+  missingCount = dfa.isnull().sum()
+  totalMissing = missingCount.sum()
+  print("The telecom dataset contains", round(((totalMissing/totalCells) * 100), 2), "%", "missing values.")
+ 
+percent_missing(dfa)
+ 
+sessions = len(dfa.columns)
+
+print("Number of xDR sessions:", sessions)
+
+dfa['Google DL (Bytes)'].hist()
+ 
+num_cols=dfa.select_dtypes(include=np.number).columns.tolist()
+ 
+num_cols.skew()
+
+session_durations = dfa['Dur. (ms)'].count()
+ 
+print("Number of session durations:", session_durations)
+
+total_dl_data = dfa['Total DL (Bytes)'].sum()
+
+total_ul_data = dfa['Total UL (Bytes)'].sum()
+ 
+print("Total Download Data:", total_dl_data, "bytes")
+
+print("Total Upload Data:", total_ul_data, "bytes")
+
+total_social_media_dl = dfa['Social Media DL (Bytes)'].sum()
+
+total_social_media_ul = dfa['Social Media UL (Bytes)'].sum()
+
+total_google_dl = dfa['Google DL (Bytes)'].sum()
+
+total_google_ul = dfa['Google UL (Bytes)'].sum()
+
+total_email_dl = dfa['Email DL (Bytes)'].sum()
+
+total_email_ul = dfa['Email UL (Bytes)'].sum()
+
+total_youtube_dl = dfa['Youtube DL (Bytes)'].sum()
+
+total_youtube_ul = dfa['Youtube UL (Bytes)'].sum()
+
+total_netflix_dl = dfa['Netflix DL (Bytes)'].sum()
+
+total_netflix_ul = dfa['Netflix UL (Bytes)'].sum()
+
+total_gaming_dl = dfa['Gaming DL (Bytes)'].sum()
+
+total_gaming_ul = dfa['Gaming UL (Bytes)'].sum()
+
+total_other_dl = dfa['Other DL (Bytes)'].sum()
+
+total_other_ul = dfa['Other UL (Bytes)'].sum()
+ 
+print("Total Social Media Data (DL):", total_social_media_dl, "bytes")
+
+print("Total Social Media Data (UL):", total_social_media_ul, "bytes")
+
+print("Total Google Data (DL):", total_google_dl, "bytes")
+
+print("Total Google Data (UL):", total_google_ul, "bytes")
+
+print("Total Email Data (DL):", total_email_dl, "bytes")
+
+print("Total Email Data (UL):", total_email_ul, "bytes")
+
+print("Total YouTube Data (DL):", total_youtube_dl, "bytes")
+
+print("Total YouTube Data (UL):", total_youtube_ul, "bytes")
+
+print("Total Netflix Data (DL):", total_netflix_dl, "bytes")
+
+print("Total Netflix Data (UL):", total_netflix_ul, "bytes")
+
+print("Total Gaming Data (DL):", total_gaming_dl, "bytes")
+
+print("Total Gaming Data (UL):", total_gaming_ul, "bytes")
+
+print("Total Other Data (DL):", total_other_dl, "bytes")
+
+print("Total Other Data (UL):", total_other_ul, "bytes")
+ 
+num_cols = dfa.select_dtypes(include=np.number).columns.tolist()
+
+cat_cols=dfa.select_dtypes(include=['object']).columns
+
+for col in num_cols:
+  print(col)
+  print('Skew :', round(dfa[col].skew(), 2))
+  plt.figure(figsize = (15, 4))
+  plt.subplot(1, 2, 1)
+  dfa[col].hist(grid=False)
+  plt.ylabel('count')
+  plt.subplot(1, 2, 2)
+  sns.boxplot(x=dfa[col])
+  plt.show()
+ 
+application_vars = ['Social Media UL (Bytes)', 'Google UL (Bytes)', 'Email UL (Bytes)', 'Youtube UL (Bytes)',
+  'Netflix UL (Bytes)', 'Gaming UL (Bytes)', 'Other UL (Bytes)','Social Media DL (Bytes)', 'Google DL (Bytes)', 'Email DL (Bytes)', 'Youtube DL (Bytes)',
+  'Netflix DL (Bytes)', 'Gaming DL (Bytes)', 'Other DL (Bytes)']
+ 
+dfa['DL+UL (Bytes)']=dfa['Total UL (Bytes)']+dfa['Total DL (Bytes)']
+ 
+for var in application_vars:
+  subset = dfa[[var, 'DL+UL (Bytes)']]
+  plt.figure(figsize=(13, 17))
+  sns.pairplot(subset)
+  plt.title(f'Pair Plot for {var} with Total UL')
+  plt.show()
+
+dfa['Total Duration'] = dfa['Dur. (ms)'] + dfa['Dur. (ms).1'] + dfa['Activity Duration DL (ms)'] + dfa['Activity Duration UL (ms)']
+ 
+sorted_dfa = dfa.sort_values('Total Duration', ascending=False)
+ 
+decile_size = len(sorted_dfa) // 5
+ 
+sorted_dfa['Decile Class'] = pd.qcut(sorted_dfa.index, 5, labels=False)
+
+sorted_dfa['Decile Class'] = sorted_dfa['Decile Class'].apply(lambda x: x + 1)
+ 
+decile_data = sorted_dfa.groupby('Decile Class')[['DL+UL (Bytes)']].sum()
+ 
+print(decile_data)
+ 
+data_list = ['Social Media UL (Bytes)', 'Social Media DL (Bytes)',
+  'Google UL (Bytes)', 'Google DL (Bytes)',
+  'Email UL (Bytes)', 'Email DL (Bytes)',
+  'Youtube UL (Bytes)', 'Youtube DL (Bytes)',
+  'Netflix UL (Bytes)', 'Netflix DL (Bytes)',
+  'Gaming UL (Bytes)', 'Gaming DL (Bytes)',
+  'Other UL (Bytes)', 'Other DL (Bytes)']
+ 
+subset = dfa[data_list]
+ 
+correlation_matrix = subset.corr()
+ 
+print(correlation_matrix)
+ 
+session_duration = dfa.groupby('MSISDN/Number')['Dur. (ms)'].sum()
+
+top_10_session_duration = session_duration.nlargest(10)
+ 
+print("\nTop 10 Customers by Session Duration:")
+
+print(top_10_session_duration)
+dfa_clean=dfa[['Bearer Id','Start']]
+
+dfa_clean.info()
+
+dfa_clean.to_sql('clean_data',alchemyConn)

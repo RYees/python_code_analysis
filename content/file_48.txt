@@ -1,0 +1,977 @@
+import pandas as pd
+
+import sys, os
+ 
+rpath = os.path.abspath('..')
+
+if rpath not in sys.path:
+  sys.path.insert(0, rpath)
+ 
+from utils import DataCleaner, DatabaseEngine
+
+db_engine = DatabaseEngine()
+
+engine = db_engine.create()
+
+df = pd.read_sql_table("xdr_data", con=engine)
+
+df.head()
+ 
+df.isnull().sum().sum()
+ 
+cleaner = DataCleaner(df)
+
+cleaned_df = cleaner.clean()
+ 
+cleaned_df.to_sql("clean_xdr_data", con=engine, if_exists="replace", index=False)
+
+clean_df = pd.read_sql_table("clean_xdr_data", con=engine)
+ 
+clean_df.isnull().sum().sum()
+
+filtered_handsets = clean_df[clean_df["Handset Type"] != "undefined"]
+
+top_10_handsets = filtered_handsets["Handset Type"].value_counts().head(10)
+
+pd.DataFrame(top_10_handsets)
+
+top_3_manufacturers = clean_df["Handset Manufacturer"].value_counts().head(3)
+
+pd.DataFrame(top_3_manufacturers)
+
+top_3_manufacturers = ['Apple', 'Samsung', 'Huawei']
+ 
+results = []
+ 
+for manufacturer in top_3_manufacturers:
+  top_5_handsets = clean_df[clean_df["Handset Manufacturer"] == manufacturer]["Handset Type"].value_counts().head(5)
+  temp_df = pd.DataFrame({'Manufacturer': manufacturer, 'Handset Type': top_5_handsets.index, 'Count': top_5_handsets.values})
+  results.append(temp_df)
+ 
+results_df = pd.concat(results, ignore_index=True)
+ 
+pd.DataFrame(results_df)
+from urllib.parse import quote_plus
+from pathlib import Path
+from sqlalchemy import create_engine
+from dotenv import dotenv_values
+ 
+class DatabaseEngine:
+  """
+  A class used to create a SQLAlchemy engine object for the PostgreSQL database.
+  ...
+  Attributes
+  ----------
+  env_path : Path
+  path to the .env file containing database configuration
+  Methods
+  -------
+  create():
+  Creates and returns a SQLAlchemy engine object for the PostgreSQL database.
+  """
+  def __init__(self):
+  """
+  Constructs all the necessary attributes for the DatabaseEngine object.
+  """
+  self.env_path = Path(__file__).parent / ".env"
+  def create(self):
+  """
+  Creates and returns a SQLAlchemy engine object for the PostgreSQL database.
+  Returns:
+  engine: A SQLAlchemy engine object connected to the PostgreSQL database.
+  Raises:
+  Exception: If there is a problem connecting to the database.
+  """
+  env_values = dotenv_values(dotenv_path=self.env_path)
+  db_password = env_values["POSTGRES_PASSWORD"]
+  encoded_password = quote_plus(db_password)
+  database = env_values["POSTGRES_DB"]
+  user = env_values["POSTGRES_USER"]
+  server = env_values["POSTGRES_SERVER"]
+  engine = create_engine(
+  f"postgresql://{user}:{encoded_password}@{server}/{database}"
+  )
+  try:
+  with engine.connect() as connection_str:
+  print(f'Successfully connected to the PostgreSQL "{database}" database')
+  except Exception as ex:
+  print(f"Sorry failed to connect: {ex}")
+  return engine
+class DataCleaner:
+  """
+  A class used to clean data in a DataFrame.
+  ...
+  Attributes
+  ----------
+  df : DataFrame
+  a pandas DataFrame to be cleaned
+  columns_to_exclude : list
+  a list of column names to be excluded from certain operations
+  Methods
+  -------
+  drop_null_rows():
+  Drops rows that have a null value in any of the columns that have exactly one null value.
+  fill_categorical():
+  Fills missing categorical values with the mode of each column.
+  fill_numerical():
+  Fills missing numerical values with the mean of each column, excluding certain specified columns.
+  fill_unknown():
+  Fills missing values in certain specified columns with the string "Unknown".
+  clean():
+  Performs all the cleaning steps and returns the cleaned DataFrame.
+  """
+  def __init__(self, df):
+  """
+  Constructs all the necessary attributes for the DataCleaner object.
+  Parameters
+  ----------
+  df : DataFrame
+  a pandas DataFrame to be cleaned
+  """
+  self.df = df.copy()
+  self.columns_to_exclude = ["Bearer Id", "IMSI", "MSISDN/Number", "IMEI"]
+  def drop_null_rows(self):
+  """
+  Drops rows that have a null value in any of the columns that have exactly one null value.
+  Returns
+  -------
+  self : object
+  Returns self to allow chaining.
+  """
+  columns_with_one_null = self.df.columns[self.df.isnull().sum() == 1]
+  self.df = self.df.dropna(subset=columns_with_one_null)
+  return self
+  def fill_categorical(self):
+  """
+  Fills missing categorical values with the mode of each column.
+  Returns
+  -------
+  self : object
+  Returns self to allow chaining.
+  """
+  categorical_columns = self.df.select_dtypes(include="object").columns
+  self.df[categorical_columns] = self.df[categorical_columns].fillna(
+  self.df[categorical_columns].mode().iloc[0]
+  )
+  return self
+  def fill_numerical(self):
+  """
+  Fills missing numerical values with the mean of each column, excluding certain specified columns.
+  Returns
+  -------
+  self : object
+  Returns self to allow chaining.
+  """
+  numerical_columns = self.df.select_dtypes(include=["float64"]).columns
+  numerical_columns = numerical_columns.drop(self.columns_to_exclude)
+  self.df[numerical_columns] = self.df[numerical_columns].fillna(
+  self.df[numerical_columns].mean()
+  )
+  return self
+  def fill_unknown(self):
+  """
+  Fills missing values in certain specified columns with the string "Unknown".
+  Returns
+  -------
+  self : object
+  Returns self to allow chaining.
+  """
+  self.df[self.columns_to_exclude] = self.df[self.columns_to_exclude].fillna(
+  "Unknown"
+  )
+  return self
+  def clean(self):
+  """
+  Performs all the cleaning steps and returns the cleaned DataFrame.
+  Returns
+  -------
+  DataFrame
+  The cleaned DataFrame.
+  """
+  self.drop_null_rows().fill_categorical().fill_numerical().fill_unknown()
+  return self.df
+from .data_cleaning import DataCleaner
+from .db_connection import DatabaseEngine
+import pandas as pd
+
+import sys, os
+ 
+rpath = os.path.abspath('..')
+
+if rpath not in sys.path:
+  sys.path.insert(0, rpath)
+ 
+from utils import DatabaseEngine
+db_engine = DatabaseEngine()
+
+engine = db_engine.create()
+
+clean_df = pd.read_sql_table("clean_xdr_data", con=engine)
+def process_user_info(clean_df):
+  num_sessions = clean_df.groupby('MSISDN/Number')['Bearer Id'].count()
+  session_duration = clean_df.groupby('MSISDN/Number')['Dur. (ms)'].sum()
+  total_DL = clean_df.groupby('MSISDN/Number')['Total DL (Bytes)'].sum()
+  total_UL = clean_df.groupby('MSISDN/Number')['Total UL (Bytes)'].sum()
+  total_data_vol = clean_df.groupby('MSISDN/Number')[['Social Media DL (Bytes)', 'Social Media UL (Bytes)',
+  'Google DL (Bytes)', 'Google UL (Bytes)',
+  'Email DL (Bytes)', 'Email UL (Bytes)',
+  'Youtube DL (Bytes)', 'Youtube UL (Bytes)',
+  'Netflix DL (Bytes)', 'Netflix UL (Bytes)',
+  'Gaming DL (Bytes)', 'Gaming UL (Bytes)',
+  'Other DL (Bytes)', 'Other UL (Bytes)']].sum()
+  user_info = pd.concat([num_sessions, session_duration, total_DL, total_UL, total_data_vol], axis=1)
+  user_info = user_info.rename(columns={
+  'Bearer Id': 'Number of Sessions',
+  'Dur. (ms)': 'Total Session Duration',
+  'Total DL (Bytes)': 'Total Download Data',
+  'Total UL (Bytes)': 'Total Upload Data',
+  'Social Media DL (Bytes)': 'Social Media Download Data',
+  'Social Media UL (Bytes)': 'Social Media Upload Data',
+  'Google DL (Bytes)': 'Google Download Data',
+  'Google UL (Bytes)': 'Google Upload Data',
+  'Email DL (Bytes)': 'Email Download Data',
+  'Email UL (Bytes)': 'Email Upload Data',
+  'Youtube DL (Bytes)': 'Youtube Download Data',
+  'Youtube UL (Bytes)': 'Youtube Upload Data',
+  'Netflix DL (Bytes)': 'Netflix Download Data',
+  'Netflix UL (Bytes)': 'Netflix Upload Data',
+  'Gaming DL (Bytes)': 'Gaming Download Data',
+  'Gaming UL (Bytes)': 'Gaming Upload Data',
+  'Other DL (Bytes)': 'Other Download Data',
+  'Other UL (Bytes)': 'Other Upload Data'
+  })
+  return user_info
+ 
+filtered_df = clean_df[clean_df['MSISDN/Number'] != 'Unknown']
+
+user_info = process_user_info(filtered_df)
+
+pd.DataFrame(user_info)
+import sys, os
+
+import pandas as pd
+
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+ 
+rpath = os.path.abspath('..')
+
+if rpath not in sys.path:
+  sys.path.insert(0, rpath)
+ 
+from utils import DatabaseEngine
+db_engine = DatabaseEngine()
+
+engine = db_engine.create()
+
+clean_df = pd.read_sql_table("clean_xdr_data", con=engine)
+data_df = pd.read_csv('../data/user_info.csv')
+
+df = pd.concat([clean_df, data_df], axis=1)
+
+df.info()
+df.describe()
+exclude_columns = ['Bearer Id', 'IMSI', 'MSISDN/Number', 'IMEI']
+
+column_list = [col for col in df.select_dtypes(include=['int64', 'float64']).columns if col not in exclude_columns]
+ 
+for column in column_list:
+  print(f"--- {column} ---")
+  print(f"Range: {df[column].max()} - {df[column].min()}")
+  print(f"Variance: {df[column].var()}")
+  print(f"Standard Deviation: {df[column].std()}")
+  print(f"IQR: {df[column].quantile(0.75) - df[column].quantile(0.25)}")
+
+plt.hist(df['Total Download Data'], bins=20)
+
+plt.xlabel('Total Download Data')
+
+plt.ylabel('Frequency')
+
+plt.title('Total Download Data')
+
+plt.show()
+
+plt.hist(df['Total Upload Data'], bins=20)
+
+plt.xlabel('Total Uploaded Data')
+
+plt.ylabel('Frequency')
+
+plt.title('Total Uploaded Data')
+
+plt.show()
+
+labels = ['DL TP < 50 Kbps (%)', '50 Kbps < DL TP < 250 Kbps (%)', '250 Kbps < DL TP < 1 Mbps (%)', 'DL TP > 1 Mbps (%)']
+
+sizes = [df[label].mean() for label in labels]
+ 
+plt.pie(sizes, labels=labels, autopct='%1.1f%%')
+
+plt.title('Traffic Distribution')
+
+plt.axis('equal')
+
+plt.show()
+
+q1 = df['Avg RTT DL (ms)'].quantile(0.25)
+
+q3 = df['Avg RTT DL (ms)'].quantile(0.75)
+
+iqr = q3 - q1
+ 
+lower_bound = q1 - 1.5 * iqr
+
+upper_bound = q3 + 1.5 * iqr
+ 
+df['Avg RTT DL (ms)'] = df['Avg RTT DL (ms)'].apply(lambda x: upper_bound if x > upper_bound else (lower_bound if x < lower_bound else x))
+ 
+sns.boxplot(y=df['Avg RTT DL (ms)'])
+
+plt.ylabel('Avg RTT DL (ms)')
+
+plt.title('Average Round Trip Time for Download')
+
+plt.show()
+ 
+q1 = df['Avg RTT UL (ms)'].quantile(0.25)
+
+q3 = df['Avg RTT UL (ms)'].quantile(0.75)
+
+iqr = q3 - q1
+ 
+lower_bound = q1 - 1.5 * iqr
+
+upper_bound = q3 + 1.5 * iqr
+ 
+df['Avg RTT UL (ms)'] = df['Avg RTT UL (ms)'].apply(lambda x: upper_bound if x > upper_bound else (lower_bound if x < lower_bound else x))
+ 
+sns.boxplot(y=df['Avg RTT UL (ms)'])
+
+plt.ylabel('Avg RTT UL (ms)')
+
+plt.title('Average Round Trip Time for Upload')
+
+plt.show()
+activity_duration = df['Activity Duration DL (ms)']
+
+avg_bearer_throughput = df['Avg Bearer TP DL (kbps)']
+ 
+plt.figure(figsize=(10, 6))
+
+plt.scatter(activity_duration, avg_bearer_throughput, color='blue', alpha=0.5)
+
+plt.xlabel('Activity Duration DL (ms)')
+
+plt.ylabel('Avg Bearer TP DL (kbps)')
+
+plt.title('Average Bearer Throughput for Downlink vs. Activity Duration')
+
+plt.tight_layout()
+
+plt.show()
+ 
+user_info = {
+  'Total DL (Bytes)': 'Total Download Data',
+  'Social Media DL (Bytes)': 'Social Media Download Data',
+  'Google DL (Bytes)': 'Google Download Data',
+  'Email DL (Bytes)': 'Email Download Data',
+  'Youtube DL (Bytes)': 'Youtube Download Data',
+  'Netflix DL (Bytes)': 'Netflix Download Data',
+  'Gaming DL (Bytes)': 'Gaming Download Data',
+  'Other DL (Bytes)': 'Other Download Data',
+  'Total UL (Bytes)': 'Total Upload Data',
+  'Social Media UL (Bytes)': 'Social Media Upload Data',
+  'Google UL (Bytes)': 'Google Upload Data',
+  'Email UL (Bytes)': 'Email Upload Data',
+  'Youtube UL (Bytes)': 'Youtube Upload Data',
+  'Netflix UL (Bytes)': 'Netflix Upload Data',
+  'Gaming UL (Bytes)': 'Gaming Upload Data',
+  'Other UL (Bytes)': 'Other Upload Data'
+
+}
+ 
+download_columns = [
+  'Total DL (Bytes)',
+  'Social Media DL (Bytes)',
+  'Google DL (Bytes)',
+  'Email DL (Bytes)',
+  'Youtube DL (Bytes)',
+  'Netflix DL (Bytes)',
+  'Gaming DL (Bytes)',
+  'Other DL (Bytes)'
+
+]
+ 
+upload_columns = [
+  'Total UL (Bytes)',
+  'Social Media UL (Bytes)',
+  'Google UL (Bytes)',
+  'Email UL (Bytes)',
+  'Youtube UL (Bytes)',
+  'Netflix UL (Bytes)',
+  'Gaming UL (Bytes)',
+  'Other UL (Bytes)'
+
+]
+ 
+download_data = df[download_columns].sum()
+
+upload_data = df[upload_columns].sum()
+ 
+plt.figure(figsize=(10, 6))
+
+plt.bar(download_data.index.map(user_info), download_data.values, color='orange')
+
+plt.title('Total Download Data for Different Categories')
+
+plt.xlabel('Categories')
+
+plt.ylabel('Download Data')
+
+plt.xticks(rotation=45)
+
+plt.tight_layout()
+
+plt.show()
+ 
+plt.figure(figsize=(10, 6))
+
+plt.bar(upload_data.index.map(user_info), upload_data.values, color='green')
+
+plt.title('Total Upload Data for Different Categories')
+
+plt.xlabel('Categories')
+
+plt.ylabel('Upload Data')
+
+plt.xticks(rotation=45)
+
+plt.tight_layout()
+
+plt.show()
+
+df['Decile Class'] = pd.qcut(df['Total Session Duration'], 10, labels=False)
+ 
+df_top_five = df[df['Decile Class'] >= 5].copy()
+ 
+df_top_five.loc[:, 'Total Data'] = df_top_five['Total Download Data'] + df_top_five['Total Upload Data']
+
+total_data_per_decile = df_top_five.groupby('Decile Class')['Total Data'].sum()
+
+pd.DataFrame(total_data_per_decile)
+
+data_for_correlation = df[['Total DL (Bytes)', 'Social Media DL (Bytes)', 'Google DL (Bytes)', 'Email DL (Bytes)', 'Youtube DL (Bytes)',
+  'Netflix DL (Bytes)', 'Gaming DL (Bytes)', 'Other DL (Bytes)', 'Total UL (Bytes)', 'Social Media UL (Bytes)',   'Google UL (Bytes)', 'Email UL (Bytes)', 'Youtube UL (Bytes)', 'Netflix UL (Bytes)', 'Gaming UL (Bytes)', 'Other UL (Bytes)']]
+ 
+correlation_matrix = data_for_correlation.corr()
+ 
+col_info = {
+  'Total DL (Bytes)': 'Total Download Data',
+  'Social Media DL (Bytes)': 'Social Media Download Data',
+  'Google DL (Bytes)': 'Google Download Data',
+  'Email DL (Bytes)': 'Email Download Data',
+  'Youtube DL (Bytes)': 'Youtube Download Data',
+  'Netflix DL (Bytes)': 'Netflix Download Data',
+  'Gaming DL (Bytes)': 'Gaming Download Data',
+  'Other DL (Bytes)': 'Other Download Data',
+  'Total UL (Bytes)': 'Total Upload Data',
+  'Social Media UL (Bytes)': 'Social Media Upload Data',
+  'Google UL (Bytes)': 'Google Upload Data',
+  'Email UL (Bytes)': 'Email Upload Data',
+  'Youtube UL (Bytes)': 'Youtube Upload Data',
+  'Netflix UL (Bytes)': 'Netflix Upload Data',
+  'Gaming UL (Bytes)': 'Gaming Upload Data',
+  'Other UL (Bytes)': 'Other Upload Data'
+
+}
+ 
+correlation_matrix = correlation_matrix.rename(columns=col_info, index=col_info)
+
+correlation_matrix
+plt.figure(figsize=(16, 12))
+
+sns.heatmap(correlation_matrix, annot=True, fmt=".2f", cmap='coolwarm', linewidths=.05)
+
+plt.title('Correlation Matrix')
+
+plt.show()
+import sys, os
+
+import pandas as pd
+
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+
+from sklearn.preprocessing import StandardScaler
+
+from sklearn.cluster import KMeans
+
+from sklearn.metrics import silhouette_score
+
+from mpl_toolkits.mplot3d import Axes3D
+ 
+rpath = os.path.abspath('..')
+
+if rpath not in sys.path:
+  sys.path.insert(0, rpath)
+ 
+from utils import DatabaseEngine
+db_engine = DatabaseEngine()
+
+engine = db_engine.create()
+
+clean_df = pd.read_sql_table("clean_xdr_data", con=engine)
+data_df = pd.read_csv('../data/user_info.csv')
+
+data_df.columns = ['MSISDN/Number_data' if col=='MSISDN/Number' else col for col in data_df.columns]
+df = pd.concat([clean_df, data_df], axis=1)
+df['Total Traffic'] = df['Total Download Data'] + df['Total Upload Data']
+
+engagement_metrics = ['Number of Sessions', 'Total Session Duration', 'Total Traffic']
+ 
+for metric in engagement_metrics:
+  top_10_customers = df.nlargest(10, metric)[['MSISDN/Number', metric]]
+  print(f"Top 10 customers for {metric}:")
+  print(top_10_customers.to_string(index=False))
+  print("\n")
+
+def replace_with_mean(df, column):
+  mean = df[column].mean()
+  std = df[column].std()
+  is_outlier = (df[column] - mean).abs() > 3*std
+  df.loc[is_outlier, column] = mean
+  return df
+data_df['Total Traffic'] = data_df['Total Download Data'] + data_df['Total Upload Data']
+ 
+engagement_metrics = ['Number of Sessions', 'Total Session Duration', 'Total Traffic']
+
+for metric in engagement_metrics:
+  data_df = replace_with_mean(data_df, metric)
+ 
+scaler = StandardScaler()
+
+normalized_data = scaler.fit_transform(data_df[engagement_metrics])
+ 
+kmeans = KMeans(n_clusters=3, n_init=10, random_state=0)
+
+clusters = kmeans.fit_predict(normalized_data)
+
+data_df['Engagement Cluster'] = clusters
+data_df.head()
+fig = plt.figure(figsize=(10, 7))
+
+ax = fig.add_subplot(111, projection='3d')
+ 
+scatter = ax.scatter(data_df['Number of Sessions'],   data_df['Total Session Duration'],   data_df['Total Traffic'],   c=clusters,   cmap='viridis')
+ 
+ax.set_title('Customer Engagement Clusters')
+
+ax.set_xlabel('Number of Sessions')
+
+ax.set_ylabel('Total Session Duration')
+
+ax.set_zlabel('Total Traffic')
+ 
+cbar = plt.colorbar(scatter)
+
+cbar.set_label('Cluster')
+ 
+plt.show()
+cluster_metrics = data_df.groupby('Engagement Cluster')[engagement_metrics].agg(['min', 'max', 'mean', 'sum'])
+
+pd.DataFrame(cluster_metrics)
+cluster_metrics['Total Traffic'].plot(kind='bar', subplots=True, layout=(1,4), sharey=True, figsize=(20,5), title='Total Traffic Metrics by Cluster')
+
+plt.yscale('log')
+
+plt.show()
+applications = {
+  'Google': ['Google Download Data', 'Google Upload Data'],
+  'Email': ['Email Download Data', 'Email Upload Data'],
+  'Youtube': ['Youtube Download Data', 'Youtube Upload Data'],
+  'Netflix': ['Netflix Download Data', 'Netflix Upload Data'],
+ 
+}
+ 
+for app, (dl, ul) in applications.items():
+  data_df[app + ' Total Data'] = data_df[dl] + data_df[ul]
+ 
+user_total_traffic = data_df.groupby('MSISDN/Number_data')[[app + ' Total Data' for app in applications]].sum()
+ 
+for app in applications:
+  top_users = user_total_traffic[app + ' Total Data'].nlargest(10)
+  user_total_traffic.index = user_total_traffic.index.astype(int)
+  print(f"Top 10 users for {app}:")
+  print(pd.DataFrame(top_users).to_string())
+  print("\n")
+total_traffic_per_app = data_df[[app + ' Total Data' for app in applications]].sum()
+
+top_3_apps = total_traffic_per_app.nlargest(3)
+ 
+plt.figure(figsize=(10, 6))
+
+plt.barh(top_3_apps.index, top_3_apps.values, color='skyblue')
+
+plt.xlabel('Total Traffic')
+
+plt.ylabel('Application')
+
+plt.title('Top 3 Most Used Applications')
+
+plt.gca().invert_yaxis()
+
+plt.show()
+
+engagement_metrics = data_df[['Number of Sessions', 'Total Session Duration', 'Total Traffic']]
+
+scaler = StandardScaler()
+
+engagement_metrics_scaled = scaler.fit_transform(engagement_metrics)
+ 
+sse = []
+
+for k in range(1, 11):
+  kmeans = KMeans(n_clusters=k, n_init=10, random_state=1)
+  kmeans.fit(engagement_metrics_scaled)
+  sse.append(kmeans.inertia_)
+ 
+plt.figure(figsize=(10, 6))
+
+plt.plot(range(1, 11), sse, marker='o')
+
+plt.xlabel('Number of clusters')
+
+plt.ylabel('SSE')
+
+plt.title('Elbow Method to Determine Optimal k')
+
+plt.show()
+ 
+kmeans = KMeans(n_clusters=2, n_init=10, random_state=1)
+
+clusters = kmeans.fit_predict(engagement_metrics_scaled)
+
+data_df['Elbow_Cluster'] = clusters
+
+fig = plt.figure(figsize=(10, 8))
+
+ax = fig.add_subplot(111, projection='3d')
+ 
+for i in range(clusters.max()+1):
+  cluster_data = data_df[data_df['Elbow_Cluster'] == i]
+  ax.scatter(cluster_data['Number of Sessions'],   cluster_data['Total Session Duration'],   cluster_data['Total Traffic'],   label=f'Cluster {i}')
+ 
+ax.set_xlabel('Number of Sessions')
+
+ax.set_ylabel('Total Session Duration')
+
+ax.set_zlabel('Total Traffic')
+
+plt.legend()
+
+plt.title('User Engagement Clusters')
+
+plt.show()
+import pandas as pd
+
+import sys, os
+
+import matplotlib.pyplot as plt
+ 
+rpath = os.path.abspath('..')
+
+if rpath not in sys.path:
+  sys.path.insert(0, rpath)
+ 
+from utils import DatabaseEngine
+
+from sklearn.preprocessing import StandardScaler
+
+from sklearn.cluster import KMeans
+
+from sklearn.metrics import silhouette_score
+
+from mpl_toolkits.mplot3d import Axes3D
+db_engine = DatabaseEngine()
+
+engine = db_engine.create()
+
+clean_df = pd.read_sql_table("clean_xdr_data", con=engine)
+def process_user_info(clean_df):
+  avg_tcp_retrans = clean_df.groupby('MSISDN/Number')[['TCP UL Retrans. Vol (Bytes)', 'TCP DL Retrans. Vol (Bytes)']].mean()
+  avg_rtt = clean_df.groupby('MSISDN/Number')[['Avg RTT DL (ms)', 'Avg RTT UL (ms)']].mean()
+  handset_type = clean_df.groupby('MSISDN/Number')['Handset Type'].agg(pd.Series.mode)
+  avg_throughput = clean_df.groupby('MSISDN/Number')[['Avg Bearer TP DL (kbps)', 'Avg Bearer TP UL (kbps)']].mean()
+  user_info = pd.concat([avg_tcp_retrans, avg_rtt, handset_type, avg_throughput], axis=1)
+  return user_info
+ 
+filtered_df = clean_df[clean_df['MSISDN/Number'] != 'Unknown']
+
+user_info = process_user_info(filtered_df)
+
+pd.DataFrame(user_info)
+
+top10_tcp = user_info[['TCP UL Retrans. Vol (Bytes)', 'TCP DL Retrans. Vol (Bytes)']].sum(axis=1).nlargest(10)
+
+bottom10_tcp = user_info[['TCP UL Retrans. Vol (Bytes)', 'TCP DL Retrans. Vol (Bytes)']].sum(axis=1).nsmallest(10)
+
+most_frequent_tcp = user_info[['TCP UL Retrans. Vol (Bytes)', 'TCP DL Retrans. Vol (Bytes)']].sum(axis=1).value_counts().nlargest(10)
+pd.DataFrame(top10_tcp, columns=['Total TCP Retransmission Volume (Bytes)'])
+pd.DataFrame(bottom10_tcp, columns=['Total TCP Retransmission Volume (Bytes)'])
+pd.DataFrame(most_frequent_tcp).rename_axis('Total TCP Retransmission Volume (Bytes)').rename(columns={0: 'Count'})
+
+top10_rtt = user_info[['Avg RTT DL (ms)', 'Avg RTT UL (ms)']].mean(axis=1).nlargest(10)
+
+bottom10_rtt = user_info[['Avg RTT DL (ms)', 'Avg RTT UL (ms)']].mean(axis=1).nsmallest(10)
+
+most_frequent_rtt = user_info[['Avg RTT DL (ms)', 'Avg RTT UL (ms)']].mean(axis=1).value_counts().nlargest(10)
+pd.DataFrame(top10_rtt, columns=['Total Average RTT (ms)'])
+pd.DataFrame(bottom10_rtt, columns=['Total Average RTT (ms)'])
+pd.DataFrame(most_frequent_rtt).rename_axis('Total Average RTT (ms)').rename(columns={0: 'Count'})
+
+top10_throughput = user_info[['Avg Bearer TP DL (kbps)', 'Avg Bearer TP UL (kbps)']].mean(axis=1).nlargest(10)
+
+bottom10_throughput = user_info[['Avg Bearer TP DL (kbps)', 'Avg Bearer TP UL (kbps)']].mean(axis=1).nsmallest(10)
+
+most_frequent_throughput = user_info[['Avg Bearer TP DL (kbps)', 'Avg Bearer TP UL (kbps)']].mean(axis=1).value_counts().nlargest(10)
+pd.DataFrame(top10_throughput, columns=['Total Average Throughput (kbps)'])
+pd.DataFrame(bottom10_throughput, columns=['Total Average Throughput (kbps)'])
+pd.DataFrame(most_frequent_throughput).rename_axis('Total Average Throughput (kbps)').rename(columns={0: 'Count'})
+filtered_df = clean_df[clean_df['Handset Type'] != 'undefined']
+ 
+avg_throughput_per_handset = filtered_df.groupby('Handset Type')[['Avg Bearer TP DL (kbps)', 'Avg Bearer TP UL (kbps)']].mean().mean(axis=1)
+ 
+pd.DataFrame(avg_throughput_per_handset, columns = ['Average Throughput (kbps)'])
+filtered_df = clean_df[clean_df['Handset Type'] != 'undefined']
+
+avg_tcp_retrans_per_handset = filtered_df.groupby('Handset Type')[['TCP UL Retrans. Vol (Bytes)', 'TCP DL Retrans. Vol (Bytes)']].mean().mean(axis=1)
+
+pd.DataFrame(avg_tcp_retrans_per_handset, columns = ['Average TCP Retransmission Volume (Bytes)'])
+
+def replace_with_mean(df, column):
+  mean = df[column].mean()
+  std = df[column].std()
+  is_outlier = (df[column] - mean).abs() > 3*std
+  df.loc[is_outlier, column] = mean
+  return df
+clean_df['Total TCP'] = clean_df['TCP UL Retrans. Vol (Bytes)'] + clean_df['TCP DL Retrans. Vol (Bytes)']
+
+clean_df['Total RTT'] = clean_df['Avg RTT DL (ms)'] + clean_df['Avg RTT UL (ms)']
+
+clean_df['Total Throughput'] = clean_df['Avg Bearer TP DL (kbps)'] + clean_df['Avg Bearer TP UL (kbps)']
+ 
+engagement_metrics = ['Total TCP', 'Total RTT', 'Total Throughput']
+
+for metric in engagement_metrics:
+  clean_df = replace_with_mean(clean_df, metric)
+ 
+scaler = StandardScaler()
+
+normalized_data = scaler.fit_transform(clean_df[engagement_metrics])
+ 
+kmeans = KMeans(n_clusters=3, n_init=10, random_state=0)
+
+clusters = kmeans.fit_predict(normalized_data)
+
+clean_df['Engagement Cluster'] = clusters
+fig = plt.figure(figsize=(10, 7))
+
+ax = fig.add_subplot(111, projection='3d')
+ 
+scatter = ax.scatter(clean_df['Total TCP'],   clean_df['Total RTT'],   clean_df['Total Throughput'],   c=clusters,   cmap='viridis')
+ 
+ax.set_title('Customer Experience Clusters')
+
+ax.set_xlabel('Total TCP')
+
+ax.set_ylabel('Total RTT')
+
+ax.set_zlabel('Total Throughput')
+ 
+cbar = plt.colorbar(scatter)
+
+cbar.set_label('Cluster')
+ 
+plt.show()
+import pandas as pd
+
+import sys, os
+
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+
+from sklearn.metrics.pairwise import euclidean_distances
+
+from sklearn.model_selection import train_test_split
+
+from sklearn.linear_model import LinearRegression
+
+from sklearn.metrics import mean_squared_error
+
+from scipy.stats.mstats import winsorize
+ 
+rpath = os.path.abspath('..')
+
+if rpath not in sys.path:
+  sys.path.insert(0, rpath)
+ 
+from utils import DatabaseEngine
+
+from sklearn.preprocessing import StandardScaler
+
+from sklearn.cluster import KMeans
+
+from sklearn.metrics import silhouette_score
+
+from mpl_toolkits.mplot3d import Axes3D
+
+from scipy.spatial import distance
+
+import warnings
+ 
+warnings.filterwarnings('ignore', message="Warning: 'partition' will ignore the 'mask' of the MaskedArray.")
+db_engine = DatabaseEngine()
+
+engine = db_engine.create()
+
+clean_df = pd.read_sql_table("clean_xdr_data", con=engine)
+data_df = pd.read_csv('../data/user_info.csv')
+df = pd.concat([clean_df, data_df], axis=1)
+df['Total Traffic'] = df['Total Download Data'] + df['Total Upload Data']
+
+engagement_metrics = ['Number of Sessions', 'Total Session Duration', 'Total Traffic']
+
+def replace_with_mean(df, column):
+  mean = df[column].mean()
+  std = df[column].std()
+  is_outlier = (df[column] - mean).abs() > 3*std
+  df.loc[is_outlier, column] = mean
+  return df
+data_df['Total Traffic'] = data_df['Total Download Data'] + data_df['Total Upload Data']
+ 
+engagement_metrics = ['Number of Sessions', 'Total Session Duration', 'Total Traffic']
+
+for metric in engagement_metrics:
+  data_df = replace_with_mean(data_df, metric)
+ 
+scaler = StandardScaler()
+
+normalized_data = scaler.fit_transform(data_df[engagement_metrics])
+ 
+kmeans = KMeans(n_clusters=3, n_init=10, random_state=0)
+
+clusters = kmeans.fit_predict(normalized_data)
+ 
+data_df['Engagement Cluster'] = clusters
+avg_engagement = data_df.groupby('Engagement Cluster')[engagement_metrics].mean()
+ 
+less_engaged_cluster = avg_engagement.mean(axis=1).idxmin()
+ 
+centroid = kmeans.cluster_centers_[less_engaged_cluster]
+ 
+data_df['Engagement Score'] = euclidean_distances(normalized_data, centroid.reshape(1, -1)).flatten()
+data_df['Engagement Score'].describe()
+clean_df['Total TCP'] = clean_df['TCP UL Retrans. Vol (Bytes)'] + clean_df['TCP DL Retrans. Vol (Bytes)']
+
+clean_df['Total RTT'] = clean_df['Avg RTT DL (ms)'] + clean_df['Avg RTT UL (ms)']
+
+clean_df['Total Throughput'] = clean_df['Avg Bearer TP DL (kbps)'] + clean_df['Avg Bearer TP UL (kbps)']
+ 
+exp_engagement_metrics = ['Total TCP', 'Total RTT', 'Total Throughput']
+
+for metric in exp_engagement_metrics:
+  clean_df = replace_with_mean(clean_df, metric)
+ 
+scaler = StandardScaler()
+
+normalized_data = scaler.fit_transform(clean_df[exp_engagement_metrics])
+ 
+kmeans = KMeans(n_clusters=3, n_init=10, random_state=0)
+
+exp_clusters = kmeans.fit_predict(normalized_data)
+ 
+clean_df['Experiance Cluster'] = exp_clusters
+exp_avg_engagement = clean_df.groupby('Experiance Cluster')[exp_engagement_metrics].mean()
+ 
+exp_less_engaged_cluster = exp_avg_engagement.mean(axis=1).idxmin()
+ 
+exp_centroid = kmeans.cluster_centers_[exp_less_engaged_cluster]
+ 
+clean_df['Experiance Score'] = euclidean_distances(normalized_data, centroid.reshape(1, -1)).flatten()
+clean_df['Experiance Score'].describe()
+data_df['MSISDN/Number'] = data_df['MSISDN/Number'].astype(str)
+
+clean_df['MSISDN/Number'] = clean_df['MSISDN/Number'].astype(str)
+ 
+merged_df = pd.merge(data_df, clean_df, on='MSISDN/Number')
+ 
+merged_df['Satisfaction Score'] = (merged_df['Experiance Score'] + merged_df['Engagement Score']) / 2
+ 
+top_10_satisfied_users = merged_df.sort_values('Satisfaction Score', ascending=False).head(10)
+merged_df['Satisfaction Score'].describe()
+top_10_satisfied_customers = merged_df.sort_values('Satisfaction Score', ascending=False).head(10)
+ 
+top_10_satisfied_customers = top_10_satisfied_customers[['MSISDN/Number', 'Satisfaction Score']]
+ 
+print(top_10_satisfied_customers.to_string(index=False))
+percentiles = merged_df['Satisfaction Score'].describe(percentiles=[0.25, 0.75])
+ 
+bins = [percentiles['min'], percentiles['25%'], percentiles['75%'], percentiles['max']]
+ 
+labels = ['low satisfaction', 'moderate satisfaction', 'high satisfaction']
+ 
+merged_df['Satisfaction Category'] = pd.cut(merged_df['Satisfaction Score'], bins=bins, labels=labels, include_lowest=True)
+ 
+category_counts = merged_df['Satisfaction Category'].value_counts()
+
+print(category_counts)
+category_percentages = category_counts / category_counts.sum() * 100
+ 
+plt.figure(figsize=(10, 6))
+
+plt.pie(category_percentages, labels=category_percentages.index, autopct='%1.1f%%', startangle=140)
+
+plt.axis('equal')
+
+plt.title('Satisfaction Score Categories')
+
+plt.show()
+X = merged_df[['Engagement Score', 'Experiance Score']]
+
+y = merged_df['Satisfaction Score']
+ 
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+ 
+model = LinearRegression()
+ 
+model.fit(X_train, y_train)
+ 
+y_pred = model.predict(X_test)
+
+new_data = {'Engagement Score': [1.5], 'Experiance Score': [1.2]}
+
+new_df = pd.DataFrame(new_data)
+ 
+new_pred = model.predict(new_df)
+ 
+print(f'The predicted satisfaction score for the new customer is: {new_pred[0]}')
+X = merged_df[['Engagement Score', 'Experiance Score']]
+
+kmeans = KMeans(n_clusters=2, n_init=10, random_state=42)
+
+kmeans.fit(X)
+
+merged_df['Cluster'] = kmeans.labels_
+average_scores = merged_df.groupby('Cluster')[['Satisfaction Score', 'Experiance Score']].mean()
+ 
+print(average_scores)
+merged_df.to_sql('user_satisfaction', engine, if_exists='replace', index=False)
+query = "SELECT * FROM user_satisfaction LIMIT 5;"
+
+query_df = pd.read_sql_query(query, engine)
+
+query_df

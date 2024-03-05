@@ -1,0 +1,197 @@
+from fastapi import FastAPI, HTTPException, Query
+from typing import List, Dict
+
+app = FastAPI()
+
+def generate_prompts(description: str, scenarios: List[str], expected_outputs: List[str]) -> List[str]:
+  return [f"{description} {scenario} {expected_output}" for scenario, expected_output in zip(scenarios, expected_outputs)]
+
+def evaluate_prompt(description: str, generated_prompt: str) -> float:
+  return abs(len(description) - len(generated_prompt))
+
+def generate_evaluation_data(description: str, scenarios: List[str], expected_outputs: List[str]) -> List[Dict[str, float]]:
+  evaluation_data = []
+  for scenario, expected_output in zip(scenarios, expected_outputs):
+  generated_prompt = generate_prompts(description, [scenario], [expected_output])[0]
+  evaluation_score = evaluate_prompt(description, generated_prompt)
+  evaluation_data.append({"prompt": generated_prompt, "evaluation_score": evaluation_score})
+  return evaluation_data
+
+@app.post("/generate_prompts")
+def generate_prompts_api(description: str, scenarios: List[str], expected_outputs: List[str]):
+  prompts = generate_prompts(description, scenarios, expected_outputs)
+  return {"prompts": prompts}
+
+@app.post("/evaluate_prompt")
+def evaluate_prompt_api(description: str, generated_prompt: str):
+  evaluation_score = evaluate_prompt(description, generated_prompt)
+  return {"evaluation_score": evaluation_score}
+
+@app.post("/generate_evaluation_data")
+def generate_evaluation_data_api(description: str, scenarios: List[str], expected_outputs: List[str]):
+  evaluation_data = generate_evaluation_data(description, scenarios, expected_outputs)
+  return {"evaluation_data": evaluation_data}
+
+if __name__ == "__main__":
+  import uvicorn
+  uvicorn.run(app, host="127.0.0.1", port=8000)
+import React, { useState } from 'react';
+import './App.css';
+
+const App = () => {
+  const [userMessage, setUserMessage] = useState('');
+  const [generatedContent, setGeneratedContent] = useState('');
+  // const [selectedOption, setSelectedOption] = useState('Option 1');
+  const handleGeneratePrompts = async () => {
+  try {
+  const response = await fetch('http://127.0.0.1:8000/get_prompt_completion', {
+  method: 'POST',
+  headers: {
+  'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({ user_message: userMessage }),
+  });
+  if (!response.ok) {
+  throw new Error('Network response was not ok');
+  }
+  const result = await response.json();
+  setGeneratedContent(result.generated_content);
+  } catch (error) {
+  console.error('Error:', error.message);
+  }
+  };
+  const handleFileUpload = (event) => {
+  // Handle file upload logic here
+  const file = event.target.files[0];
+  console.log('Uploaded file:', file);
+  };
+  // const handleDropdownChange = (event) => {
+  //   setSelectedOption(event.target.value);
+  // };
+  return (
+  <div className="container">
+  <header>
+  <h1>Promptly</h1>
+  </header>
+  <main className="main-container">
+  {/* Left side: Generate Prompts */}
+  <section className="left-section">
+  <h2>Generate Prompts</h2>
+  <textarea
+  placeholder="Enter your prompt..."
+  value={userMessage}
+  onChange={(e) => setUserMessage(e.target.value)}
+  />
+  <button onClick={handleGeneratePrompts}>Generate</button>
+  {generatedContent && (
+  <section className="generated-content">
+  <h3>Enhanced Prompt</h3>
+  <p>{generatedContent}</p>
+  </section>
+  )}
+  </section>
+  <section className="right-section">
+  <h2>Enter Contexts or Upload Files</h2>
+  <textarea
+  placeholder="Enter your context..."
+  // value={userContext}
+  // onChange={(e) => setUserContext(e.target.value)}
+  />
+  <label htmlFor="file-upload" className="file-upload-label">
+  <span>Upload </span>
+  <input
+  type="file"
+  id="file-upload"
+  accept=".csv, .txt"
+  onChange={handleFileUpload}
+  />
+  </label>
+  </section>
+  </main>
+  </div>
+  );
+};
+
+export default App;
+from fastapi import FastAPI, Form, Request
+from fastapi.templating import Jinja2Templates
+import openai
+from llama import Llama
+from weaviate import Weaviate
+
+app = FastAPI()
+
+openai.api_key = 'your-gpt-3-api-key'
+llama_api_key = 'your-llama-api-key'
+weaviate_api_key = 'your-weaviate-api-key'
+
+llama = Llama(api_key=llama_api_key)
+weaviate = Weaviate(api_key=weaviate_api_key)
+
+templates = Jinja2Templates(directory="templates")
+
+@app.get("/")
+def read_form(request: Request):
+  return templates.TemplateResponse("index.html", {"request": request})
+
+@app.post("/generate_prompt")
+async def generate_prompt(user_input: str = Form(...)):
+  enhanced_prompt = llama.enrich_prompt(user_input)
+  response = openai.Completion.create(
+  model="text-davinci-003",
+  prompt=f"User input: {enhanced_prompt}\nAI response:"
+  )
+  ai_response = response['choices'][0]['text']
+  weaviate.create_object({
+  "class": "UserPrompt",
+  "properties": {
+  "user_input": user_input,
+  "enhanced_prompt": enhanced_prompt,
+  "ai_response": ai_response
+  }
+  })
+  return templates.TemplateResponse("result.html", {"request": request, "user_input": user_input, "enhanced_prompt": enhanced_prompt, "ai_response": ai_response})
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from openai import OpenAI
+from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+load_dotenv()
+import os
+api_key = os.environ.get("OPENAI_API_KEY")
+
+app = FastAPI()
+client = OpenAI()
+
+app.add_middleware(
+  CORSMiddleware,
+  allow_origins=["*"],   allow_credentials=True,
+  allow_methods=["*"],
+  allow_headers=["*"],
+)
+class ChatInput(BaseModel):
+  user_message: str
+ 
+@app.post("/get_prompt_completion")
+def get_prompt_completion(chat_input: ChatInput):
+  prompt = f"You will be provided with a prompt and I want you to improve the prompt into more accurate and detailed one\n\nUser Input: {chat_input.user_message}"
+  response = client.chat.completions.create(
+  model="gpt-3.5-turbo",
+  messages=[
+  {
+  "role": "system",
+  "content": prompt,
+  },
+  {"role": "user", "content": " {chat_input.user_message}"},
+  ],
+  temperature=0.8,
+  max_tokens=64,
+  top_p=1,
+  )
+  gemerated_content = response.choices[0].message.content
+  return {
+  "generated_content": gemerated_content
+  }
+if __name__ == "__main__":
+  import uvicorn
+  uvicorn.run(app, host="127.0.0.1", port=8000)

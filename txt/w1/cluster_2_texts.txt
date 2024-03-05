@@ -1,0 +1,107 @@
+%reload_ext autoreload
+%autoreload 2
+import os, sys
+import pprint
+ 
+rpath = os.path.abspath('..')
+if rpath not in sys.path:
+  sys.path.insert(0, rpath)
+ 
+from src.db_utils import engine
+import pandas as pd
+import matplotlib.pylab as plt
+import seaborn as sns
+import src.data_utils as data_utils
+import src.plot_utils as plot_utils
+plt.style.use('ggplot')
+pd.set_option('display.max_columns',200)
+sql_query = 'SELECT * FROM xdr_data'
+ 
+df = pd.read_sql(sql_query,engine)
+df.head()
+df.shape
+df.dtypes
+df.describe()
+df.isna().sum()
+data_utils.percent_missing(df)
+df.dtypes
+df['Start'] =pd.to_datetime(df['Start'])
+df['End'] =pd.to_datetime(df['End'])
+df.columns = df.columns.str.replace(' ', '_')
+df.columns
+df = df[['Bearer_Id', 'Start',   'End', 'Dur._(ms)',   'MSISDN/Number',   'Avg_RTT_DL_(ms)',
+  'Avg_RTT_UL_(ms)', 'Avg_Bearer_TP_DL_(kbps)', 'Avg_Bearer_TP_UL_(kbps)',
+  'TCP_DL_Retrans._Vol_(Bytes)', 'TCP_UL_Retrans._Vol_(Bytes)',
+  'DL_TP_<_50_Kbps_(%)', '50_Kbps_<_DL_TP_<_250_Kbps_(%)',
+  '250_Kbps_<_DL_TP_<_1_Mbps_(%)', 'DL_TP_>_1_Mbps_(%)',
+  'UL_TP_<_10_Kbps_(%)', '10_Kbps_<_UL_TP_<_50_Kbps_(%)',
+  '50_Kbps_<_UL_TP_<_300_Kbps_(%)', 'UL_TP_>_300_Kbps_(%)',
+  'HTTP_DL_(Bytes)', 'HTTP_UL_(Bytes)', 'Activity_Duration_DL_(ms)',
+  'Activity_Duration_UL_(ms)', 'Dur._(ms).1', 'Handset_Manufacturer',
+  'Handset_Type', 'Nb_of_sec_with_125000B_<_Vol_DL',
+  'Nb_of_sec_with_1250B_<_Vol_UL_<_6250B',
+  'Nb_of_sec_with_31250B_<_Vol_DL_<_125000B',
+  'Nb_of_sec_with_37500B_<_Vol_UL',
+  'Nb_of_sec_with_6250B_<_Vol_DL_<_31250B',
+  'Nb_of_sec_with_6250B_<_Vol_UL_<_37500B',
+  'Nb_of_sec_with_Vol_DL_<_6250B', 'Nb_of_sec_with_Vol_UL_<_1250B',
+  'Social_Media_DL_(Bytes)', 'Social_Media_UL_(Bytes)',
+  'Google_DL_(Bytes)', 'Google_UL_(Bytes)', 'Email_DL_(Bytes)',
+  'Email_UL_(Bytes)', 'Youtube_DL_(Bytes)', 'Youtube_UL_(Bytes)',
+  'Netflix_DL_(Bytes)', 'Netflix_UL_(Bytes)', 'Gaming_DL_(Bytes)',
+  'Gaming_UL_(Bytes)', 'Other_DL_(Bytes)', 'Other_UL_(Bytes)',
+  'Total_UL_(Bytes)', 'Total_DL_(Bytes)']]
+ 
+top_10_handsets = df['Handset_Type'].value_counts().head(10)
+ax = top_10_handsets.plot(kind='barh', title='Top 10 handsets')
+ 
+ax.set_xlabel('Number of Handsets'); ax.set_ylabel('Handset Type')
+top_3_handsets_manufacturers = df['Handset_Manufacturer'].value_counts().head(3)
+ax = top_3_handsets_manufacturers.plot(kind='bar', title='Top 3 handset manufacturers')
+ 
+ax.set_xlabel('Handset Manufacturer'); ax.set_ylabel('Number of Handsets')
+df['Handset_Manufacturer']
+filtered_df = df[df['Handset_Manufacturer'].isin(top_3_handsets_manufacturers.index.tolist())]
+ 
+ax = filtered_df.groupby('Handset_Manufacturer')['Handset_Type']\
+  .value_counts()\
+  .groupby(level=0, group_keys=False)\
+  .nlargest(5) \
+  .plot(kind='barh', figsize=(12,5), title='Top 5 handsets for each manufacturer')
+ 
+ax.set_xlabel('Number of Handsets')
+df.head()
+ 
+user_summary = df.groupby('MSISDN/Number').agg({
+  'Bearer_Id': 'count',   'Dur._(ms)': 'sum',   'Total_UL_(Bytes)': 'sum',   'Total_DL_(Bytes)': 'sum',   'Social_Media_DL_(Bytes)': 'sum',   'Social_Media_UL_(Bytes)': 'sum',  
+})
+ 
+user_summary
+sns.pairplot(data=user_summary,
+  vars=['Total_DL_(Bytes)','Total_UL_(Bytes)'],   )
+df.dtypes
+print(df.shape)
+ 
+cols_to_be_dropped= []
+for col in df.columns:
+  missing_percentage  = data_utils.percent_missing(df[col])
+  if(missing_percentage > 30):
+  print(f'{col} has => {missing_percentage} % missing')
+  cols_to_be_dropped.append(col)
+df_cleaned = df.drop(cols_to_be_dropped,axis=1)  
+print(df_cleaned.shape)
+df_cleaned.dtypes
+df_cleaned.head(10)
+df_cleaned.columns
+df_cleaned['MSISDN/Number'].fillna(df_cleaned['MSISDN/Number'].mode()[0],inplace=True)
+df_cleaned['Handset_Type'].fillna(df_cleaned['Handset_Type'].mode()[0],inplace=True)
+df_cleaned['Handset_Manufacturer'].fillna(df_cleaned['Handset_Manufacturer'].mode()[0],inplace=True)
+df_cleaned.isna().sum().sort_values(ascending=False)
+df_cleaned['Avg_RTT_UL_(ms)'].fillna(df_cleaned['Avg_RTT_UL_(ms)'].median(),inplace=True)
+df_cleaned['Avg_RTT_DL_(ms)'].fillna(df_cleaned['Avg_RTT_DL_(ms)'].median(),inplace=True)
+df_cleaned['Nb_of_sec_with_Vol_UL_<_1250B'].fillna(df_cleaned['Nb_of_sec_with_Vol_UL_<_1250B'].median(),inplace=True)
+df_cleaned['UL_TP_>_300_Kbps_(%)'].fillna(df_cleaned['UL_TP_>_300_Kbps_(%)'].median(),inplace=True)
+df_cleaned.isna().sum().sort_values(ascending=False)
+df_cleaned.describe()
+plot_utils.plot_hist(df_cleaned, 'Avg_Bearer_TP_DL_(kbps)', 'blue')
+df_cleaned['Avg_Bearer_TP_DL_(kbps)'].describe()

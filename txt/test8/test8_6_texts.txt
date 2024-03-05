@@ -1,0 +1,220 @@
+import sys, os
+
+import pandas as pd
+
+sys.path.append(os.path.abspath(os.path.join('../scripts')))
+
+from util import Util
+parsed_data_dir = "/home/habte/llm_finetuning_amharic/data/parsed/channel_1.csv"
+
+cleaned_data_dir = "/home/habte/llm_finetuning_amharic/data/cleaned/channel_1_cleaned.csv"
+
+file_name = "TIKVAH"
+
+util = Util()
+import pandas as pd
+
+import os
+ 
+file_name = "/home/habte/llm_finetuning_amharic/data/parsed/channel_1.csv"
+ 
+file_path = os.path.join(parsed_data_dir, file_name)
+ 
+df = pd.read_csv(file_path, index_col='id')
+ 
+filtered_df = df[(df.index > 60000) & (df.index <= 750000)]
+ 
+print(filtered_df.head())
+
+filtered_df
+filtered_df = filtered_df.dropna()
+
+filtered_df.head()
+filtered_df.shape
+filtered_df = filtered_df.replace('\n', ' ', regex=True)
+
+filtered_df.head()
+
+filtered_df['hashtags'] = filtered_df['text'].apply(lambda x: util.extract_hashtags(x))
+
+filtered_df.head()
+
+filtered_df['text'] = filtered_df['text'].str.replace(r'\
+filtered_df.head()
+
+filtered_df['emojis'] = filtered_df['text'].apply(util.extract_emojis)
+
+filtered_df.tail()
+df_83826 = filtered_df.loc[83826]
+
+df_83826
+filtered_df['text'] = filtered_df['text'].apply(util.remove_emojis)
+df_83826 = filtered_df.loc[83826]
+
+df_83826
+ 
+letters = [
+  [['ሐ', 'ሑ', 'ሒ', 'ሓ', 'ሔ', 'ሖ'], ['ሀ', 'ሁ', 'ሂ', 'ሃ', 'ሄ', 'ህ', 'ሆ']],
+  [['ኀ', 'ኁ', 'ኂ', 'ኃ', 'ኄ', 'ኅ', 'ኆ'], ['ሀ', 'ሁ', 'ሂ', 'ሃ', 'ሄ', 'ህ', 'ሆ']],
+  [['ሠ', 'ሡ', 'ሢ', 'ሣ', 'ሤ', 'ሦ', 'ሦ', 'ሧ'], ['ሰ', 'ሱ', 'ሲ', 'ሳ', 'ሴ', 'ስ', 'ሶ', 'ሷ']],
+  [['ዐ', 'ዑ', 'ዒ', 'ዓ', 'ዔ', 'ዕ', 'ዖ'], ['አ', 'ኡ', 'ኢ', 'ኣ', 'ኤ', 'እ', 'ኦ']],
+  [['ጸ', 'ጹ', 'ጺ', 'ጻ', 'ጼ', 'ጽ', 'ጾ'], ['ፀ', 'ፁ', 'ፂ', 'ፃ', 'ፄ', 'ፅ', 'ፆ']]
+
+]
+
+for letter in letters:
+  for i in range(len(letter[0])):
+  filtered_df['text'] = filtered_df['text'].str.replace(letter[0][i], letter[1][i])
+ 
+filtered_df['symbols'] = filtered_df['text'].apply(util.extract_symbols)
+
+filtered_df.tail()
+filtered_df['text'] = filtered_df['text'].apply(util.remove_symbols)
+
+filtered_df.tail()
+filtered_df['links'] = filtered_df['text'].apply(util.extract_urls)
+
+filtered_df.tail()
+filtered_df['text'] = filtered_df['text'].str.replace(util.url_pattern, '', regex=True).str.strip()
+
+filtered_df.tail()
+filtered_df['mentions'] = filtered_df['text'].apply(util.extract_mentions)
+
+filtered_df.tail()
+filtered_df['text'] = filtered_df['text'].str.replace(util.mention_pattern, '', regex=True).str.strip()
+
+filtered_df.tail()
+filtered_df['text'] = filtered_df['text'].str.replace('\s+', ' ', regex=True).str.strip()
+filtered_df['text'] = filtered_df['text'].replace(r'!+', '!', regex=True)
+
+filtered_df['text'] = filtered_df['text'].replace(r'\.+', '', regex=True)
+filtered_df.tail()
+filtered_df.to_csv(f"{cleaned_data_dir}")
+filtered_df['text'].to_csv(f"{cleaned_data_dir}", index=False, header=False)
+import sys, os
+
+import pandas as pd
+
+sys.path.append(os.path.abspath(os.path.join('/home/habte/llm_finetuning_amharic/scripts/')))
+
+from scripts.util import Util
+
+import sys
+
+import os
+
+import pandas as pd
+ 
+script_dir = os.path.abspath("/home/habte/llm_finetuning_amharic/scripts/")
+
+sys.path.append(script_dir)
+ 
+from util import Util
+ 
+util_instance = Util()
+
+raw_data_dir = "/home/habte/llm_finetuning_amharic/data/raw/TIKVAH.json"
+
+parsed_data_dir = "/home/habte/llm_finetuning_amharic/data/parsed/channel_1.csv"
+ 
+file_name = "TIKVAH"
+
+util = Util()
+data = util.read_file(f'{raw_data_dir}')
+import os
+ 
+def read_file(self, file_path: str) -> dict:
+  directory = os.path.dirname(file_path)
+  if not os.path.exists(directory):
+  print(f"Directory '{directory}' does not exist.")
+  return None   with open(file_path, 'r') as file:
+  data = json.load(file)
+  return data
+
+parsed_message = util.parse_messages(data['messages'])
+
+import pandas as pd
+ 
+df = pd.DataFrame(parsed_message)
+ 
+df.set_index('id', inplace=True)
+ 
+filtered_df = df[(df.index > 60000) & (df.index < 750001)]
+ 
+print(filtered_df.head())
+
+filtered_df
+filtered_df.to_csv(f'{parsed_data_dir}')
+filtered_df.info()
+import json
+import os
+import re
+import pandas as pd
+import sys, os
+sys.path.append(os.path.abspath(os.path.join('/home/habte/llm_finetuning_amharic/scripts')))
+from scripts.util import Util
+
+raw_data_dir = "/home/habte/llm_finetuning_amharic/data/raw/TIKVAH.json"
+parsed_data_dir = "/home/habte/llm_finetuning_amharic/data/parsed/channel_1.csv"
+cleaned_data_dir = "/home/habte/llm_finetuning_amharic/data/cleaned/channel_1_cleaned.csv"
+
+os.makedirs(parsed_data_dir, exist_ok=True)
+os.makedirs(cleaned_data_dir, exist_ok=True)
+
+def parse_raw_data(raw_file_path):
+  with open(raw_file_path, "r", encoding="utf-8") as file:
+  raw_data = json.load(file)
+  parsed_data = []
+  for item in raw_data:
+  parsed_item = {
+  "id": item.get("channel_id", ""),
+  "date": item.get("date", ""),
+  "message": item.get("message", "")
+  }
+  parsed_data.append(parsed_item)
+  return parsed_data
+
+def clean_text(text):
+  cleaned_text = re.sub(r"\s+", " ", text.replace("\n", "").strip())
+  cleaned_text = re.sub(r"   cleaned_text = cleaned_text.translate(str.maketrans(
+  ''.join(['ሐ', 'ሑ', 'ሒ', 'ሓ', 'ሔ', 'ሖ']),
+  ''.join(['ሀ', 'ሁ', 'ሂ', 'ሃ', 'ሄ', 'ህ', 'ሆ'])
+  ))
+  cleaned_text = cleaned_text.translate(str.maketrans(
+  ''.join(['ኀ', 'ኁ', 'ኂ', 'ኃ', 'ኄ', 'ኅ', 'ኆ']),
+  ''.join(['ሀ', 'ሁ', 'ሂ', 'ሃ', 'ሄ', 'ህ', 'ሆ'])
+  ))
+  cleaned_text = cleaned_text.translate(str.maketrans(
+  ''.join(['ሠ', 'ሡ', 'ሢ', 'ሣ', 'ሤ', 'ሦ', 'ሦ', 'ሧ']),
+  ''.join(['ሰ', 'ሱ', 'ሲ', 'ሳ', 'ሴ', 'ስ', 'ሶ', 'ሷ'])
+  ))
+  cleaned_text = cleaned_text.translate(str.maketrans(
+  ''.join(['ዐ', 'ዑ', 'ዒ', 'ዓ', 'ዔ', 'ዕ', 'ዖ']),
+  ''.join(['አ', 'ኡ', 'ኢ', 'ኣ', 'ኤ', 'እ', 'ኦ'])
+  ))
+  cleaned_text = cleaned_text.translate(str.maketrans(
+  ''.join(['ጸ', 'ጹ', 'ጺ', 'ጻ', 'ጼ', 'ጽ', 'ጾ']),
+  ''.join(['ፀ', 'ፁ', 'ፂ', 'ፃ', 'ፄ', 'ፅ', 'ፆ'])
+  ))
+  return cleaned_text
+
+def process_and_save_data(parsed_data, output_file_path):
+  cleaned_data = []
+  for item in parsed_data:
+  cleaned_item = {
+  "id": item["id"],
+  "date": item["date"],
+  "message": clean_text(item["message"])
+  }
+  cleaned_data.append(cleaned_item)
+  with open(output_file_path, "w", encoding="utf-8") as file:
+  json.dump(cleaned_data, file, ensure_ascii=False, indent=2)
+
+for raw_file_name in os.listdir(raw_data_dir):
+  raw_file_path = os.path.join(raw_data_dir, raw_file_name)
+  parsed_data = parse_raw_data(raw_file_path)
+  parsed_output_file_path = os.path.join(parsed_data_dir, f"parsed_{raw_file_name}")
+  with open(parsed_output_file_path, "w", encoding="utf-8") as parsed_file:
+  json.dump(parsed_data, parsed_file, ensure_ascii=False, indent=2)
+  cleaned_output_file_path = os.path.join(cleaned_data_dir, f"cleaned_{raw_file_name}")
+  process_and_save_data(parsed_data, cleaned_output_file_path)

@@ -1,0 +1,803 @@
+import pandas as pd
+import numpy as np
+
+class DataWrangler:
+  def __init__(self, df):
+  self.df = df
+  def calculate_null_percentage(self):
+  """
+  Calculate the percentage of null values in each column of the DataFrame.
+  Returns:
+  - pd.Series: Percentage of null values for each column.
+  """
+  total_cells = self.df.size
+  total_null_cells = self.df.isnull().sum().sum()
+  null_percentage = (total_null_cells / total_cells) * 100
+  return null_percentage
+  def handle_duplicate_data(self):
+  """
+  Handle duplicate data in the DataFrame.
+  Returns:
+  - pd.DataFrame: DataFrame with duplicate data handled.
+  """
+  self.df.drop_duplicates(inplace=True)
+  return self.df
+  def replace_outliers_with_mean(self, columns):
+  for column in columns:
+  z_scores = np.abs((self.df[column] - self.df[column].mean()) / self.df[column].std())
+  self.df[column] = np.where(z_scores > 3, self.df[column].mean(), self.df[column])
+  def aggregate_data(self, group_by_columns, aggregation_functions):
+  """
+  Aggregate data in the DataFrame.
+  Parameters:
+  - group_by_columns (list): List of columns to group by.
+  - aggregation_functions (dict): Dictionary of {column: aggregation function}.
+  Returns:
+  - pd.DataFrame: Aggregated DataFrame.
+  """
+  self.df = (
+  self.df.groupby(group_by_columns).agg(aggregation_functions).reset_index()
+  )
+  return self.df
+  def handle_categorical_data(self, encoding_method="one-hot", columns=None):
+  """
+  Handle categorical data in the DataFrame.
+  Parameters:
+  - encoding_method (str): Method for encoding categorical data ('one-hot', 'label', etc.).
+  - columns (list): List of columns to encode.
+  Returns:
+  - pd.DataFrame: DataFrame with categorical data handled.
+  """
+  if columns is None:
+  columns = self.df.select_dtypes(include="object").columns
+  if encoding_method == "one-hot":
+  self.df = pd.get_dummies(self.df, columns=columns, drop_first=True)
+  elif encoding_method == "label":
+  pass
+  return self.df
+  def calculate_skewness(self):
+  """
+  Calculate skewness for numeric columns in a DataFrame.
+  Returns:
+  - pd.Series: Skewness values for each numeric column.
+  """
+  numeric_columns = self.df.select_dtypes(include=["float", "int"])
+  skewness_values = numeric_columns.apply(lambda x: x.skew()).round(1)
+  return skewness_values
+  def get_numeric_columns(self):
+  """
+  Extract numeric columns from a DataFrame.
+  Parameters:
+  - df (pd.DataFrame): Input DataFrame.
+  Returns:
+  - pd.DataFrame: DataFrame containing only numeric columns.
+  """
+  numeric_columns = self.df.select_dtypes(include=["float", "int"])
+  return numeric_columns
+  def get_object_columns(self):
+  """
+  Extract object (string) columns from the DataFrame.
+  Returns:
+  - pd.Index: Index containing object column names.
+  """
+  object_columns = self.df.select_dtypes(include=["object"]).columns
+  return object_columns
+  def repl_numeric_columns(self):
+  """
+  Impute missing values in numeric columns based on skewness.
+  Returns:
+  - pd.DataFrame: DataFrame with missing values imputed.
+  """
+  for column_name in self.df:
+  column_skew = self.df[column_name].skew().round()
+  fill_value = self.df[column_name].median()
+  self.df[column_name].fillna(fill_value, inplace=True)
+  return self.df
+  def calculate_categorical_mode(self, column_name):
+  """
+  Calculate the mode of a categorical column in a DataFrame.
+  Parameters:
+  - column_name (str): Name of the categorical column.
+  Returns:
+  - pd.Series: Mode(s) of the specified column.
+  """
+  category_mode = self.df[column_name].mode()
+  return category_mode
+import pandas as pd
+
+import numpy as np
+
+import psycopg2
+
+import seaborn as sb
+
+from sqlalchemy  import create_engine,MetaData, Table
+
+database_name = 'tellcom'
+
+table_name= 'xdr_data'
+ 
+connection_params = {   "host": "localhost",
+  "user": "postgres",
+  "password": "postgres",
+  "port": "5432",
+  "database": database_name
+  }
+ 
+engine = create_engine(f"postgresql+psycopg2://{connection_params['user']}:{connection_params['password']}@{connection_params['host']}:{connection_params['port']}/{connection_params['database']}")
+ 
+sql_query = 'SELECT * FROM xdr_data'
+ 
+df = pd.read_sql(sql_query, con= engine)
+
+df.head()
+
+df.shape
+
+sum(df.duplicated())
+ 
+import sys, os
+ 
+rpath = os.path.abspath('..')
+
+if rpath not in sys.path:
+  sys.path.insert(0, rpath)
+ 
+from scripts.wrangling import DataWrangler
+data_wrangler = DataWrangler(df)
+data_wrangler.calculate_null_percentage().round(2)
+
+df.info()
+
+numerical_df = data_wrangler.get_numeric_columns()
+
+numerical_df.head()
+
+numerical_df.info()
+numerical_wrangler = DataWrangler(numerical_df)
+skewnes_value = numerical_wrangler.calculate_skewness()
+skewnes_value
+ 
+df_numerical = numerical_wrangler.repl_numeric_columns()
+df_numerical.head()
+col_name = ['Dur. (ms)', 'Total DL (Bytes)', 'Total UL (Bytes)',
+  'Social Media DL (Bytes)', 'Social Media UL (Bytes)',
+  'Youtube DL (Bytes)', 'Youtube UL (Bytes)',
+  'Netflix DL (Bytes)', 'Netflix UL (Bytes)',
+  'Google DL (Bytes)', 'Google UL (Bytes)',
+  'Email DL (Bytes)', 'Email UL (Bytes)',
+  'Gaming DL (Bytes)', 'Gaming UL (Bytes)',
+  'Other DL (Bytes)', 'Other UL (Bytes)']
+numerical_wrangler.replace_outliers_with_mean(col_name)
+object_column_names = data_wrangler.get_object_columns()
+categorical_df = data_wrangler.df[object_column_names]
+categorical_df.head()
+df_clean = pd.concat([df_numerical, categorical_df], axis=1)
+df_clean.info()
+df_clean.dropna(inplace=True)
+df_clean.shape
+df_clean.head()
+df_clean.to_csv('../data/clean_data.csv',index=False)
+
+!jupyter nbconvert <Part_II_Filename>.ipynb --to slides --post serve --no-input --no-prompt
+import numpy as np
+
+import pandas as pd
+
+import seaborn as sns
+
+import matplotlib.pyplot as plt
+df_clean = pd.read_csv('../data/clean_data.csv')
+df_clean.head()
+
+df_clean.describe()
+ 
+import sys, os
+ 
+rpath = os.path.abspath('..')
+
+if rpath not in sys.path:
+  sys.path.insert(0, rpath)
+ 
+from scripts.visualizer import Plotter
+
+handset_data = df_clean[['MSISDN/Number', 'Handset Type']]
+
+handset_counts = handset_data['Handset Type'].value_counts().reset_index()
+
+handset_counts.columns = ['Handset Type', 'Count']
+
+top_ten_handsets = handset_counts.head(10)
+
+top_ten_handsets
+plotter_instance = Plotter(top_ten_handsets)
+!jupyter nbconvert user_overview_analysis.ipynb --to slides --post serve --no-input --no-prompt
+
+plt.figure(figsize=(10, 6))
+
+sns.barplot(x='Count', y='Handset Type', data=top_ten_handsets, palette='viridis')
+
+plt.xlabel('Count')
+
+plt.ylabel('Handset Type')
+
+plt.title('Top Ten Handsets Used by Customers')
+
+plt.show();
+
+handsetM_data = df_clean['Handset Manufacturer']
+
+handsetM_counts = handsetM_data.value_counts().reset_index()
+
+handsetM_counts.columns = ['Handset Manufacturer', 'Count']
+
+top_three_handsets_manf = handsetM_counts.head(3)
+
+top_three_handsets_manf
+
+plt.figure(figsize=(10, 6))
+
+sns.barplot(x='Count', y='Handset Manufacturer', data=top_three_handsets_manf, palette='viridis')
+
+plt.xlabel('Count')
+
+plt.ylabel('Handset Manufacturer')
+
+plt.title('Top Three Handset Manufacturer')
+
+plt.show();
+
+handset_ocurrance_counts = df_clean.groupby(['Handset Manufacturer', 'Handset Type']).size().reset_index(name='Count')
+
+top_manufacturers = handset_ocurrance_counts.groupby('Handset Manufacturer')['Count'].sum().nlargest(3).index
+
+top_manufacturer_data = handset_ocurrance_counts[handset_ocurrance_counts['Handset Manufacturer'].isin(top_manufacturers)]
+
+top_5_handsets_per_manufacturer = (
+  top_manufacturer_data.groupby('Handset Manufacturer')
+  .apply(lambda group: group.nlargest(5, 'Count'))
+  .reset_index(drop=True)
+
+)
+ 
+top_5_handsets_per_manufacturer
+
+sns.set(style="whitegrid")
+ 
+plt.figure(figsize=(12, 8))
+
+sns.barplot(x='Handset Manufacturer', y='Count', hue='Handset Type', data=top_5_handsets_per_manufacturer)
+
+plt.title('Handset Types Count by Manufacturer')
+
+plt.xlabel('Handset Manufacturer')
+
+plt.ylabel('Count')
+
+plt.xticks(rotation=45, ha='right')  
+plt.legend(title='Handset Type', bbox_to_anchor=(1, 1))  
+plt.show()
+ 
+print(df_clean.columns.tolist())
+
+columns_to_aggregate = ['Dur. (ms)', 'Total DL (Bytes)', 'Total UL (Bytes)',
+  'Social Media DL (Bytes)', 'Social Media UL (Bytes)',
+  'Youtube DL (Bytes)', 'Youtube UL (Bytes)',
+  'Netflix DL (Bytes)', 'Netflix UL (Bytes)',
+  'Google DL (Bytes)', 'Google UL (Bytes)',
+  'Email DL (Bytes)', 'Email UL (Bytes)',
+  'Gaming DL (Bytes)', 'Gaming UL (Bytes)',
+  'Other DL (Bytes)', 'Other UL (Bytes)']
+
+user_aggregated_data = df_clean.groupby('MSISDN/Number').agg({
+  'Bearer Id': 'count',   'Dur. (ms)': 'sum',   'Total DL (Bytes)': 'sum',   'Total UL (Bytes)': 'sum',   'Social Media DL (Bytes)': 'sum', 'Social Media UL (Bytes)': 'sum',
+  'Youtube DL (Bytes)': 'sum', 'Youtube UL (Bytes)': 'sum',
+  'Netflix DL (Bytes)': 'sum', 'Netflix UL (Bytes)': 'sum',
+  'Google DL (Bytes)': 'sum', 'Google UL (Bytes)': 'sum',
+  'Email DL (Bytes)': 'sum', 'Email UL (Bytes)': 'sum',
+  'Gaming DL (Bytes)': 'sum', 'Gaming UL (Bytes)': 'sum',
+  'Other DL (Bytes)': 'sum', 'Other UL (Bytes)': 'sum'
+
+})
+ 
+user_aggregated_data
+user_aggregated_data['Session duration (s)'] = user_aggregated_data['Dur. (ms)'] / 1000
+
+user_aggregated_data.head()
+
+user_aggregated_data['Social Media Total (Bytes)'] = (
+  user_aggregated_data['Social Media DL (Bytes)']
+  +   user_aggregated_data['Social Media UL (Bytes)']
+  )
+
+user_aggregated_data['Youtube Total (Bytes)'] = (
+  user_aggregated_data['Youtube DL (Bytes)']
+  +   user_aggregated_data['Youtube UL (Bytes)']
+  )
+
+user_aggregated_data['Netflix Total (Bytes)'] = (
+  user_aggregated_data['Netflix DL (Bytes)']
+  +   user_aggregated_data['Netflix UL (Bytes)']
+  )
+
+user_aggregated_data['Google Total (Bytes)'] = (
+  user_aggregated_data['Google DL (Bytes)']   +   user_aggregated_data['Google UL (Bytes)']
+  )
+
+user_aggregated_data['Email Total (Bytes)'] = (
+  user_aggregated_data['Email DL (Bytes)']
+  +   user_aggregated_data['Email UL (Bytes)']
+  )
+
+user_aggregated_data['Gaming Total (Bytes)'] = (
+  user_aggregated_data['Gaming DL (Bytes)']
+  +   user_aggregated_data['Gaming UL (Bytes)']
+  )
+
+user_aggregated_data['Other Total (Bytes)'] = (
+  user_aggregated_data['Other DL (Bytes)']
+  +   user_aggregated_data['Other UL (Bytes)']
+  )
+
+user_aggregated_data.head()
+user_aggregated_data.describe()
+ 
+plt.hist(user_aggregated_data['Session duration (s)'], bins=30, edgecolor='black')
+
+plt.title('Histogram of Session duration')
+
+plt.xlabel('Session duration (ms)')
+
+plt.ylabel('Frequency')
+
+plt.show()
+ 
+fig, ax = plt.subplots()
+ 
+ax.boxplot(user_aggregated_data['Session duration (s)'])
+
+ax.set_yscale('log')  
+ax.set_title('Box Plot of Session duration')
+
+ax.set_ylabel('Session duration (seccond)')
+
+plt.show()
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
+import pandas as pd
+
+class Plotter:
+  def __init__(self, data):
+  self.data = data
+  def plot_horizontal_bar_chart(self, x_values, y_values, title="Horizontal Bar Chart", xlabel="X Axis", ylabel="Y Axis"):
+  plt.figure(figsize=(10, 6))
+  sns.barplot(x=x_values, y=y_values, data=self.df, palette='viridis')
+  plt.xlabel(xlabel)
+  plt.ylabel(ylabel)
+  plt.title(title)
+  plt.show()
+  def plot_heatmap(self, title="Heatmap"):
+  plt.figure(figsize=(8, 6))
+  sns.heatmap(self.data, annot=True, cmap="YlGnBu", fmt=".2f", linewidths=0.5)
+  plt.title(title)
+  plt.show()
+  def plot_scatter_plot(self, x_values, y_values, title="Scatter Plot", xlabel="X Axis", ylabel="Y Axis"):
+  plt.figure(figsize=(8, 6))
+  plt.scatter(x_values, y_values)
+  plt.title(title)
+  plt.xlabel(xlabel)
+  plt.ylabel(ylabel)
+  plt.show()
+import numpy as np
+
+import pandas as pd
+
+import seaborn as sns
+
+import matplotlib.pyplot as plt
+df_clean = pd.read_csv('../data/clean_data.csv')
+df_clean.head()
+
+df_clean.describe()
+ 
+import sys, os
+ 
+rpath = os.path.abspath('..')
+
+if rpath not in sys.path:
+  sys.path.insert(0, rpath)
+ 
+from scripts.visualizer import Plotter
+
+handset_data = df_clean[['MSISDN/Number', 'Handset Type']]
+
+handset_counts = handset_data['Handset Type'].value_counts().reset_index()
+
+handset_counts.columns = ['Handset Type', 'Count']
+
+top_ten_handsets = handset_counts.head(10)
+
+top_ten_handsets
+plotter_instance = Plotter(top_ten_handsets)
+
+plt.figure(figsize=(10, 6))
+
+sns.barplot(x='Count', y='Handset Type', data=top_ten_handsets, palette='viridis')
+
+plt.xlabel('Count')
+
+plt.ylabel('Handset Type')
+
+plt.title('Top Ten Handsets Used by Customers')
+
+plt.show();
+
+handsetM_data = df_clean['Handset Manufacturer']
+
+handsetM_counts = handsetM_data.value_counts().reset_index()
+
+handsetM_counts.columns = ['Handset Manufacturer', 'Count']
+
+top_three_handsets_manf = handsetM_counts.head(3)
+
+top_three_handsets_manf
+
+plt.figure(figsize=(10, 6))
+
+sns.barplot(x='Count', y='Handset Manufacturer', data=top_three_handsets_manf, palette='viridis')
+
+plt.xlabel('Count')
+
+plt.ylabel('Handset Manufacturer')
+
+plt.title('Top Three Handset Manufacturer')
+
+plt.show();
+
+handset_ocurrance_counts = df_clean.groupby(['Handset Manufacturer', 'Handset Type']).size().reset_index(name='Count')
+
+top_manufacturers = handset_ocurrance_counts.groupby('Handset Manufacturer')['Count'].sum().nlargest(3).index
+
+top_manufacturer_data = handset_ocurrance_counts[handset_ocurrance_counts['Handset Manufacturer'].isin(top_manufacturers)]
+
+top_5_handsets_per_manufacturer = (
+  top_manufacturer_data.groupby('Handset Manufacturer')
+  .apply(lambda group: group.nlargest(5, 'Count'))
+  .reset_index(drop=True)
+
+)
+ 
+top_5_handsets_per_manufacturer
+
+sns.set(style="whitegrid")
+ 
+plt.figure(figsize=(12, 8))
+
+sns.barplot(x='Handset Manufacturer', y='Count', hue='Handset Type', data=top_5_handsets_per_manufacturer)
+
+plt.title('Handset Types Count by Manufacturer')
+
+plt.xlabel('Handset Manufacturer')
+
+plt.ylabel('Count')
+
+plt.xticks(rotation=45, ha='right')  
+plt.legend(title='Handset Type', bbox_to_anchor=(1, 1))  
+plt.show()
+ 
+print(df_clean.columns.tolist())
+
+columns_to_aggregate = ['Dur. (ms)', 'Total DL (Bytes)', 'Total UL (Bytes)',
+  'Social Media DL (Bytes)', 'Social Media UL (Bytes)',
+  'Youtube DL (Bytes)', 'Youtube UL (Bytes)',
+  'Netflix DL (Bytes)', 'Netflix UL (Bytes)',
+  'Google DL (Bytes)', 'Google UL (Bytes)',
+  'Email DL (Bytes)', 'Email UL (Bytes)',
+  'Gaming DL (Bytes)', 'Gaming UL (Bytes)',
+  'Other DL (Bytes)', 'Other UL (Bytes)']
+
+user_aggregated_data = df_clean.groupby('MSISDN/Number').agg({
+  'Bearer Id': 'count',   'Dur. (ms)': 'sum',   'Total DL (Bytes)': 'sum',   'Total UL (Bytes)': 'sum',   'Social Media DL (Bytes)': 'sum', 'Social Media UL (Bytes)': 'sum',
+  'Youtube DL (Bytes)': 'sum', 'Youtube UL (Bytes)': 'sum',
+  'Netflix DL (Bytes)': 'sum', 'Netflix UL (Bytes)': 'sum',
+  'Google DL (Bytes)': 'sum', 'Google UL (Bytes)': 'sum',
+  'Email DL (Bytes)': 'sum', 'Email UL (Bytes)': 'sum',
+  'Gaming DL (Bytes)': 'sum', 'Gaming UL (Bytes)': 'sum',
+  'Other DL (Bytes)': 'sum', 'Other UL (Bytes)': 'sum'
+
+})
+ 
+user_aggregated_data
+user_aggregated_data['Session duration (s)'] = user_aggregated_data['Dur. (ms)'] / 1000
+
+user_aggregated_data.head()
+
+user_aggregated_data['Social Media Total (Bytes)'] = (
+  user_aggregated_data['Social Media DL (Bytes)']
+  +   user_aggregated_data['Social Media UL (Bytes)']
+  )
+
+user_aggregated_data['Youtube Total (Bytes)'] = (
+  user_aggregated_data['Youtube DL (Bytes)']
+  +   user_aggregated_data['Youtube UL (Bytes)']
+  )
+
+user_aggregated_data['Netflix Total (Bytes)'] = (
+  user_aggregated_data['Netflix DL (Bytes)']
+  +   user_aggregated_data['Netflix UL (Bytes)']
+  )
+
+user_aggregated_data['Google Total (Bytes)'] = (
+  user_aggregated_data['Google DL (Bytes)']   +   user_aggregated_data['Google UL (Bytes)']
+  )
+
+user_aggregated_data['Email Total (Bytes)'] = (
+  user_aggregated_data['Email DL (Bytes)']
+  +   user_aggregated_data['Email UL (Bytes)']
+  )
+
+user_aggregated_data['Gaming Total (Bytes)'] = (
+  user_aggregated_data['Gaming DL (Bytes)']
+  +   user_aggregated_data['Gaming UL (Bytes)']
+  )
+
+user_aggregated_data['Other Total (Bytes)'] = (
+  user_aggregated_data['Other DL (Bytes)']
+  +   user_aggregated_data['Other UL (Bytes)']
+  )
+
+user_aggregated_data.head()
+user_aggregated_data.describe()
+ 
+plt.hist(user_aggregated_data['Session duration (s)'], bins=30, edgecolor='black')
+
+plt.title('Histogram of Session duration')
+
+plt.xlabel('Session duration (ms)')
+
+plt.ylabel('Frequency')
+
+plt.show()
+ 
+fig, ax = plt.subplots()
+ 
+ax.boxplot(user_aggregated_data['Session duration (s)'])
+
+ax.set_yscale('log')  
+ax.set_title('Box Plot of Session duration')
+
+ax.set_ylabel('Session duration (seccond)')
+
+plt.show()
+import numpy as np
+
+import pandas as pd
+
+import seaborn as sns
+
+import matplotlib.pyplot as plt
+
+from IPython.display import Image
+
+from sklearn.preprocessing import StandardScaler,MinMaxScaler
+
+from sklearn.cluster import KMeans
+
+import plotly.io as pio
+
+from plotly.subplots import make_subplots
+
+import plotly.graph_objects as go
+
+from mpl_toolkits.mplot3d import Axes3D
+df = pd.read_csv('../data/clean_data.csv')
+df.head()
+df.info()
+df.columns.tolist()
+tcp_retrans_cols = ['MSISDN/Number', 'TCP DL Retrans. Vol (Bytes)', 'TCP UL Retrans. Vol (Bytes)']
+
+avg_tcp_retrans = df[tcp_retrans_cols].groupby('MSISDN/Number').mean()
+avg_tcp_retrans
+avg_tcp_retrans.info()
+rtt_cols = ['MSISDN/Number', 'Avg RTT DL (ms)', 'Avg RTT UL (ms)']
+
+avg_rtt = df[rtt_cols].groupby('MSISDN/Number').mean()
+avg_rtt
+handset_mode = df.groupby('MSISDN/Number')['Handset Type'].agg(lambda x: x.mode().iat[0] if not x.mode().empty else None)
+handset_mode
+throughput_cols = ['MSISDN/Number', 'Avg Bearer TP DL (kbps)', 'Avg Bearer TP UL (kbps)']
+
+avg_throughput = df[throughput_cols].groupby('MSISDN/Number').mean()
+avg_throughput
+
+result_df = pd.concat([avg_tcp_retrans, avg_rtt, handset_mode, avg_throughput], axis=1)
+result_df.head()
+
+tcp_values = df[['TCP DL Retrans. Vol (Bytes)', 'TCP UL Retrans. Vol (Bytes)']].stack().reset_index(level=1, drop=True)
+top_tcp_values = tcp_values.nlargest(10)
+
+print("Top TCP Values:")
+
+print(top_tcp_values)
+bottom_tcp_values = tcp_values.nsmallest(10)
+print("\nBottom TCP Values:")
+
+print(bottom_tcp_values)
+most_frequent_tcp_values = tcp_values.value_counts().nlargest(10)
+print("\nMost Frequent TCP Values:")
+
+print(most_frequent_tcp_values)
+rtt_values = df[['Avg RTT DL (ms)', 'Avg RTT UL (ms)']].stack().reset_index(level=1, drop=True)
+top_rtt_values = rtt_values.nlargest(10)
+print("\nTop RTT Values:")
+
+print(top_rtt_values)
+bottom_rtt_values = rtt_values.nsmallest(10)
+print("\nBottom RTT Values:")
+
+print(bottom_rtt_values)
+most_frequent_rtt_values = rtt_values.value_counts().nlargest(10)
+print("\nMost Frequent RTT Values:")
+
+print(most_frequent_rtt_values)
+
+throughput_values = df[['Avg Bearer TP DL (kbps)', 'Avg Bearer TP UL (kbps)']].stack().reset_index(level=1, drop=True)
+top_throughput_values = throughput_values.nlargest(10)
+print("\nTop Throughput Values:")
+
+print(top_throughput_values)
+bottom_throughput_values = throughput_values.nsmallest(10)
+print("\nBottom Throughput Values:")
+
+print(bottom_throughput_values)
+most_frequent_throughput_values = throughput_values.value_counts().nlargest(10)
+print("\nMost Frequent Throughput Values:")
+
+print(most_frequent_throughput_values)
+
+avg_throughput = df.groupby('Handset Type')['Avg Bearer TP DL (kbps)'].mean()
+ 
+print("Average Throughput per Handset Type:")
+
+print(avg_throughput)
+ 
+avg_tcp_retransmission = df.groupby('Handset Type')['TCP DL Retrans. Vol (Bytes)'].mean()
+ 
+print("Average TCP Retransmission per Handset Type:")
+
+print(avg_tcp_retransmission)
+ 
+experience_metrics = df[['Avg Bearer TP DL (kbps)', 'Avg Bearer TP UL (kbps)', 'Avg RTT DL (ms)', 'Avg RTT UL (ms)', 'TCP DL Retrans. Vol (Bytes)']]
+experience_metrics.info()
+experience_metrics.head()
+
+scaler = StandardScaler()
+
+scaled_data = scaler.fit_transform(experience_metrics)
+
+scaled_data
+
+kmeans = KMeans(n_clusters=3, random_state=10)
+
+df['Cluster'] = kmeans.fit_predict(scaled_data)
+df['Cluster'].unique()
+df1 = df[df.Cluster==0]
+
+df2 = df[df.Cluster==1]
+
+df3 = df[df.Cluster==2]
+plt.scatter(df1['TCP DL Retrans. Vol (Bytes)'], df1['Avg Bearer TP DL (kbps)'], color='green', label='Avg Bearer TP DL (kbps)')
+
+plt.scatter(df2['TCP DL Retrans. Vol (Bytes)'], df2['Avg Bearer TP DL (kbps)'], color='red', label='Avg Bearer TP DL (kbps)')
+
+plt.scatter(df3['TCP DL Retrans. Vol (Bytes)'], df3['Avg Bearer TP DL (kbps)'], color='black', label='Avg Bearer TP DL (kbps)')
+ 
+plt.xlabel('TCP DL Retransmission Volume (Bytes)')
+
+plt.ylabel('Average Bearer Throughput DL (kbps)')
+
+plt.legend()
+
+plt.show();
+ 
+experience_metrics.head()
+Sessions Frequencyexperience_metrics.info()
+experience_metrics.to_csv('../data/user_experience_metrics.csv',index=False)
+import numpy as np
+
+import pandas as pd
+
+import seaborn as sns
+
+import matplotlib.pyplot as plt
+
+from IPython.display import Image
+
+from sklearn.preprocessing import StandardScaler,MinMaxScaler
+
+from sklearn.cluster import KMeans
+
+import plotly.io as pio
+
+from plotly.subplots import make_subplots
+
+import plotly.graph_objects as go
+
+from mpl_toolkits.mplot3d import Axes3D
+df = pd.read_csv('../data/clean_data.csv')
+df.head()
+df.columns.tolist()
+df.describe()
+
+sessions_frequency = df.groupby('MSISDN/Number')['Bearer Id'].count()
+
+sessions_frequency
+
+session_duration = df.groupby('MSISDN/Number')['Dur. (ms)'].sum()
+
+session_duration
+
+df['Total Traffic (Bytes)'] = df['Total UL (Bytes)'] + df['Total DL (Bytes)']
+ 
+total_traffic_per_user = df.groupby('MSISDN/Number')['Total Traffic (Bytes)'].sum()
+ 
+print(total_traffic_per_user)
+ 
+engagement_metrics = pd.DataFrame({
+  'Sessions Frequency': sessions_frequency,
+  'session_duration': session_duration,
+  'Total Traffic (Bytes)': total_traffic_per_user
+
+})
+ 
+top_10_sessions_frequency = engagement_metrics['Sessions Frequency'].nlargest(10)
+
+top_10_session_duration = engagement_metrics['session_duration'].nlargest(10)
+
+top_10_total_traffic = engagement_metrics['Total Traffic (Bytes)'].nlargest(10)
+top_10_sessions_frequency
+
+def mult_hist(sr, rows, cols, title_text, subplot_titles, interactive=False):
+  fig = make_subplots(rows=rows, cols=cols, subplot_titles=subplot_titles)
+  for i in range(rows):
+  for j in range(cols):
+  x = ["-> " + str(i) for i in sr[i+j].index]
+  fig.add_trace(go.Bar(x=x, y=sr[i+j].values), row=i+1, col=j+1)
+  fig.update_layout(showlegend=False, title_text=title_text)
+  if(interactive):
+  fig.show()
+  else:
+  return Image(pio.to_image(fig, format='png', width=1200))
+ 
+mult_hist([top_10_session_duration, top_10_sessions_frequency,
+  top_10_total_traffic], 1,3, "User metrix",
+  ['Sessions Duration', 'Frequency Duration','Total Traffic']
+  )
+
+engagement_metrics.describe()
+engagement_metrics['Total Traffic (Bytes)']
+
+engagement_metrics['Sessions Frequency'] = (engagement_metrics['Sessions Frequency'] - engagement_metrics['Sessions Frequency'].min()) / (engagement_metrics['Sessions Frequency'].max() - engagement_metrics['Sessions Frequency'].min())
+
+engagement_metrics['session_duration'] = (engagement_metrics['session_duration'] - engagement_metrics['session_duration'].min()) / (engagement_metrics['session_duration'].max() - engagement_metrics['session_duration'].min())
+
+engagement_metrics['session_duration'] = (engagement_metrics['session_duration'] - engagement_metrics['session_duration'].min()) / (engagement_metrics['session_duration'].max() - engagement_metrics['session_duration'].min())
+
+engagement_metrics['Total Traffic (Bytes)']['Total Traffic (Bytes)'] = (engagement_metrics['Total Traffic (Bytes)'] - engagement_metrics['Total Traffic (Bytes)'].min()) / (engagement_metrics['Total Traffic (Bytes)'].max() - engagement_metrics['Total Traffic (Bytes)'].min())
+ 
+Km = KMeans(n_clusters=3, n_init=10)
+
+Km
+model_predicted =Km.fit_predict(engagement_metrics[['Sessions Frequency','session_duration','Total Traffic (Bytes)']])
+
+model_predicted
+engagement_metrics['clusters'] = model_predicted
+engagement_metrics.head()
+engagement_metrics['clusters'].unique()
+df1 = engagement_metrics[engagement_metrics.clusters==0]
+
+df2 = engagement_metrics[engagement_metrics.clusters==1]
+
+df3 = engagement_metrics[engagement_metrics.clusters==2]
+df1.head()

@@ -1,0 +1,280 @@
+%reload_ext autoreload
+
+%autoreload 2
+ 
+import matplotlib.pyplot as plt
+
+import matplotlib
+ 
+import pandas as pd
+ 
+from sqlalchemy import create_engine
+ 
+database_name = 'telecom'
+
+table_name = 'xdr_data'
+ 
+connection_params ={"host": "localhost", "user": "postgres", "password":"myPassword", "port":"5432","database":database_name}
+
+engine = create_engine(f"postgresql+psycopg2://{connection_params['user']}:{connection_params['password']}@{connection_params['host']}:{connection_params['port']}/{connection_params['database']}")
+ 
+sql_query='SELECT * FROM xdr_data Limit 300010'
+ 
+df = pd.read_sql(sql_query,con=engine)
+
+df.head(5)
+df.info()
+df.shape
+
+len(df.columns)
+len(df)
+
+df.columns.tolist()
+df.dtypes
+df['Start'].dtypes
+
+len(df['Bearer Id'].unique())
+ 
+def get_data_float (datafr):
+  fl_col = []
+  for col in df.columns :
+  if datafr[col].dtypes == 'float64' :
+  fl_col = fl_col + [col]
+  print ("number of float column = " , len(fl_col))
+  return fl_col
+ 
+def get_data_obj (datafr):
+  obj_col = []
+  for col in df.columns :
+  if datafr[col].dtypes == 'O' :
+  obj_col = obj_col + [col]
+  print ("number of object column = " , len(obj_col))
+  return obj_col
+dtob = get_data_obj (df)
+
+print(dtob)
+dtfl = get_data_float (df)
+
+print(dtfl)
+
+df.describe()
+
+df['Dur. (ms)'].describe()
+
+df.isna().sum()
+ 
+df.isna().sum().sum()
+
+df['Dur. (ms)'].isna().sum()
+import numpy as np
+ 
+def percent_miss (data):
+  T = np.product(data.shape)
+  M = data.isna().sum().sum()
+  P = round((M/T)*100,2)
+  print ("The dataframe telecom has ", P , "%" , " missing values.")
+  return P
+ 
+percent_miss(df)
+
+def percent_miss_each (datafr):
+  a = (datafr.isna().sum() / len(df) )*100
+  return a
+ 
+percent_miss_each(df)
+
+df[fl_col].skew(axis=0)
+df['MSISDN/Number'].hist()
+df['Dur. (ms)'].hist()
+import seaborn as sns
+ 
+sns.displot(data=df, x=df['Dur. (ms)'], kind='hist', log_scale=(10,10))
+
+df_clean1 = df.drop(['TCP DL Retrans. Vol (Bytes)','TCP UL Retrans. Vol (Bytes)', 'HTTP DL (Bytes)','HTTP UL (Bytes)','Nb of sec with 125000B < Vol DL','Nb of sec with 1250B < Vol UL < 6250B','Nb of sec with 31250B < Vol DL < 125000B','Nb of sec with 37500B < Vol UL' ,'Nb of sec with 6250B < Vol DL < 31250B'  ,'Nb of sec with 6250B < Vol UL < 37500B'   ],axis=1)
+
+df_clean1.shape
+ 
+def filmode (datafr) :
+  for col in datafr.columns :
+  datafr[col] = datafr[col].fillna(datafr[col].mode()[0])
+  return datafr
+ 
+df_clean = filmode(df_clean1)
+
+df_clean.shape
+print (df_clean.head(5))
+
+df_clean.isna().sum().sum()
+ 
+def top10(datafr,IDcol,col):   UnId = datafr[IDcol].unique()
+  UnHandset = datafr[col].unique()
+  numb_use=[]
+  for handset in UnHandset :   numb = len(datafr[datafr[col]==handset].index.tolist())
+  numb_use = numb_use +[numb]
+  df_handset = pd.DataFrame()
+  df_handset['Handset type'] = UnHandset
+  df_handset['number of users'] = numb_use   maxi_use = sorted(df_handset['number of users'], reverse = True)[:11]
+  tops =[]
+  for i in maxi_use :   row = df_handset[df_handset['number of users']== i].index.tolist()
+  row = row[0]
+  top = df_handset['Handset type'][row]
+  tops=tops+[top]
+  print("The top 10 of handset type are : ")
+  return(tops)
+ 
+top10(df_clean,'Bearer Id','Handset Type')  
+def top3(datafr,IDcol,col):   UnManuf = datafr[col].unique()   numb_manu = len(UnManuf)   numb_use_manu=[]
+  for manu in UnManuf :   numb = len(datafr[datafr[col]==manu].index.tolist())
+  numb_use_manu = numb_use_manu +[numb]
+  df_manuf = pd.DataFrame()
+  df_manuf['Handset Manufacturer'] = UnManuf
+  df_manuf['Number of customers'] = numb_use_manu
+  num_top_use = sorted(df_manuf['Number of customers'], reverse=True)[:3]
+  top_manu =[]
+  for num in num_top_use :   row = df_manuf[df_manuf['Number of customers']== num].index.tolist()
+  row = row[0]   top = df_manuf['Handset Manufacturer'][row]
+  top_manu=top_manu+[top]
+  print("The top 3 manufacturers are :")
+  return(top_manu)
+ 
+top3(df_clean,'Bearer Id','Handset Manufacturer')
+ 
+def findtop5 (datafr,manufcol,handsetcol,manuf):   row =datafr[datafr[manufcol]==manuf].index.tolist()   handset_list =[]
+  for index in row :
+  handset = datafr[handsetcol][index]
+  handset_list = handset_list + [handset]
+  handset_list =handset_list
+  df_handset_and_manuf = pd.DataFrame()
+  df_handset_and_manuf['Handset'] = handset_list
+  handset_list = df_handset_and_manuf['Handset'].unique()   nb_hs_type = len( handset_list)
+  numb_use_hs=[]
+  for hs in handset_list :   numb = len(df_handset_and_manuf[df_handset_and_manuf['Handset']==hs].index.tolist())
+  numb_use_hs = numb_use_hs +[numb]
+  df_hs = pd.DataFrame()
+  df_hs['Handset Type'] = handset_list
+  df_hs['Number of users'] = numb_use_hs
+  num_top_hs = sorted(df_hs['Number of users'], reverse=True)[:5]
+  top_hs =[]
+  for num in num_top_hs :   row = df_hs[df_hs['Number of users']== num].index.tolist()
+  row = row[0]   top = df_hs['Handset Type'][row]
+  top_hs=top_hs+[top]
+  n=len(handset_list)
+  print("There are ", n , "handset type of ", manuf , " and the top 5 handset types are : ", top_hs)   return(top_hs)
+ 
+def top5ofeach(datafr,IDcol,manufcol,handsetcol) :
+  top_manu = top3(datafr,IDcol,manufcol)
+  for manuf in top_manu :
+  a = findtop5(datafr,manufcol,handsetcol,manuf)
+  return(a)
+ 
+top5ofeach(df_clean, 'Bearer Id','Handset Manufacturer', 'Handset Type')
+ 
+def session_num(datafr,usersIDcol, data) :
+  userlist = datafr[usersIDcol].unique()
+  Ss_num_ls = []
+  for ID in userlist :
+  row = datafr[datafr[usersIDcol]==ID].index.tolist()
+  numb=len(row)
+  Ss_num_ls = Ss_num_ls + [numb]
+  df_Ss_num = pd.DataFrame()
+  df_Ss_num[usersIDcol] = userlist
+  df_Ss_num[data] = Ss_num_ls
+  return df_Ss_num  
+Session_bhv = session_num(df_clean,'Bearer Id', 'Number of xDR sessions')
+
+print(Session_bhv.head(5))
+
+Session_bhv = session_num(df_clean,'IMEI', 'Number of xDR sessions')
+
+print(Session_bhv.head(5))
+
+Session_bhv = session_num(df_clean,'IMSI', 'Number of xDR sessions')
+
+print(Session_bhv.head(5))
+
+Session_bhv = session_num(df_clean,'MSISDN/Number', 'Number of xDR sessions')
+
+print(Session_bhv.head(5))
+
+def table_user (datafr,usersIDcol, data) :   userlist = datafr[usersIDcol].unique()
+  data1 = []
+  for ID in userlist :
+  row = datafr[datafr[usersIDcol]==ID].index.tolist()
+  tot = 0
+  for i in row :   row_n= i
+  value_n = datafr[data][row_n]
+  tot=tot+value_n
+  data1 = data1 + [tot]
+  df_behave = pd.DataFrame()
+  df_behave[usersIDcol] = userlist
+  df_behave[data] = data1
+  return df_behave  
+Dur_bhv_ID = table_user(df_clean,'Bearer Id','Dur. (ms)' )
+
+print(Dur_bhv_ID.head(5))
+
+Dur_bhv_ID.shape
+
+Dur_bhv_IMEI = table_user(df_clean,'IMEI','Dur. (ms)' )
+
+print(Dur_bhv_IMEI.head(5))
+
+Dur_bhv_IMEI.shape
+
+Dur_bhv_IMSI = table_user(df_clean,'IMSI','Dur. (ms)' )
+
+print(Dur_bhv_IMSI.head(5))
+
+Dur_bhv_IMSI.shape
+
+Dur_bhv_MSISDN = table_user(df_clean,'MSISDN/Number','Dur. (ms)' )
+
+print(Dur_bhv_MSISDN.head(5))
+
+Dur_bhv_MSISDN.shape
+
+def sumofdata (datafr,usersIDcol, data1, data2):
+  DLT = table_user(datafr,usersIDcol,data1 )
+  ULT = table_user(datafr,usersIDcol,data2 )
+  ST = DLT[data1] + ULT[data2]
+  df_DL_UL = pd.DataFrame()
+  df_DL_UL[usersIDcol] =DLT[usersIDcol]
+  df_DL_UL['Total of '+ data1 +' and '+data2] = ST
+  return df_DL_UL 
+tot_dl_ul_ID = sumofdata (df_clean,'Bearer Id', 'Total DL (Bytes)', 'Total UL (Bytes)')
+
+print(tot_dl_ul_ID.head(5))
+
+tot_dl_ul_IMEI = sumofdata (df_clean,'IMEI', 'Total DL (Bytes)', 'Total UL (Bytes)')
+
+print(tot_dl_ul_IMEI.head(5))
+tot_dl_ul_IMSI = sumofdata (df_clean,'IMSI', 'Total DL (Bytes)', 'Total UL (Bytes)')
+
+print(tot_dl_ul_IMSI.head(5))
+tot_dl_ul_MSIDN = sumofdata (df_clean,'MSISDN/Number', 'Total DL (Bytes)', 'Total UL (Bytes)')
+
+print(tot_dl_ul_IMSI.head(5))
+ 
+Applications =[['Social Media DL (Bytes)','Social Media UL (Bytes)'],['Youtube DL (Bytes)','Youtube UL (Bytes)'],['Netflix DL (Bytes)','Netflix UL (Bytes)'],['Google DL (Bytes)','Google UL (Bytes)'],['Email UL (Bytes)','Email DL (Bytes)'],['Gaming UL (Bytes)','Gaming DL (Bytes)'],['Total UL (Bytes)','Total DL (Bytes)']]
+ 
+def tot_per_app (datafr,usersIDcol, Applist):
+  dt_appli = pd.DataFrame()
+  userlist = datafr[usersIDcol].unique()
+  dt_appli[usersIDcol]= userlist
+  for appli in Applist :
+  tot_vol_ap = sumofdata(datafr,usersIDcol, appli[0], appli[1])
+  dt_appli = pd.merge(dt_appli, tot_vol_ap)
+  return dt_appli
+
+Tot_dat_ID =tot_per_app (df_clean,'Bearer Id',Applications)
+
+Tot_dat_ID.head(5)  
+Tot_dat_IMEI =tot_per_app (df_clean,'IMEI',Applications)
+
+Tot_dat_IMEI.head(5)  
+Tot_dat_IMSI =tot_per_app (df_clean,'IMSI',Applications)
+
+Tot_dat_IMSI.head(5)  
+Tot_dat_MSISDN =tot_per_app (df_clean,'MSISDN/Number',Applications)
+
+Tot_dat_MSISDN.head(5)  

@@ -1,0 +1,382 @@
+import pandas as pd
+
+from sqlalchemy import create_engine
+
+import numpy as np
+
+from IPython.display import Image
+
+import seaborn as sns
+
+import matplotlib.pyplot as plt
+path = '../Data'
+df = pd.read_csv(path+"/teledata.csv")
+
+df.head(5)
+df.columns.tolist()
+len(df.columns)
+
+df.shape
+print (f"There are {df.shape[0]} rows and {df.shape[1]} columns")
+
+df.isnull().sum().sum()
+ 
+df.describe()
+def percent_missing(df):
+  totalCells = np.product(df.shape)
+  missingCount = df.isnull().sum()
+  totalMissing = missingCount.sum()   print("The tele database contains", round(((totalMissing/totalCells) * 100),2), "%", 'missing values')
+ 
+percent_missing(df)
+df.isna().sum()
+percent_missing(df['Nb of sec with 37500B < Vol UL'])
+
+percent_missing(df['Nb of sec with 6250B < Vol UL < 37500B'])
+
+percent_missing(df['Nb of sec with 1250B < Vol UL < 6250B'])
+
+percent_missing(df['Nb of sec with 125000B < Vol DL'])
+
+percent_missing(df['Nb of sec with 31250B < Vol DL < 125000B'])
+
+percent_missing(df['Nb of sec with 6250B < Vol DL < 31250B'])
+
+percent_missing(df['TCP DL Retrans. Vol (Bytes)'])
+
+percent_missing(df['TCP UL Retrans. Vol (Bytes)'])
+
+percent_missing(df['HTTP DL (Bytes)'])
+
+percent_missing(df['HTTP UL (Bytes)'])
+
+percent_missing(df['Bearer Id'])
+ 
+df_clean = df.drop(['Nb of sec with 37500B < Vol UL',
+  'Nb of sec with 6250B < Vol UL < 37500B','Nb of sec with 1250B < Vol UL < 6250B',
+  'Nb of sec with 125000B < Vol DL',
+  'Nb of sec with 31250B < Vol DL < 125000B',
+  'Nb of sec with 6250B < Vol DL < 31250B',
+  'TCP DL Retrans. Vol (Bytes)',
+  'TCP UL Retrans. Vol (Bytes)',
+  'HTTP DL (Bytes)',
+  'HTTP UL (Bytes)'], axis=1)
+
+df_clean=df_clean.dropna(subset=['End'])
+
+df_clean.shape
+
+print (f"The shape of the dataframe after cleaning some data is {df_clean.shape}")
+df_clean.isna().sum()
+df_clean.sample(5)
+df_clean['Start'] = pd.to_datetime(df['Start'])
+
+df_clean['End'] = pd.to_datetime(df['End'])
+df_clean.isna().sum()
+df_clean.sample(5)
+df_clean.head()
+df_clean.skew(axis=0)
+missing_columns = ["Avg RTT DL (ms)",
+  "Avg RTT UL (ms)",
+  "DL TP < 50 Kbps (%)",
+  "50 Kbps < DL TP < 250 Kbps (%)",
+  "250 Kbps < DL TP < 1 Mbps (%)",
+  "DL TP > 1 Mbps (%)",
+  "UL TP < 10 Kbps (%)",
+  "10 Kbps < UL TP < 50 Kbps (%)",
+  "50 Kbps < UL TP < 300 Kbps (%)",
+  "UL TP > 300 Kbps (%)",
+  "Nb of sec with Vol DL < 6250B",
+  "Nb of sec with Vol UL < 1250B"]
+def fix_missing_mean(df, col):
+  df[col] = df[col].fillna(df[col].mean())
+  return df[col]
+ 
+def fix_missing_median(df, col):
+  df[col] = df[col].fillna(df[col].median())   return df[col]
+ 
+def fix_missing_mode(df, col):
+  df[col] = df[col].fillna(df_clean[col].mode()[0])
+  return df[col]
+for i in missing_columns:
+  df_clean[i] = fix_missing_median(df_clean, i)
+
+df_clean["Last Location Name"] = fix_missing_mode(df_clean,"Last Location Name")
+df_clean.isna().sum()
+df_clean['Bearer Id'].hist()
+df_clean=df_clean.dropna(subset=['Bearer Id'])
+
+df_clean=df_clean.dropna(subset=['MSISDN/Number'])
+
+df_clean=df_clean.dropna(subset=['IMSI'])
+
+df_clean.isna().sum()
+df['Handset Type'].value_counts()[0:10]
+df['Handset Manufacturer'].value_counts()[0:3]
+df_top = df_clean.query('`Handset Manufacturer` in ["Apple", "Samsung", "Huawei"]')
+
+len(df_top)
+df_top_apple = df_clean.loc[df['Handset Manufacturer']=='Apple']
+
+df_top_samsung = df_clean.loc[df['Handset Manufacturer']=='Samsung']
+
+df_top_huawei = df_clean.loc[df['Handset Manufacturer']=='Huawei']
+ 
+df_top['Handset Type'].value_counts()[0:5]
+
+df_top_apple['Handset Type'].value_counts()[0:5]
+
+df_top_samsung['Handset Type'].value_counts()[0:5]
+
+df_top_huawei['Handset Type'].value_counts()[0:5]
+Users = df_clean.groupby(['IMSI'])
+ 
+xDR_users = df_clean['IMSI'].value_counts()
+
+session_duration = Users['Dur. (ms)'].sum()
+
+Total_session_UL = Users['Total UL (Bytes)'].sum()
+
+Total_session_DL = Users['Total DL (Bytes)'].sum()
+
+Total_Download_Social = Users['Social Media DL (Bytes)'].sum() + Users['Social Media UL (Bytes)'].sum()
+
+Total_Download_Google = Users['Google DL (Bytes)'].sum() + Users['Google UL (Bytes)'].sum()
+
+Total_Download_Email = Users['Email DL (Bytes)'].sum() + Users['Email UL (Bytes)'].sum()
+
+Total_Download_Youtube = Users['Youtube DL (Bytes)'].sum() + Users['Youtube UL (Bytes)'].sum()
+
+Total_Download_Netflix = Users['Netflix DL (Bytes)'].sum() + Users['Netflix UL (Bytes)'].sum()
+
+Total_Download_Gaming = Users['Gaming DL (Bytes)'].sum() + Users['Gaming UL (Bytes)'].sum()
+
+Total_Download_Other = Users['Other DL (Bytes)'].sum() + Users['Other DL (Bytes)'].sum()
+ 
+new = pd.concat([xDR_users,
+  session_duration,
+  Total_session_UL,
+  Total_session_DL,
+  Total_Download_Social,
+  Total_Download_Google,
+  Total_Download_Email,
+  Total_Download_Youtube,
+  Total_Download_Netflix,
+  Total_Download_Gaming,
+  Total_Download_Other
+  ], axis="columns", sort=True)
+ 
+new = new.rename(columns={0: 'Social media total volume (Bytes)'})
+
+new = new.rename(columns={1: 'Google total volume (Bytes)'})
+
+new = new.rename(columns={2: 'Email total volume (Bytes)'})
+
+new = new.rename(columns={3: 'Youtube total volume (Bytes)'})
+
+new = new.rename(columns={4: 'Netflix total volume (Bytes)'})
+
+new = new.rename(columns={5: 'Gaming total volume (Bytes)'})
+
+new = new.rename(columns={'Other DL (Bytes)': 'Other source total volume (Bytes)'})
+
+new = new.rename(columns={'IMSI': 'number of sessions'})
+
+df_norm = (new-new.min())/(new.max()-new.min())
+
+df_norm.head(10)
+new1 = new.copy()
+ 
+def fix_outlier(df, column):
+  df[column] = np.where(df[column] > df[column].quantile(0.95), df[column].median(),df[column])
+  return df[column]
+ 
+for i in df_norm.columns.tolist():
+  df_norm[i]=fix_outlier(df_norm,i)
+ 
+for i in new.columns.tolist():
+  new[i]=fix_outlier(new,i)
+
+len(new)
+
+fig, ax=plt.subplots(1,2, figsize=(20, 6))
+
+sns.histplot(df_norm['number of sessions'], ax=ax[0])
+
+ax[0].set_title("numbers of sessions")
+
+sns.histplot(df_norm['Dur. (ms)'], ax=ax[1])
+
+ax[1].set_title("Dur. (ms)")
+
+plt.ylim(0, 2500)
+
+fig, ax=plt.subplots(1,2, figsize=(20, 6))
+
+sns.histplot(df_norm['Total UL (Bytes)'], ax=ax[0])
+
+ax[0].set_title("Total UL (Bytes)")
+
+sns.histplot(df_norm['Total DL (Bytes)'], ax=ax[1])
+
+ax[1].set_title("Total DL (Bytes)")
+
+fig, ax=plt.subplots(1,2, figsize=(20, 6))
+
+sns.histplot(new['Netflix total volume (Bytes)'], ax=ax[0])
+
+ax[0].set_title("Netflix total volume (Bytes)")
+
+sns.histplot(new['Gaming total volume (Bytes)'], ax=ax[1])
+
+ax[1].set_title("Gaming total volume (Bytes)")
+
+plt.ylim(0, 2500)
+
+fig, ax=plt.subplots(1, figsize=(9, 6))
+
+sns.histplot(new['Other source total volume (Bytes)'])
+
+ax.set_title("Other source total volume")
+
+plt.ylim(0, 2500)
+
+new['Total_DL_UL'] = new['Total DL (Bytes)'] + new['Total UL (Bytes)']
+a4_dims = (20, 7)
+
+fig, axs = plt.subplots(ncols=6,figsize=a4_dims)
+
+sns.scatterplot(x="Social media total volume (Bytes)", y="Total_DL_UL",ax=axs[0], data=new)
+
+sns.scatterplot(x="Gaming total volume (Bytes)", y="Total_DL_UL", ax=axs[1],data=new)
+
+sns.scatterplot(x="Email total volume (Bytes)", y="Total_DL_UL",ax=axs[2], data=new)
+
+sns.scatterplot(x="Youtube total volume (Bytes)", y="Total_DL_UL",ax=axs[3], data=new)
+
+sns.scatterplot(x="Google total volume (Bytes)", y="Total_DL_UL",ax=axs[4], data=new)
+
+sns.scatterplot(x="Other source total volume (Bytes)", y="Total_DL_UL",ax=axs[5], data=new)
+
+plt.show()
+ 
+new['decile'] = pd.qcut(new['Dur. (ms)'], 5, labels =False, )
+
+new.head(10)
+
+data_per_decile = new.groupby(['decile']).agg({'Total_DL_UL':['sum']})
+
+data_per_decile.columns = ["_".join(x) for x in data_per_decile.columns.ravel()]
+ 
+data_per_decile.head(10)
+
+df_new=df_norm[['Social media total volume (Bytes)',
+  'Google total volume (Bytes)',
+  'Email total volume (Bytes)',
+  'Youtube total volume (Bytes)',
+  'Netflix total volume (Bytes)',
+  'Gaming total volume (Bytes)',
+  'Other source total volume (Bytes)']]
+ 
+corrMatrix = df_new.corr()
+
+f, ax = plt.subplots(figsize=(13, 9))
+
+sns.heatmap(corrMatrix,annot=True,fmt='.3f',annot_kws={"size":12})
+
+plt.show()
+
+new.index.name = 'customer ID'
+
+new.reset_index(inplace=True)
+ 
+new.head()
+ 
+new.sort_values(by='number of sessions', ascending=False)[['customer ID','number of sessions']]
+
+new.sort_values(by='Dur. (ms)', ascending=False)[['customer ID','Dur. (ms)']].head(10)
+
+new.sort_values(by='Total_DL_UL', ascending=False)[['customer ID','Total_DL_UL']].head(10)
+from sklearn.cluster import KMeans
+
+from sklearn.preprocessing import MinMaxScaler
+
+df_model = new[['customer ID','Dur. (ms)', 'Total_DL_UL','number of sessions']]
+
+df_scaled = df_model.copy()
+
+df_scaled[['Dur. (ms)', 'Total_DL_UL','number of sessions']] = (df_scaled[['Dur. (ms)', 'Total_DL_UL','number of sessions']]-df_scaled[['Dur. (ms)', 'Total_DL_UL','number of sessions']].min())/(df_scaled[['Dur. (ms)', 'Total_DL_UL','number of sessions']].max()-df_scaled[['Dur. (ms)', 'Total_DL_UL','number of sessions']].min())
+
+df_scaled.head(10)
+ 
+kmeans = KMeans(n_clusters=3, random_state=0)
+
+df_scaled['cluster'] = kmeans.fit_predict(df_scaled[['number of sessions', 'Dur. (ms)','Total_DL_UL']])
+ 
+df_eng = df_scaled.copy()
+
+df_scaled.head()
+
+centroids = kmeans.cluster_centers_
+
+cen_x = [i[0] for i in centroids]  
+cen_y = [i[1] for i in centroids]
+ 
+df_scaled['cen_x'] = df_scaled['cluster'].map({0:cen_x[0], 1:cen_x[1], 2:cen_x[2]})
+ 
+df_scaled['cen_y'] = df_scaled['cluster'].map({0:cen_y[0], 1:cen_y[1], 2:cen_y[2]})
+
+df_scaled.groupby(['cluster']).describe().transpose()
+ 
+new.sort_values(by='Social media total volume (Bytes)', ascending=False)[['customer ID','Social media total volume (Bytes)']].head(10)
+
+new.sort_values(by='Netflix total volume (Bytes)', ascending=False)[['customer ID','Netflix total volume (Bytes)']].head(10)
+ 
+new.sort_values(by='Google total volume (Bytes)', ascending=False)[['customer ID','Google total volume (Bytes)']].head(10)
+
+new.sort_values(by='Youtube total volume (Bytes)', ascending=False)[['customer ID','Youtube total volume (Bytes)']].head(10)
+
+new.sort_values(by='Email total volume (Bytes)',   ascending=False)[['customer ID','Email total volume (Bytes)']].head(10)
+
+new.sort_values(by='Gaming total volume (Bytes)', ascending=False)[['customer ID','Gaming total volume (Bytes)']].head(10)
+
+new.sort_values(by='Other source total volume (Bytes)', ascending=False)[['customer ID','Other source total volume (Bytes)']].head(10)
+
+labels = ['Social media', 'Google', 'Email','Youtube','Netflix','Gaming']
+
+sizes = [new['Social media total volume (Bytes)'].sum(),
+  new['Google total volume (Bytes)'].sum(),
+  new['Email total volume (Bytes)'].sum(),
+  new['Youtube total volume (Bytes)'].sum(),
+  new['Netflix total volume (Bytes)'].sum(),
+  new['Gaming total volume (Bytes)'].sum(),
+  ]
+ 
+fig1, ax1 = plt.subplots(figsize = (10, 10))
+
+colors = ['red', 'blue', 'green', 'yellow', 'orange', 'purple']
+
+ax1.pie(sizes, labels=labels, autopct='%1.1f%%', shadow=True, colors=colors)
+ 
+ax1.axis('equal')
+
+plt.title("Total traffics per application")
+
+plt.show()
+ 
+labels=['Gaming','Youtube','Netflix']
+ 
+sizes.sort()
+
+top3 = sizes[3:]
+
+ys=top3
+
+fig = plt.figure()
+
+ax = fig.add_axes([0,0,1,1])
+
+plt.title("Top 3 used application", color='brown')
+
+ax.bar(labels,ys)
+
+plt.show() 

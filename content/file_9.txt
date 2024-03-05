@@ -1,0 +1,1413 @@
+import os
+from abc import ABC, abstractmethod
+from sqlalchemy.engine.base import Engine
+from typing import Generic, Optional, TypeVar
+from dotenv import load_dotenv
+
+RawConnectionT = TypeVar("RawConnectionT")
+
+class ConnectionBase(ABC, Generic[RawConnectionT]):
+  """The abstract base class that all connections must inherit from
+  This base class provides connection authors with a way to set up   database parameters like database name, database password, port, and also   instance of database engine.
+  """
+  def __init__(self, **kwargs):
+  """ create a BaseConnection
+  Parameters
+  ----------
+  **kwargs: dict
+  dictionary of parameters of any length to pass tho the connection class
+  Returns
+  -------
+  None
+  """
+  self._kwargs = kwargs if kwargs else {
+  'user': os.getenv('DB_USER'),
+  'password': os.getenv('DB_PASSWORD'),
+  'host': os.getenv('DB_HOST'),
+  'port': os.getenv('DB_PORT'),
+  'database': os.getenv('DB_NAME'),
+  }
+  self._raw_instance: Optional[Engine] = self._connect()
+  @property
+  def _instance(self) -> RawConnectionT:
+  """Get an instance of the underlying connection, creating a new one if needed."""
+  if self._raw_instance is None:
+  self._raw_instance = self._connect()
+  return self._raw_instance
+  @abstractmethod
+  def _connect(self) -> RawConnectionT:
+  """Create an instance of an underlying connection object.
+  This abstract method is the one method that we require subclasses of
+  BaseConnection to provide an implementation for. It is called when first
+  creating a connection and when reconnecting after a connection is reset.
+  Returns
+  -------
+  RawConnectionT
+  The underlying connection object.
+  """
+  raise NotImplementedError
+  def __enter__(self):
+  self._raw_instance = self._connect()
+  return self._raw_instance
+  def __exit__(self, exc_type, exc_value, traceback):
+  if self._raw_instance is not None:
+  self._raw_instance.dispose()
+import os, sys
+
+rpath = os.path.abspath('..')
+if rpath not in sys.path:
+  sys.path.insert(0, rpath)
+
+import logging
+from sqlalchemy import create_engine
+from connections.connection_base import ConnectionBase
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+class PostgresConnection(ConnectionBase):
+  """A class representing a connection to a PostgreSQL database.
+  This class inherits from ConnectionBase, providing a standardized way to manage
+  the connection to the PostgreSQL database.
+  Parameters
+  ----------
+  **kwargs : dict
+  Keyword arguments containing the database connection parameters.
+  Attributes
+  ----------
+  _kwargs : dict
+  Dictionary containing the database connection parameters.
+  _raw_instance : sqlalchemy.engine.base.Engine
+  """
+  def __init__(self, **kwargs):
+  super().__init__(**kwargs)
+  def _connect(self):
+  """Create an instance of the underlying SQLAlchemy Engine for PostgreSQL.
+  Returns
+  -------
+  sqlalchemy.engine.base.Engine
+  The SQLAlchemy Engine instance representing the PostgreSQL database connection.
+  Raises
+  ------
+  Exception
+  If there is an error connecting to the database.
+  """
+  try:
+  engine = create_engine(
+  f"postgresql://{self._kwargs['user']}:{self._kwargs['password']}@{self._kwargs['host']}:{self._kwargs['port']}/{self._kwargs['database']}"
+  )
+  engine.connect()
+  return engine
+  except Exception as e:
+  logger.error(f"Error connecting to the database: {e}")
+  raise
+import os, sys
+ 
+rpath = os.path.abspath('..')
+
+if rpath not in sys.path:
+  sys.path.insert(0, rpath)
+ 
+import scripts.read_data_from_db as rd
+
+df = rd.read_data()
+df.shape
+df.head()
+df.info()
+df.isnull().sum()
+df.duplicated().sum()
+df.describe()
+for col in df.columns:
+  print(df[col].value_counts())
+import os, sys
+
+import pandas as pd
+
+rpath = os.path.abspath('..')
+
+if rpath not in sys.path:
+  sys.path.insert(0, rpath)
+ 
+import scripts.read_data_from_db as rd
+
+import scripts.write_to_db as wd
+
+import scripts.data_cleaning as sd  
+df = rd.read_data()
+df = sd.drop_high_missing_columns(df, 0.7)
+
+df.columns
+
+def remove_missing_values():
+  columns_to_check = [
+  'Start',   'Start ms',   'End',   'End ms',   'Dur. (ms)',
+  'Avg Bearer TP DL (kbps)',
+  'Avg Bearer TP UL (kbps)',
+  'Activity Duration DL (ms)',   'Activity Duration UL (ms)',   'Dur. (ms).1',
+  'Total UL (Bytes)',   'Total DL (Bytes)'
+  ]
+  return sd.remove_rows_with_missing_values(df, columns_to_check)
+ 
+cleaned_df = remove_missing_values()
+df.shape
+cleaned_df.isnull().sum()
+
+def impute_columns():
+  columns_to_impute = [
+  "Avg RTT DL (ms)",   "Avg RTT UL (ms)",   "TCP DL Retrans. Vol (Bytes)",   "TCP UL Retrans. Vol (Bytes)",   "DL TP < 50 Kbps (%)",   "50 Kbps < DL TP < 250 Kbps (%)",   "250 Kbps < DL TP < 1 Mbps (%)",   "DL TP > 1 Mbps (%)",   "UL TP < 10 Kbps (%)",   "10 Kbps < UL TP < 50 Kbps (%)",   "50 Kbps < UL TP < 300 Kbps (%)",   "UL TP > 300 Kbps (%)",   "HTTP DL (Bytes)",   "HTTP UL (Bytes)",   "Nb of sec with 125000B < Vol DL",   "Nb of sec with 1250B < Vol UL < 6250B",   "Nb of sec with 31250B < Vol DL < 125000B",   "Nb of sec with 6250B < Vol DL < 31250B",   "Nb of sec with Vol DL < 6250B",   "Nb of sec with Vol UL < 1250B"   ]
+  return sd.impute_numeric_missing(cleaned_df, columns_to_impute)
+ 
+imputed_df = impute_columns()
+imputed_df.isnull().sum()
+imputed_df.shape
+def replace_with_mode():
+  columns_to_replace = [
+  'Bearer Id',
+  'IMSI',
+  'MSISDN/Number',
+  'IMEI',   'Last Location Name',
+  'Handset Manufacturer',
+  'Handset Type'   ]
+  return sd.replace_column_with_mode(imputed_df, columns_to_replace)
+ 
+cleaned_df = replace_with_mode()
+cleaned_df.isnull().sum()
+cleaned_df.shape
+def handle_outliers():
+  columns = [
+  "Avg RTT DL (ms)",   "Avg RTT UL (ms)",   "TCP DL Retrans. Vol (Bytes)",   "TCP UL Retrans. Vol (Bytes)",   "DL TP < 50 Kbps (%)",   "50 Kbps < DL TP < 250 Kbps (%)",   "250 Kbps < DL TP < 1 Mbps (%)",   "DL TP > 1 Mbps (%)",   "UL TP < 10 Kbps (%)",   "10 Kbps < UL TP < 50 Kbps (%)",   "50 Kbps < UL TP < 300 Kbps (%)",   "UL TP > 300 Kbps (%)",   "HTTP DL (Bytes)",   "HTTP UL (Bytes)",   "Nb of sec with 125000B < Vol DL",   "Nb of sec with 1250B < Vol UL < 6250B",   "Nb of sec with 31250B < Vol DL < 125000B",   "Nb of sec with 6250B < Vol DL < 31250B",   "Nb of sec with Vol DL < 6250B",   "Nb of sec with Vol UL < 1250B"   ]
+  return sd.handle_outliers(cleaned_df, columns)
+ 
+processed_df = handle_outliers()
+
+processed_df.head()
+processed_df.shape
+wd.write_data(processed_df, 'processed_data')
+import pandas as pd
+import numpy as np
+from sklearn.impute import SimpleImputer
+
+def drop_high_missing_columns(
+  df: pd.DataFrame,   threshold=0.8
+  ) -> pd.DataFrame:
+  """Drop columns with missing values exceeding a specified threshold.
+  Parameters
+  ----------
+  - df: DataFrame
+  The dataframe of raw data set.
+  - threshold: float, default 0.8
+  The threshold for the percentage of missing values in a column.
+  Returns
+  -------
+  - Dataframe object
+  where columns specified in the columns_to_drop list,   which have missing values, dropped.
+  """
+  missing_percentage = df.isnull().mean()
+  columns_to_drop = missing_percentage[missing_percentage > threshold].index
+  df_cleaned = df.drop(columns=columns_to_drop)
+  return df_cleaned
+
+def impute_numeric_missing(
+  df:pd.DataFrame,   columns_list:list[str],
+  strategy:str='mean'
+  ) -> pd.DataFrame:
+  """Impute missing values for numerical columns.
+  Parameters
+  ----------
+  - df: DataFrame
+  - columns_list
+  list of columnst to Impute the missing values
+  - strategy: str, default 'mean'
+  Imputation strategy, options: 'mean', 'zero'.
+  Returns
+  -------
+  - Dataframe object
+  with imputed missing columns from columns_list
+  """
+  numeric_columns = df[columns_list].select_dtypes(include='number').columns
+  if strategy == 'zero':
+  df_imputed = df.copy()   df_imputed[numeric_columns] = df_imputed[numeric_columns].fillna(0)
+  else:
+  imputation_values = df[numeric_columns].mean() if strategy == 'mean' else df[numeric_columns].median()
+  df_imputed = df.copy()   df_imputed[numeric_columns] = df_imputed[numeric_columns].fillna(imputation_values)
+  return df_imputed
+
+def remove_rows_with_missing_values(
+  df: pd.DataFrame,   columns_to_check: list[str]
+  ):
+  """
+  Remove rows from a DataFrame where any of the specified columns have missing values.
+  Parameters
+  ----------
+  df : pandas.DataFrame
+  The input DataFrame.
+  columns_to_check : list of str
+  A list of column names to check for missing values. Rows will be dropped
+  if any of these columns have missing values.
+  Returns
+  -------
+  pandas.DataFrame
+  A new DataFrame with rows removed where any of the specified columns have missing values.
+  """
+  cleaned_df = df.dropna(subset=columns_to_check, how='any')
+  return cleaned_df
+
+import pandas as pd
+
+def replace_column_with_mode(
+  df: pd.DataFrame,   column_names: list[str]
+  ) -> pd.DataFrame:
+  """Replace missing values in a column with its mode.
+  Parameters
+  ----------
+  - df: DataFrame
+  - column_list: list[str]
+  Name of the list of columns to replace missing values.
+  Returns
+  -------
+  - DataFrame object
+  with missing values in the specified column replaced by its mode.
+  """
+  df_mode = df.copy()   for column_name in column_names:
+  mode_value = df_mode[column_name].mode().iloc[0]
+  df_mode[column_name] = df_mode[column_name].fillna(mode_value)
+  return df_mode
+
+def handle_outliers(
+  df: pd.DataFrame,   columns: list[str],   method:str='mean'
+  ) -> pd.DataFrame:
+  """Handle outliers in specified columns using a specified method.
+  Parameters
+  ----------
+  - df: DataFrame
+  - columns: list
+  List of columns to handle outliers.
+  - method: str, default 'clip'
+  Outlier handling method, options: 'clip', 'remove', 'mean'
+  Returns
+  -------
+  - Dataframe object
+  where outliers are handled
+  """
+  if method == 'clip':
+  for col in columns:
+  df[col] = np.clip(df[col], df[col].quantile(0.05), df[col].quantile(0.95))
+  elif method == 'remove':
+  for col in columns:
+  q1 = df[col].quantile(0.25)
+  q3 = df[col].quantile(0.75)
+  iqr = q3 - q1
+  df = df[(df[col] >= q1 - 1.5 * iqr) & (df[col] <= q3 + 1.5 * iqr)]
+  elif method == 'mean':
+  for col in columns:
+  mean_val = df[col].mean()
+  df[col] = np.where(
+  (df[col] < df[col].quantile(0.05)) | (df[col] > df[col].quantile(0.95)),
+  mean_val,
+  df[col]
+  )
+  return df
+import os, sys
+
+rpath = os.path.abspath('..')
+if rpath not in sys.path:
+  sys.path.insert(0, rpath)
+
+import logging
+import pandas as pd
+from connections.postegresql_connection import PostgresConnection
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+def read_data(table_name='xdr_data'):
+  """Read data from a PostgreSQL database table.
+  Parameters
+  ----------
+  table_name : str, optional
+  The name of the table from which to fetch data. Default is 'xdr_data'.
+  Returns
+  -------
+  pandas.DataFrame
+  A DataFrame containing the data retrieved from the specified table.
+  Raises
+  ------
+  Exception
+  If there is an error during the data retrieval process.
+  Notes
+  -----
+  This function uses the `PostgresConnection` class to establish a connection
+  to the PostgreSQL database. Ensure that the necessary environment variables
+  (DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME) are set before calling
+  this function.
+  """
+  try:
+  with PostgresConnection() as postgres_conn:
+  df = pd.read_sql_query(f"SELECT * FROM {table_name};", postgres_conn)
+  logger.info('Data fetched succesfully')
+  return df
+  except Exception as e:
+  logger.error(f"Error in the main block: {e}")
+import os, sys
+
+rpath = os.path.abspath('..')
+if rpath not in sys.path:
+  sys.path.insert(0, rpath)
+
+import logging
+import pandas as pd
+from connections.postegresql_connection import PostgresConnection
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+def write_data(
+  df: pd.DataFrame,
+  table_name : str
+  ) -> None:
+  """Write DataFrame to a PostgreSQL database table.
+  Parameters
+  ----------
+  df : pandas.DataFrame
+  The DataFrame containing the data to be written.
+  table_name : str
+  The name of the table where the data will be written.
+  Returns
+  -------
+  None
+  Raises
+  ------
+  Exception
+  If there is an error during the data writing process.
+  Notes
+  -----
+  This function uses the `PostgresConnection` class to establish a connection
+  to the PostgreSQL database. Ensure that the necessary environment variables
+  (DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME) are set before calling
+  this function.
+  """
+  try:
+  conn = PostgresConnection()
+  df.to_sql(name=table_name, con=conn._instance, index=False, if_exists='replace')
+  logger.info('Data written successfully')
+  except Exception as e:
+  logger.error(f"Error in the main block: {e}")
+import os, sys
+
+import pandas as pd
+
+from pandasql import sqldf
+ 
+rpath = os.path.abspath('..')
+
+if rpath not in sys.path:
+  sys.path.insert(0, rpath)
+ 
+import scripts.read_data_from_db as rd
+
+import scripts.utils as util
+df = rd.read_data(table_name='processed_data')
+df.shape
+pysqldf = lambda q: sqldf(q, globals())
+df.columns
+query = '''   SELECT DISTINCT   "Handset Type",   COUNT(*) as UsageCount
+  FROM df
+  GROUP BY "Handset Type"   ORDER BY UsageCount DESC
+  limit 10
+
+'''
+ 
+result_df = pysqldf(query)
+
+result_df
+
+query = '''   SELECT DISTINCT   "Handset Manufacturer",   COUNT(*) as "Number of Users"
+  FROM df
+  GROUP BY "Handset Manufacturer"   ORDER BY "Number of Users" DESC
+  limit 3
+
+'''
+ 
+result_df = pysqldf(query)
+
+result_df
+query = '''   SELECT "Handset Manufacturer", AVG("Dur. (ms)") AS "Avg Session Duration (ms)"
+  FROM df
+  WHERE "Handset Manufacturer" IN ('Apple', 'Samsung', 'Huawei')
+  GROUP BY "Handset Manufacturer";
+ 
+'''
+
+result_df = pysqldf(query)
+
+result_df
+
+query = '''   SELECT
+  "Handset Manufacturer",
+  SUM("Total UL (Bytes)" + "Total DL (Bytes)") AS "Total Data Volume (Bytes)"
+  FROM df
+  WHERE "Handset Manufacturer" IN ('Apple', 'Samsung', 'Huawei')
+  GROUP BY "Handset Manufacturer";
+
+'''
+
+result_df = sqldf(query)
+
+result_df
+query = '''   WITH RankedHandsets AS (
+  SELECT
+  "Handset Manufacturer",
+  "Handset Type",
+  RANK() OVER (PARTITION BY "Handset Manufacturer" ORDER BY COUNT(*) DESC) AS "Rank"
+  FROM df
+  WHERE "Handset Manufacturer" IN ('Apple', 'Samsung', 'Huawei')
+  GROUP BY "Handset Manufacturer", "Handset Type"
+  )
+  SELECT
+  "Handset Manufacturer",
+  "Handset Type",
+  "Rank"
+  FROM RankedHandsets
+  WHERE "Rank" <= 5;
+
+'''
+ 
+result_df = sqldf(query)
+
+result_df
+query = '''   SELECT "MSISDN/Number" AS UserIdentifer,
+  COUNT(*) AS NumberOfXDRSessions
+  FROM df
+  GROUP BY "MSISDN/Number"
+  ORDER BY NumberOfXDRSessions DESc;
+
+'''
+ 
+result_df = pysqldf(query)
+
+result_df
+query = '''
+  SELECT COUNT(*) AS num_users
+  FROM (
+  SELECT COUNT(*) AS NumberOfXDRSessions
+  FROM df
+  GROUP BY "MSISDN/Number"
+  HAVING COUNT(*) >= 10
+  ) AS subquery
+
+'''
+ 
+result_df = pysqldf(query)
+
+result_df
+query = '''   SELECT
+  "MSISDN/Number" AS UserIdentifier,
+  SUM("Dur. (ms)") / 1000 AS TotalSessionDurationInSeconds
+  FROM df
+  GROUP BY "MSISDN/Number"
+  ORDER BY TotalSessionDurationInSeconds DESC;
+ 
+'''
+ 
+result_df = pysqldf(query)
+
+result_df
+query = '''   SELECT
+  CAST(SUBSTRING(CAST("Start" AS TEXT), INSTR(CAST("Start" AS TEXT), ' ') + 1, INSTR(CAST("Start" AS TEXT), ':') - INSTR(CAST("Start" AS TEXT), ' ') - 1) AS INTEGER) AS HourOfDay,
+  COUNT(*) AS NumberOfSessions
+  FROM df
+  WHERE "Start" IS NOT NULL
+  GROUP BY HourOfDay
+  ORDER BY NumberOfSessions DESC;
+ 
+'''
+ 
+result_df = pysqldf(query)  
+result_df
+query = '''   SELECT
+  "MSISDN/Number" AS User,
+  COUNT(*) AS SessionCount,
+  SUM("Dur. (ms)") AS TotalSessionDuration
+  FROM df
+  GROUP BY "MSISDN/Number"
+  ORDER BY TotalSessionDuration DESC;
+ 
+'''
+ 
+result_df = pysqldf(query)
+
+result_df
+result_df = util.get_total_download_for_each_app(df, "Total DL (Bytes)", "Total UL (Bytes)")
+query = '''SELECT COUNT(*) AS num_users
+  FROM result_df
+  WHERE Total >= 100000000;
+  '''
+ 
+pysqldf(query)
+
+util.get_total_download_for_each_app(df, "Social Media DL (Bytes)", "Social Media UL (Bytes)")
+util.get_total_download_for_each_app(df, "YouTube DL (Bytes)", "YouTube UL (Bytes)")
+util.get_total_download_for_each_app(df, "Netflix DL (Bytes)", "Netflix UL (Bytes)")
+util.get_total_download_for_each_app(df, "Google DL (Bytes)", "Google UL (Bytes)")
+util.get_total_download_for_each_app(df, "Email DL (Bytes)", "Email UL (Bytes)")
+util.get_total_download_for_each_app(df, "Gaming DL (Bytes)", "Gaming UL (Bytes)")
+util.get_total_download_for_each_app(df, "Other DL", "Other UL")
+import os, sys
+
+import pandas as pd
+
+import seaborn as sns
+
+import matplotlib.pyplot as plt
+
+from pandasql import sqldf
+ 
+rpath = os.path.abspath('..')
+
+if rpath not in sys.path:
+  sys.path.insert(0, rpath)
+ 
+import scripts.read_data_from_db as rd
+
+import scripts.data_cleaning as dc
+
+import scripts.utils as util
+df = rd.read_data(table_name='processed_data')
+quantitative_columns = [
+  "Avg RTT DL (ms)",   "Avg RTT UL (ms)",   "Avg Bearer TP DL (kbps)",
+  "Avg Bearer TP UL (kbps)",   "TCP DL Retrans. Vol (Bytes)",   "TCP UL Retrans. Vol (Bytes)",   "DL TP < 50 Kbps (%)",   "50 Kbps < DL TP < 250 Kbps (%)",   "250 Kbps < DL TP < 1 Mbps (%)",   "DL TP > 1 Mbps (%)",   "UL TP < 10 Kbps (%)",   "10 Kbps < UL TP < 50 Kbps (%)",   "50 Kbps < UL TP < 300 Kbps (%)",   "UL TP > 300 Kbps (%)",
+  "Activity Duration DL (ms)",
+  "Activity Duration UL (ms)",   "HTTP DL (Bytes)",   "HTTP UL (Bytes)",   "Dur. (ms).1",   "Nb of sec with 125000B < Vol DL",   "Nb of sec with 1250B < Vol UL < 6250B",   "Nb of sec with 31250B < Vol DL < 125000B",   "Nb of sec with 6250B < Vol DL < 31250B",   "Nb of sec with Vol DL < 6250B",   "Nb of sec with Vol UL < 1250B",   "Social Media DL (Bytes)",
+  "Social Media UL (Bytes)",
+  "Youtube DL (Bytes)",
+  "Youtube UL (Bytes)",
+  "Netflix DL (Bytes)",
+  "Netflix UL (Bytes)",
+  "Google DL (Bytes)",
+  "Google UL (Bytes)",
+  "Email DL (Bytes)",
+  "Email UL (Bytes)",
+  "Gaming DL (Bytes)",
+  "Gaming UL (Bytes)",
+  "Other DL (Bytes)",
+  "Other UL (Bytes)",
+  "Total DL (Bytes)",
+  "Total UL (Bytes)"
+
+]
+
+df = dc.handle_outliers(df, quantitative_columns)
+df.shape
+descriptive_stats = df[quantitative_columns].describe()
+
+descriptive_stats
+plt.hist(df['Avg RTT UL (ms)'], bins=20, color='blue', alpha=0.7)
+
+plt.xlabel('Average RTT UL (ms)')
+
+plt.ylabel('Frequency')
+
+plt.title('Histogram of Avg RTT DL (ms)')
+
+plt.show()
+ 
+sns.boxplot(x=df['Avg Bearer TP DL (kbps)'])
+
+plt.xlabel('Average Bearer TP DL (kbps)')
+
+plt.title('Boxplot of Avg Bearer TP DL (kbps)')
+
+plt.show()
+
+plt.figure(figsize=(8, 5))
+
+df['Handset Type'].value_counts().head(10).plot(kind='bar', color='green')
+
+plt.xlabel('Handset Type')
+
+plt.ylabel('Count')
+
+plt.title('Distribution of Handset Types')
+
+plt.show()
+
+correlation_matrix = df[
+  [
+  "Social Media DL (Bytes)",
+  "Social Media UL (Bytes)",
+  "Youtube DL (Bytes)",
+  "Youtube UL (Bytes)",
+  "Netflix DL (Bytes)",
+  "Netflix UL (Bytes)",
+  "Google DL (Bytes)",
+  "Google UL (Bytes)",
+  "Email DL (Bytes)",
+  "Email UL (Bytes)",
+  "Gaming DL (Bytes)",
+  "Gaming UL (Bytes)",
+  "Other DL (Bytes)",
+  "Other UL (Bytes)",
+  "Total DL (Bytes)",
+  "Total UL (Bytes)"
+
+]].corr()
+
+correlation_matrix
+ 
+sns.scatterplot(x='Netflix DL (Bytes)', y='Total DL (Bytes)', data=df)
+
+plt.title('Youtube download vs Total Download')
+
+plt.show()
+import os, sys
+
+import pandas as pd
+
+import seaborn as sns
+
+import matplotlib.pyplot as plt
+
+from pandasql import sqldf
+
+from sklearn.preprocessing import MinMaxScaler
+
+from sklearn.cluster import KMeans
+
+from mpl_toolkits.mplot3d import Axes3D
+ 
+rpath = os.path.abspath('..')
+
+if rpath not in sys.path:
+  sys.path.insert(0, rpath)
+ 
+import scripts.read_data_from_db as rd
+
+import scripts.data_cleaning as dc
+
+import scripts.utils as util
+df = rd.read_data(table_name='processed_data')
+pysqldf = lambda q: sqldf(q, globals())
+query = '''   SELECT
+  "MSISDN/Number" AS MSISDN,
+  COUNT(DISTINCT "Bearer Id") AS SessionFrequency
+  FROM df
+  GROUP BY "MSISDN/Number"
+  ORDER BY SessionFrequency DESC
+  LIMIT 10
+
+'''
+ 
+result_df = pysqldf(query)
+
+result_df
+query = '''
+  SELECT   "MSISDN/Number",
+  SUM("Dur. (ms)") AS SessionDuration
+  FROM df
+  GROUP BY "MSISDN/Number"   ORDER BY SessionDuration DESC
+  LIMIT 10;
+  '''  
+result_df = pysqldf(query)
+
+result_df
+
+query = '''   SELECT   "MSISDN/Number",
+  SUM("Total DL (Bytes)") AS TotalDownload,
+  SUM("Total UL (Bytes)") AS TotalUpload,
+  (SUM("Total DL (Bytes)") + SUM("Total UL (Bytes)")) AS TotalTraffic
+  FROM df
+  GROUP BY "MSISDN/Number"
+  ORDER BY TotalTraffic DESC
+  LIMIT 10;
+
+'''
+ 
+pysqldf(query)
+query = '''
+  SELECT   "MSISDN/Number",
+  SUM("Dur. (ms)") AS SessionDuration,
+  COUNT(DISTINCT "Bearer Id") AS SessionFrequency,
+  (SUM("Total DL (Bytes)") + SUM("Total UL (Bytes)")) AS TotalTraffic
+  FROM df
+  GROUP BY "MSISDN/Number"
+  '''  
+aggregated_df = pysqldf(query)
+
+aggregated_df.tail()
+scaler = MinMaxScaler()
+
+columns_to_normalize = ["SessionDuration", "SessionFrequency","TotalTraffic"]
+
+customer_id = aggregated_df['MSISDN/Number']
+
+transformed_data = scaler.fit_transform(aggregated_df[columns_to_normalize])
+
+normalized_data = pd.DataFrame(transformed_data, columns=columns_to_normalize)
+
+df_normalized = pd.concat([customer_id, normalized_data], axis=1)
+
+df_normalized
+fig = plt.figure(figsize=(10, 8))
+
+ax = fig.add_subplot(111, projection='3d')
+ 
+ax.scatter(df_normalized['SessionDuration'], df_normalized['SessionFrequency'], df_normalized['TotalTraffic'], c='blue', marker='o')
+ 
+ax.set_xlabel('SessionDuration')
+
+ax.set_ylabel('SessionFrequency')
+
+ax.set_zlabel('TotalTraffic')
+ 
+plt.title('3D Scatter Plot of SessionDuration, SessionFrequency, and TotalTraffic')
+
+plt.show()
+processed_df = dc.handle_outliers(normalized_data, columns_to_normalize)
+fig = plt.figure(figsize=(10, 8))
+
+ax = fig.add_subplot(111, projection='3d')
+ 
+ax.scatter(processed_df['SessionDuration'], processed_df['SessionFrequency'], processed_df['TotalTraffic'], c='blue', marker='o')
+ 
+ax.set_xlabel('SessionDuration')
+
+ax.set_ylabel('SessionFrequency')
+
+ax.set_zlabel('TotalTraffic')
+ 
+plt.title('3D Scatter Plot of SessionDuration, SessionFrequency, and TotalTraffic')
+
+plt.show()
+selected_columns = columns_to_normalize
+
+X = processed_df[selected_columns]
+
+k = 3
+ 
+kmeans = KMeans(n_clusters=3, random_state=0)  
+kmeans.fit(X)
+ 
+processed_df['Cluster'] = kmeans.labels_
+fig = plt.figure(figsize=(10, 8))
+
+ax = fig.add_subplot(111, projection='3d')
+ 
+cluster_colors = {0: 'red', 1: 'blue', 2:'green'}
+ 
+for cluster_label, color in cluster_colors.items():
+  cluster_data = processed_df[processed_df['Cluster'] == cluster_label]
+  ax.scatter(
+  cluster_data['SessionDuration'],   cluster_data['SessionFrequency'],   cluster_data['TotalTraffic'],   label=f'Cluster {cluster_label}',
+  color=color
+  )
+ 
+ax.set_xlabel('SessionDuration')
+
+ax.set_ylabel('SessionFrequency')
+
+ax.set_zlabel('TotalTraffic')
+ 
+plt.title(f'3D Scatter plot with k-Means clustering (K={k})')
+
+plt.show()
+import os, sys
+
+import pandas as pd
+
+import seaborn as sns
+
+import matplotlib.pyplot as plt
+
+from pandasql import sqldf
+
+from sklearn.preprocessing import MinMaxScaler
+
+from sklearn.cluster import KMeans
+
+from mpl_toolkits.mplot3d import Axes3D
+ 
+rpath = os.path.abspath('..')
+
+if rpath not in sys.path:
+  sys.path.insert(0, rpath)
+ 
+import scripts.read_data_from_db as rd
+
+import scripts.data_cleaning as dc
+
+import scripts.write_to_db as wd
+
+import scripts.utils as util
+df = rd.read_data(table_name='processed_data')
+pysqldf = lambda q: sqldf(q, globals())
+query = '''   SELECT
+  "MSISDN/Number" AS MSISDN,
+  COUNT(DISTINCT "Bearer Id") AS SessionFrequency
+  FROM df
+  GROUP BY "MSISDN/Number"
+  ORDER BY SessionFrequency DESC
+  LIMIT 10
+
+'''
+ 
+result_df = pysqldf(query)
+
+result_df
+query = '''
+  SELECT   "MSISDN/Number",
+  SUM("Dur. (ms)") AS SessionDuration
+  FROM df
+  GROUP BY "MSISDN/Number"   ORDER BY SessionDuration DESC
+  LIMIT 10;
+  '''  
+result_df = pysqldf(query)
+
+result_df
+
+query = '''
+  SELECT   "MSISDN/Number",
+  SUM("Dur. (ms)") AS SessionDuration
+  FROM df
+  GROUP BY "MSISDN/Number"   ORDER BY SessionDuration DESC;
+  '''  
+result_df = pysqldf(query)
+
+result_df['SessionDuration'].median()
+query = '''   SELECT   "MSISDN/Number",
+  SUM("Total DL (Bytes)") AS TotalDownload,
+  SUM("Total UL (Bytes)") AS TotalUpload,
+  (SUM("Total DL (Bytes)") + SUM("Total UL (Bytes)")) AS TotalTraffic
+  FROM df
+  GROUP BY "MSISDN/Number"
+  ORDER BY TotalTraffic DESC
+  LIMIT 10;
+
+'''
+ 
+pysqldf(query)
+query = '''   SELECT   "MSISDN/Number",
+  (SUM("Total DL (Bytes)") + SUM("Total UL (Bytes)")) AS TotalTraffic
+  FROM df
+  GROUP BY "MSISDN/Number"
+  ORDER BY TotalTraffic DESC
+
+'''
+ 
+pysqldf(query)['TotalTraffic'].median()
+query = '''
+  SELECT   "MSISDN/Number",
+  SUM("Dur. (ms)") AS SessionDuration,
+  COUNT(DISTINCT "Bearer Id") AS SessionFrequency,
+  (SUM("Total DL (Bytes)") + SUM("Total UL (Bytes)")) AS TotalTraffic
+  FROM df
+  GROUP BY "MSISDN/Number"
+  '''  
+aggregated_df = pysqldf(query)
+
+aggregated_df.tail()
+aggregated_df = dc.handle_outliers(aggregated_df, ["SessionDuration","SessionFrequency","TotalTraffic"])
+scaler = MinMaxScaler()
+
+columns_to_normalize = ["SessionDuration", "SessionFrequency","TotalTraffic"]
+
+customer_id = aggregated_df['MSISDN/Number']
+
+transformed_data = scaler.fit_transform(aggregated_df[columns_to_normalize])
+
+normalized_data = pd.DataFrame(transformed_data, columns=columns_to_normalize)
+
+df_normalized = pd.concat([customer_id, normalized_data], axis=1)
+
+df_normalized
+fig = plt.figure(figsize=(10, 8))
+
+ax = fig.add_subplot(111, projection='3d')
+ 
+ax.scatter(df_normalized['SessionDuration'], df_normalized['SessionFrequency'], df_normalized['TotalTraffic'], c='blue', marker='o')
+ 
+ax.set_xlabel('SessionDuration')
+
+ax.set_ylabel('SessionFrequency')cases = 707,443
+ 
+Total deaths = 3,891
+
+ax.set_zlabel('TotalTraffic')
+ 
+plt.title('3D Scatter Plot of SessionDuration, SessionFrequency, and TotalTraffic')
+
+plt.show()
+selected_columns = columns_to_normalize
+
+X = df_normalized[selected_columns]
+
+k = 3
+ 
+kmeans = KMeans(n_clusters=3, random_state=0, n_init=25)  
+kmeans.fit(X)
+ 
+df_normalized['Cluster'] = kmeans.labels_
+fig = plt.figure(figsize=(10, 8))
+
+ax = fig.add_subplot(111, projection='3d')
+ 
+cluster_colors = {0: 'red', 1: 'blue', 2:'green'}
+ 
+for cluster_label, color in cluster_colors.items():
+  cluster_data = df_normalized[df_normalized['Cluster'] == cluster_label]
+  ax.scatter(
+  cluster_data['SessionDuration'],   cluster_data['SessionFrequency'],   cluster_data['TotalTraffic'],   label=f'Cluster {cluster_label}',
+  color=color
+  )
+ 
+ax.set_xlabel('SessionDuration')
+
+ax.set_ylabel('SessionFrequency')
+
+ax.set_zlabel('TotalTraffic')
+ 
+plt.title(f'3D Scatter plot with k-Means clustering (K={k})')
+
+plt.show()
+grouped_df = (df_normalized
+  .groupby('Cluster')[["SessionDuration", "SessionFrequency", "TotalTraffic"]]
+  .agg(['min', 'max', 'mean', 'sum']))
+ 
+grouped_df
+
+wcss = []
+
+X = df_normalized.iloc[:, [1, 3]]
+ 
+for i in range(1, 11):
+  kmeans = KMeans(n_clusters = i, random_state=42, n_init=10)
+  kmeans.fit(X)
+  wcss.append(kmeans.inertia_)
+ 
+plt.plot(range(1, 11), wcss)
+
+plt.xlabel('Number of clusters')
+
+plt.ylabel('WCSS')
+
+plt.show()
+selected_columns = columns_to_normalize
+
+X = df_normalized[selected_columns]
+
+k = 7
+ 
+kmeans = KMeans(n_clusters=k, random_state=0, n_init=25)  
+kmeans.fit(X)
+ 
+df_normalized['Cluster'] = kmeans.labels_
+fig = plt.figure(figsize=(10, 8))
+
+ax = fig.add_subplot(111, projection='3d')
+ 
+cluster_colors = {0: 'red', 1: 'blue', 2:'green', 3:'black', 4:'yellow', 5:'brown', 6:'purple'}
+ 
+for cluster_label, color in cluster_colors.items():
+  cluster_data = df_normalized[df_normalized['Cluster'] == cluster_label]
+  ax.scatter(
+  cluster_data['SessionDuration'],   cluster_data['SessionFrequency'],   cluster_data['TotalTraffic'],   label=f'Cluster {cluster_label}',
+  color=color
+  )
+ 
+ax.set_xlabel('SessionDuration')
+
+ax.set_ylabel('SessionFrequency')
+
+ax.set_zlabel('TotalTraffic')
+ 
+plt.title(f'3D Scatter plot with k-Means clustering (K={k})')
+
+plt.show()
+wd.write_data(df_normalized, 'user_engagement')
+import os, sys
+
+import pandas as pd
+
+import seaborn as sns
+
+import matplotlib.pyplot as plt
+
+from pandasql import sqldf
+
+from sklearn.preprocessing import MinMaxScaler
+
+from sklearn.cluster import KMeans
+
+from mpl_toolkits.mplot3d import Axes3D
+ 
+rpath = os.path.abspath('..')
+
+if rpath not in sys.path:
+  sys.path.insert(0, rpath)
+ 
+import scripts.read_data_from_db as rd
+
+import scripts.write_to_db as wd
+
+import scripts.data_cleaning as dc
+
+import scripts.utils as util
+df = rd.read_data(table_name='processed_data')
+pysqldf = lambda q: sqldf(q, globals())
+def helper(field1 : str, field2 : str) -> pd.DataFrame:
+  query = f'''   SELECT
+  "MSISDN/Number" AS CustomerID,
+  AVG("{field1}") AS AvgDL,
+  AVG("{field2}") AS AvgUL,
+  (
+  AVG("{field1}") +   AVG("{field2}")
+  ) / 2 AS Avg
+  FROM df
+  GROUP BY "MSISDN/Number";
+  '''
+  return pysqldf(query)
+avg_retransmission = helper("TCP DL Retrans. Vol (Bytes)", "TCP UL Retrans. Vol (Bytes)")
+
+avg_retransmission
+avg_rtt = helper("Avg RTT DL (ms)", "Avg RTT UL (ms)")
+
+avg_rtt
+query = '''   SELECT
+  "MSISDN/Number" AS User_MSISDN,
+  "Handset Type" AS HandsetType,
+  COUNT(*) AS HandsetTypeCount
+  FROM df
+  GROUP BY "MSISDN/Number", "Handset Type";
+ 
+'''
+ 
+count_handset = pysqldf(query)  
+count_handset
+
+avg_throughput = helper("Avg Bearer TP DL (kbps)", "Avg Bearer TP UL (kbps)")
+
+avg_throughput
+def helper(field, order):
+  query = f'''   SELECT   "{field}",
+  COUNT("{field}") AS "Frequency"
+  FROM df
+  GROUP BY "{field}"
+  ORDER BY "Frequency" {order}   LIMIT 10;
+  '''
+  return pysqldf(query)
+top_tcp = helper("TCP DL Retrans. Vol (Bytes)", "DESC")
+
+top_tcp
+bottom_tcp = helper("TCP DL Retrans. Vol (Bytes)", "ASC")
+
+bottom_tcp
+top_rtt = helper("Avg RTT DL (ms)", "DESC")
+
+top_rtt
+bottom_rtt = helper("Avg RTT DL (ms)", "ASC")
+
+bottom_rtt
+top_throughput = helper("Avg Bearer TP DL (kbps)", "Desc")
+
+top_throughput
+bottom_throughput = helper("Avg Bearer TP DL (kbps)", "ASC")
+
+bottom_throughput
+def helper(field1, field2):
+  query = f'''
+  SELECT
+  "Handset Type" AS HandsetType,
+  AVG("{field1}" + "{field2}") / 2 AS Average
+  FROM df
+  GROUP BY "Handset Type"
+  ORDER BY Average DESC;
+  '''
+  return pysqldf(query)
+avg_throughput_per_handset = helper("Avg Bearer TP DL (kbps)", "Avg Bearer TP UL (kbps)")
+
+avg_throughput_per_handset
+average_tcp_per_handset = helper("TCP DL Retrans. Vol (Bytes)", "TCP UL Retrans. Vol (Bytes)")
+
+average_tcp_per_handset
+query = '''   SELECT   "MSISDN/Number" AS CustomerID,
+  (AVG("TCP DL Retrans. Vol (Bytes)") + AVG("TCP UL Retrans. Vol (Bytes)")) / 2 AS AvgTCP,
+  (AVG("Avg RTT DL (ms)") + AVG("Avg RTT UL (ms)")) / 2 AS AvgRTT,
+  (AVG("Avg Bearer TP DL (kbps)") + AVG("Avg Bearer TP UL (kbps)")) / 2 AS AvgThroughput
+  FROM df
+  GROUP BY CustomerID
+
+'''
+ 
+agg_df = pysqldf(query)
+
+agg_df.head()
+agg_df = dc.handle_outliers(agg_df, ["AvgTCP", "AvgRTT","AvgThroughput"])
+scaler = MinMaxScaler()
+
+columns_to_normalize = ["AvgTCP", "AvgRTT","AvgThroughput"]
+ 
+customer_id = agg_df['CustomerID']
+
+transformed_data = scaler.fit_transform(agg_df[columns_to_normalize])
+
+normalized_data = pd.DataFrame(transformed_data, columns=columns_to_normalize)
+ 
+df_normalized = pd.concat([customer_id, normalized_data], axis=1)
+
+df_normalized
+fig = plt.figure(figsize=(10, 8))
+
+ax = fig.add_subplot(111, projection='3d')
+ 
+ax.scatter(df_normalized["AvgTCP"], df_normalized["AvgRTT"], df_normalized["AvgThroughput"], c='blue', marker='o')
+ 
+ax.set_xlabel("AvgTCP")
+
+ax.set_ylabel("AvgRTT")
+
+ax.set_zlabel("AvgThroughput")
+ 
+plt.title('3D Scatter Plot of AvgTCP, AvgRTT, and AvgThroughput')
+
+plt.show()
+wcss = []
+
+X = df_normalized.iloc[:, [1, 3]]
+ 
+for i in range(1, 11):
+  kmeans = KMeans(n_clusters = i, random_state=42, n_init=10)
+  kmeans.fit(X)
+  wcss.append(kmeans.inertia_)
+ 
+plt.plot(range(1, 11), wcss)
+
+plt.xlabel('Number of clusters')
+
+plt.ylabel('WCSS')
+
+plt.show()
+selected_columns = columns_to_normalize
+
+X = df_normalized[selected_columns]
+
+k = 3
+ 
+kmeans = KMeans(n_clusters=k, random_state=0, n_init=15)  
+kmeans.fit(X)
+ 
+df_normalized['Cluster'] = kmeans.labels_
+fig = plt.figure(figsize=(10, 8))
+
+ax = fig.add_subplot(111, projection='3d')
+ 
+cluster_colors = {0: 'red', 1: 'blue', 2:'green'}
+ 
+for cluster_label, color in cluster_colors.items():
+  cluster_data = df_normalized[df_normalized['Cluster'] == cluster_label]
+  ax.scatter(
+  cluster_data['AvgTCP'],   cluster_data['AvgRTT'],   cluster_data['AvgThroughput'],   label=f'Cluster {cluster_label}',
+  color=color
+  )
+ 
+ax.set_xlabel('AvgTCP')
+
+ax.set_ylabel('AvgRTT')
+
+ax.set_zlabel('AvgThroughput')
+ 
+plt.title(f'3D Scatter plot with k-Means clustering (K={k})')
+
+plt.show()
+grouped_df = (df_normalized
+  .groupby('Cluster')[["AvgTCP", "AvgRTT", "AvgThroughput"]]
+  .agg(['min', 'max', 'mean', 'sum']))
+ 
+grouped_df
+wd.write_data(df_normalized, 'user_experience')
+import os, sys
+
+import pandas as pd
+
+import numpy as np
+
+import seaborn as sns
+
+import matplotlib.pyplot as plt
+
+from pandasql import sqldf
+
+from sklearn.preprocessing import MinMaxScaler
+
+from sklearn.linear_model import LinearRegression
+
+from sklearn.cluster import KMeans
+
+from sklearn.model_selection import train_test_split
+
+from sklearn.metrics import euclidean_distances
+
+from mpl_toolkits.mplot3d import Axes3D
+ 
+rpath = os.path.abspath('..')
+
+if rpath not in sys.path:
+  sys.path.insert(0, rpath)
+ 
+import scripts.read_data_from_db as rd
+
+import scripts.data_cleaning as dc
+
+import scripts.write_to_db as wd
+
+import scripts.utils as util
+experience_df = rd.read_data(table_name='user_experience')
+
+engagement_df = rd.read_data(table_name='user_engagement')
+pysqldf = lambda q: sqldf(q, globals())
+experience_df.head()
+engagement_df.head()
+merged_df = engagement_df.merge(experience_df, left_on='MSISDN/Number', right_on="CustomerID", how='inner')
+
+merged_df.head()
+experience_columns = ["AvgTCP","AvgRTT","AvgThroughput"]
+
+engagement_columns = ["SessionDuration","SessionFrequency","TotalTraffic"]
+k = 3
+
+X_eng = merged_df[engagement_columns]
+
+X_exp = merged_df[experience_columns]
+kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
+
+cluster_labels = kmeans.fit_predict(X_eng)
+
+merged_df['cluster'] = cluster_labels
+query = '''   SELECT   cluster,
+  AVG(("SessionDuration"+"SessionFrequency"+"TotalTraffic") / 3) AS AVG   FROM merged_df
+  GROUP BY cluster;
+
+'''
+ 
+grouped = pysqldf(query)
+
+less_engaged_cluster = grouped['AVG'].idxmin()
+
+less_engaged_cluster
+less_engaged_cluster_center = kmeans.cluster_centers_[less_engaged_cluster]
+ 
+distances = euclidean_distances(X_eng, [less_engaged_cluster_center]).flatten()
+
+merged_df['EngagementScore'] =  distances
+
+merged_df.head()
+query = '''   SELECT   cluster,
+  AVG(("AvgTCP" + "AvgRTT" + "AvgThroughput") / 3) AS AVG   FROM merged_df
+  GROUP BY cluster;
+
+'''
+ 
+grouped = pysqldf(query)
+
+worst_experience_cluster = grouped['AVG'].idxmin()
+
+worst_experience_cluster
+kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
+
+cluster_labels = kmeans.fit_predict(X_exp)
+ 
+worst_experience_cluster_cluster_center = kmeans.cluster_centers_[worst_experience_cluster]
+ 
+distances = euclidean_distances(X_eng, [worst_experience_cluster_cluster_center]).flatten()
+
+merged_df['ExperienceScore'] =  distances
+
+merged_df.head()
+merged_df['SatisfactionScore'] = (merged_df['EngagementScore'] + merged_df['ExperienceScore']) / 2
+
+merged_df.head()
+query = '''   SELECT   "MSISDN/Number",
+  SatisfactionScore
+  FROM merged_df
+  ORDER BY SatisfactionScore DESC
+  LIMIT 10
+
+'''
+ 
+pysqldf(query)
+merged_df['SatisfactionScore'].describe()
+
+bins = np.arange(0, 1.4142, 0.35355)
+
+labels = ["Low Satisfaction", "Medium Satisfaction", "High Satisfaction"]
+ 
+merged_df['SatisfactionGroup'] = pd.cut(merged_df['SatisfactionScore'], bins=bins, labels=labels, include_lowest=True)
+ 
+group_counts = merged_df['SatisfactionGroup'].value_counts()
+ 
+plt.pie(group_counts, labels=group_counts.index, autopct='%1.1f%%', startangle=90)
+
+plt.title('Satisfaction Score Distribution')
+ 
+plt.show()
+bins
+features = engagement_columns + experience_columns
+
+X = merged_df[features]
+
+y = merged_df.SatisfactionScore
+ 
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+model = LinearRegression()  
+model.fit(X_train, y_train)
+ 
+y_pred  = model.predict(X_test)
+
+selected_columns = ["EngagementScore", "SatisfactionScore"]
+
+X = merged_df[selected_columns]
+
+k = 2
+ 
+kmeans = KMeans(n_clusters=k, random_state=0, n_init=15)  
+kmeans.fit(X)
+ 
+merged_df['cluster'] = kmeans.labels_
+cluster_colors = {0: 'red', 1: 'blue'}
+
+for cluster_label, color in cluster_colors.items():
+  cluster_df = merged_df[merged_df["cluster"] == cluster_label]
+  plt.scatter(cluster_df["EngagementScore"], cluster_df["ExperienceScore"], c=color)
+ 
+plt.xlabel("EngagementScore")
+
+plt.ylabel("ExperienceScore")
+
+plt.title("'2D Scatter Plot'of EngagementScore vs ExperienceScore")
+ 
+plt.show()
+
+query = '''   SELECT   cluster,
+  AVG("SatisfactionScore") As "Average Satisfaction"
+  FROM merged_df   GROUP BY cluster;
+
+'''
+
+avg_satsifaction = pysqldf(query)
+
+avg_satsifaction
+query = '''   SELECT   cluster,
+  AVG("ExperienceScore") AS "Average Experience"   FROM merged_df   GROUP BY cluster  
+'''
+ 
+avg_experience = pysqldf(query)
+
+avg_experience
+df = pd.DataFrame({
+  "UserID": merged_df["CustomerID"],
+  "SatisfactionScore": merged_df["SatisfactionScore"],
+  "ExperienceScore": merged_df["ExperienceScore"],
+  "EngagementScore": merged_df["EngagementScore"]
+
+})
+ 
+wd.write_data(df, "satisfaction_score")

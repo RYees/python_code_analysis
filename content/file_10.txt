@@ -1,0 +1,558 @@
+import sys
+
+import pandas as pd
+
+import numpy as np
+
+import seaborn as sns
+
+import matplotlib.pyplot as plt
+sys.path.append('script')
+
+from script import dbconn
+
+pgconn = dbconn.db_connection_psycopg()
+
+raw_df = dbconn.db_read_table_psycopg(pgconn,'xdr_data')
+ 
+handset_counts = raw_df.groupby(['Handset Manufacturer', 'Handset Type']).size().reset_index(name='Count')
+ 
+sorted_handsets = handset_counts.sort_values(by='Count', ascending=False)
+ 
+top_10_handsets = sorted_handsets.head(10)
+ 
+print(top_10_handsets)
+
+manufacturer_counts = raw_df['Handset Manufacturer'].value_counts().reset_index()
+
+manufacturer_counts.columns = ['Handset Manufacturer', 'Count']
+ 
+sorted_manufacturers = manufacturer_counts.sort_values(by='Count', ascending=False)
+ 
+top_3_manufacturers = sorted_manufacturers.head(3)
+ 
+print(top_3_manufacturers)
+ 
+manufacturer_type_counts = raw_df.groupby(['Handset Manufacturer', 'Handset Type']).size().reset_index(name='Count')
+ 
+sorted_manufacturer_types = manufacturer_type_counts.groupby('Handset Manufacturer').apply(lambda x: x.nlargest(5, 'Count')).reset_index(drop=True)
+ 
+top_3_manufacturers = sorted_manufacturer_types['Handset Manufacturer'].unique()[:3]
+ 
+for manufacturer in top_3_manufacturers:
+  print(f"Top 5 handsets for {manufacturer}:")
+  manufacturer_handsets = sorted_manufacturer_types[sorted_manufacturer_types['Handset Manufacturer'] == manufacturer]
+  print(manufacturer_handsets)
+  print()
+
+sessions_per_user = raw_df.groupby('MSISDN/Number')['Bearer Id'].count()
+
+print(sessions_per_user)
+
+session_duration_per_user = raw_df.groupby('MSISDN/Number')['Dur. (ms)'].sum()
+ 
+print(session_duration_per_user)
+
+total_data_per_user = raw_df.groupby('MSISDN/Number')[['Total DL (Bytes)', 'Total UL (Bytes)']].sum()
+ 
+print(total_data_per_user)
+
+applications = ['Social Media', 'Google', 'Email', 'Youtube', 'Netflix', 'Gaming', 'Other']
+ 
+total_data_per_user_app = raw_df.groupby('MSISDN/Number')[[col + ' DL (Bytes)' for col in applications] + [col + ' UL (Bytes)' for col in applications]].sum()
+ 
+print(total_data_per_user_app)
+
+raw_df.isna().sum()
+
+def percent_missing(df):
+  totalCells = np.product(df.shape)
+  missingCount = df.isnull().sum()
+  totalMissing = missingCount.sum()
+  percentageMissing = (totalMissing / totalCells) * 100
+  print("The dataset contains", round(percentageMissing, 2), "%", "missing values.")
+ 
+percent_missing(raw_df)
+
+numeric_columns = raw_df.select_dtypes(include=[np.number]).columns
+
+raw_df[numeric_columns] = raw_df[numeric_columns].fillna(raw_df[numeric_columns].mean())
+ 
+non_numeric_columns = raw_df.select_dtypes(exclude=[np.number]).columns
+
+raw_df[non_numeric_columns] = raw_df[non_numeric_columns].fillna(raw_df[non_numeric_columns].mode().iloc[0])
+ 
+for col in numeric_columns:
+  z_scores = (raw_df[col] - raw_df[col].mean()) / raw_df[col].std()
+  outliers = (z_scores > 3) | (z_scores < -3)
+  raw_df.loc[outliers, col] = raw_df[col].mean()
+ 
+missing_values_after_treatment = raw_df.isnull().sum()
+
+print("Missing Values After Treatment:\n", missing_values_after_treatment)
+raw_df.isna().sum()
+
+def fix_missing_ffill(df, col):
+  df[col] = df[col].fillna(method='ffill')
+  return df[col]
+ 
+raw_df['Start'] = fix_missing_ffill(raw_df, 'Start')
+
+raw_df['End'] = fix_missing_ffill(raw_df, 'End')
+
+raw_df['Last Location Name'] = fix_missing_ffill(raw_df, 'Last Location Name')
+ 
+missing_values = raw_df.isna().sum()
+
+print(missing_values)
+
+raw_df.describe()
+ 
+quantitative_variables = []
+ 
+for column in raw_df.columns:   if raw_df[column].dtype in [int, float]:
+  quantitative_variables.append(column)
+ 
+for column_name in quantitative_variables:
+  column_data = raw_df[column_name]
+  data_range = column_data.max() - column_data.min()
+  print("Range of", column_name, ":", data_range)
+ 
+clean_Data = raw_df.dropna()
+
+column_names = clean_Data.columns
+ 
+for column_name in column_names:
+  column_data = clean_Data[column_name]   plt.hist(column_data, bins=10)
+  plt.xlabel(column_name)
+  plt.ylabel('Frequency')
+  plt.title('Histogram of ' + column_name)
+  plt.show()
+ 
+user_total_duration = raw_df.groupby('MSISDN/Number')['Dur. (ms)'].sum()
+ 
+user_deciles = pd.qcut(user_total_duration, q=10, labels=False, duplicates='drop')
+ 
+data_per_decile = raw_df.groupby(user_deciles)[['Total DL (Bytes)', 'Total UL (Bytes)']].sum().reset_index()
+ 
+columns = [
+  'Social Media DL (Bytes)', 'Social Media UL (Bytes)',
+  'Google DL (Bytes)', 'Google UL (Bytes)',
+  'Email DL (Bytes)', 'Email UL (Bytes)',
+  'Youtube DL (Bytes)', 'Youtube UL (Bytes)',
+  'Netflix DL (Bytes)', 'Netflix UL (Bytes)',
+  'Gaming DL (Bytes)', 'Gaming UL (Bytes)',
+  'Other DL (Bytes)', 'Other UL (Bytes)'
+
+]
+ 
+subset_df = raw_df[columns]
+ 
+correlation_matrix = subset_df.corr()
+ 
+print(correlation_matrix)
+ 
+aggregated_data = raw_df.groupby('MSISDN/Number').agg({
+  'Bearer Id': 'nunique',   'Dur. (ms)': 'sum',   'Total UL (Bytes)': 'sum',   'Total DL (Bytes)': 'sum'  
+}).reset_index()
+ 
+aggregated_data.rename(columns={
+  'Bearer Id': 'Session Frequency',
+  'Dur. (ms)': 'Session Duration',
+  'Total UL (Bytes)': 'Total Upload Traffic',
+  'Total DL (Bytes)': 'Total Download Traffic'
+
+}, inplace=True)
+ 
+top_10_frequency = aggregated_data.nlargest(10, 'Session Frequency')
+
+top_10_duration = aggregated_data.nlargest(10, 'Session Duration')
+
+top_10_upload_traffic = aggregated_data.nlargest(10, 'Total Upload Traffic')
+
+top_10_download_traffic = aggregated_data.nlargest(10, 'Total Download Traffic')
+ 
+print("Top 10 customers by Session Frequency:")
+
+print(top_10_frequency)
+ 
+print("\nTop 10 customers by Session Duration:")
+
+print(top_10_duration)
+ 
+print("\nTop 10 customers by Total Upload Traffic:")
+
+print(top_10_upload_traffic)
+ 
+print("\nTop 10 customers by Total Download Traffic:")
+
+print(top_10_download_traffic)
+ 
+from sklearn.preprocessing import MinMaxScaler
+
+from sklearn.cluster import KMeans
+ 
+aggregated_data = raw_df.groupby('MSISDN/Number').agg({
+  'Bearer Id': 'nunique',   'Dur. (ms)': 'sum',   'Total UL (Bytes)': 'sum',   'Total DL (Bytes)': 'sum'  
+}).reset_index()
+ 
+scaler = MinMaxScaler()
+
+normalized_data = scaler.fit_transform(aggregated_data.iloc[:, 1:])  
+k = 3
+
+kmeans = KMeans(n_clusters=k, random_state=42)
+
+kmeans.fit(normalized_data)
+ 
+aggregated_data['Cluster'] = kmeans.labels_
+ 
+top_customers_per_cluster = []
+
+for i in range(k):
+  cluster_customers = aggregated_data[aggregated_data['Cluster'] == i].nlargest(10, 'Bearer Id')
+  top_customers_per_cluster.append(cluster_customers)
+ 
+for i, cluster_customers in enumerate(top_customers_per_cluster):
+  print(f"\nTop 10 customers in Cluster {i+1}:")
+  print(cluster_customers)
+ 
+aggregated_data = raw_df.groupby('MSISDN/Number').agg({
+  'Bearer Id': 'nunique',   'Dur. (ms)': 'sum',   'Total UL (Bytes)': 'sum',   'Total DL (Bytes)': 'sum'  
+}).reset_index()
+ 
+scaler = MinMaxScaler()
+
+normalized_data = scaler.fit_transform(aggregated_data.iloc[:, 1:])  
+k = 3
+
+kmeans = KMeans(n_clusters=k, random_state=42)
+
+kmeans.fit(normalized_data)
+ 
+aggregated_data['Cluster'] = kmeans.labels_
+ 
+cluster_metrics = aggregated_data.groupby('Cluster').agg({
+  'Bearer Id': ['min', 'max', 'mean', 'sum'],   'Dur. (ms)': ['min', 'max', 'mean', 'sum'],   'Total UL (Bytes)': ['min', 'max', 'mean', 'sum'],   'Total DL (Bytes)': ['min', 'max', 'mean', 'sum']  
+})
+ 
+print("Non-normalized metrics for each cluster:")
+
+print(cluster_metrics)
+ 
+app_columns = ['MSISDN/Number', 'Social Media DL (Bytes)', 'Google DL (Bytes)',   'Email DL (Bytes)', 'Youtube DL (Bytes)', 'Netflix DL (Bytes)',   'Gaming DL (Bytes)', 'Other DL (Bytes)']
+
+app_traffic = raw_df[app_columns].copy()
+ 
+app_traffic.columns = ['MSISDN/Number', 'Social Media', 'Google', 'Email', 'Youtube', 'Netflix', 'Gaming', 'Other']
+ 
+app_traffic = app_traffic.melt(id_vars='MSISDN/Number', var_name='Application', value_name='Total Traffic')
+ 
+app_traffic = app_traffic.groupby(['MSISDN/Number', 'Application'])['Total Traffic'].sum().reset_index()
+ 
+top_users_per_app = []
+
+unique_apps = app_traffic['Application'].unique()
+ 
+for app in unique_apps:
+  top_users = app_traffic[app_traffic['Application'] == app].nlargest(10, 'Total Traffic')
+  top_users_per_app.append(top_users)
+ 
+for i, app in enumerate(unique_apps):
+  print(f"\nTop 10 most engaged users for Application '{app}':")
+  print(top_users_per_app[i])
+ 
+app_columns = ['MSISDN/Number', 'Social Media DL (Bytes)', 'Google DL (Bytes)', 'Email DL (Bytes)', 'Youtube DL (Bytes)', 'Netflix DL (Bytes)', 'Gaming DL (Bytes)', 'Other DL (Bytes)']
+
+app_traffic = raw_df[app_columns].copy()
+ 
+app_traffic.columns = ['MSISDN/Number', 'Social Media', 'Google', 'Email', 'Youtube', 'Netflix', 'Gaming', 'Other']
+ 
+app_traffic = app_traffic.melt(id_vars='MSISDN/Number', var_name='Application', value_name='Total Traffic')
+ 
+app_traffic = app_traffic.groupby('Application')['Total Traffic'].sum().reset_index()
+ 
+app_traffic = app_traffic.sort_values('Total Traffic', ascending=False)
+ 
+top_3_apps = app_traffic.head(3)
+ 
+plt.figure(figsize=(8, 6))
+
+plt.bar(top_3_apps['Application'], top_3_apps['Total Traffic'])
+
+plt.xlabel('Application')
+
+plt.ylabel('Total Traffic')
+
+plt.title('Top 3 Most Used Applications')
+
+plt.show()
+ 
+average_tcp_retransmission = raw_df.groupby('MSISDN/Number')['TCP DL Retrans. Vol (Bytes)'].mean()
+ 
+print("Average TCP Retransmission per Customer:")
+
+print(average_tcp_retransmission)
+
+average_rtt = raw_df.groupby('MSISDN/Number')['Avg RTT DL (ms)'].mean()
+ 
+print("Average RTT per Customer:")
+
+print(average_rtt)
+
+handset_type = raw_df.groupby('MSISDN/Number')['Handset Type'].first()
+ 
+print("Aggregate handset type per Customer:")
+
+print(handset_type)
+
+average_throughput = raw_df.groupby('MSISDN/Number')['Avg Bearer TP DL (kbps)'].mean()
+ 
+print("Average Throughput per Customer:")
+
+print(average_throughput)
+
+top_tcp_values = raw_df['TCP DL Retrans. Vol (Bytes)'].nlargest(10)
+ 
+bottom_tcp_values = raw_df['TCP DL Retrans. Vol (Bytes)'].nsmallest(10)
+ 
+most_frequent_tcp_values = raw_df['TCP DL Retrans. Vol (Bytes)'].value_counts().head(10)
+ 
+print("Top 10 TCP Values:")
+
+print(top_tcp_values)
+
+print("\nBottom 10 TCP Values:")
+
+print(bottom_tcp_values)
+
+print("\nMost Frequent TCP Values:")
+
+print(most_frequent_tcp_values)
+
+top_rtt_values = raw_df['Avg RTT DL (ms)'].nlargest(10)
+ 
+bottom_rtt_values = raw_df['Avg RTT DL (ms)'].nsmallest(10)
+ 
+most_frequent_rtt_values = raw_df['Avg RTT DL (ms)'].value_counts().head(10)
+ 
+print("Top 10 RTT Values:")
+
+print(top_rtt_values)
+
+print("\nBottom 10 RTT Values:")
+
+print(bottom_rtt_values)
+
+print("\nMost Frequent RTT Values:")
+
+print(most_frequent_rtt_values)
+
+top_throughput_values = raw_df['Avg Bearer TP DL (kbps)'].nlargest(10)
+ 
+bottom_throughput_values = raw_df['Avg Bearer TP DL (kbps)'].nsmallest(10)
+ 
+most_frequent_throughput_values = raw_df['Avg Bearer TP DL (kbps)'].value_counts().head(10)
+ 
+print("Top 10 Throughput Values:")
+
+print(top_throughput_values)
+
+print("\nBottom 10 Throughput Values:")
+
+print(bottom_throughput_values)
+
+print("\nMost Frequent Throughput Values:")
+
+print(most_frequent_throughput_values)
+
+avg_throughput_distribution = raw_df.groupby('Handset Type')['Avg Bearer TP DL (kbps)'].mean()
+ 
+plt.figure(figsize=(12, 6))
+
+avg_throughput_distribution.plot(kind='bar')
+
+plt.xlabel('Handset Type')
+
+plt.ylabel('Average Throughput (kbps)')
+
+plt.title('Distribution of Average Throughput per Handset Type')
+
+plt.xticks(rotation=90)
+
+plt.show()
+
+avg_tcp_retransmission = raw_df.groupby('Handset Type')['TCP DL Retrans. Vol (Bytes)'].mean()
+ 
+plt.figure(figsize=(12, 6))
+
+avg_tcp_retransmission.plot(kind='bar')
+
+plt.xlabel('Handset Type')
+
+plt.ylabel('Average TCP Retransmission')
+
+plt.title('Average TCP Retransmission View per Handset Type')
+
+plt.xticks(rotation=90)
+
+plt.show()
+from sklearn.cluster import KMeans
+ 
+data = raw_df[['Avg RTT DL (ms)', 'Avg Bearer TP DL (kbps)', 'TCP DL Retrans. Vol (Bytes)']]
+ 
+kmeans = KMeans(n_clusters=3, random_state=42)
+
+kmeans.fit(data)
+ 
+raw_df['Cluster'] = kmeans.labels_
+ 
+cluster_descriptions = raw_df.groupby('Cluster').agg({
+  'Avg RTT DL (ms)': 'mean',
+  'Avg Bearer TP DL (kbps)': 'mean',
+  'TCP DL Retrans. Vol (Bytes)': 'mean'
+
+})
+ 
+print("Cluster Descriptions:")
+
+print(cluster_descriptions)
+ 
+from sklearn.cluster import KMeans
+
+from sklearn.preprocessing import MinMaxScaler
+ 
+engagement_columns = ['Social Media DL (Bytes)', 'Google DL (Bytes)', 'Email DL (Bytes)', 'Youtube DL (Bytes)', 'Netflix DL (Bytes)', 'Gaming DL (Bytes)', 'Other DL (Bytes)']
+
+engagement_data = raw_df[engagement_columns]
+ 
+kmeans = KMeans(n_clusters=3, random_state=42).fit(MinMaxScaler().fit_transform(engagement_data))
+
+raw_df['Cluster'] = kmeans.predict(MinMaxScaler().fit_transform(engagement_data))
+ 
+raw_df['Engagement Score'] = kmeans.transform(MinMaxScaler().fit_transform(engagement_data)).min(axis=1)
+ 
+top_10_least_engaged_users = raw_df.nsmallest(10, 'Engagement Score')
+
+print("Top 10 least engaged users:")
+
+print(top_10_least_engaged_users[['MSISDN/Number', 'Cluster', 'Engagement Score']])
+ 
+engagement_columns = ['Social Media DL (Bytes)', 'Google DL (Bytes)', 'Email DL (Bytes)', 'Youtube DL (Bytes)', 'Netflix DL (Bytes)', 'Gaming DL (Bytes)', 'Other DL (Bytes)']
+
+engagement_data = raw_df[engagement_columns]
+ 
+kmeans = KMeans(n_clusters=3, random_state=42).fit(MinMaxScaler().fit_transform(engagement_data))
+
+raw_df['Cluster'] = kmeans.predict(MinMaxScaler().fit_transform(engagement_data))
+ 
+worst_experience_cluster = np.argmin(kmeans.inertia_)
+
+worst_experience_cluster_centroid = kmeans.cluster_centers_[worst_experience_cluster]
+ 
+raw_df['Experience Score'] = kmeans.transform(MinMaxScaler().fit_transform(engagement_data)).min(axis=1)
+ 
+top_10_worst_experience_users = raw_df.nsmallest(10, 'Experience Score')
+
+print("Top 10 users with the worst experience:")
+
+print(top_10_worst_experience_users[['MSISDN/Number', 'Cluster', 'Experience Score']])
+ 
+engagement_data = raw_df[['Social Media DL (Bytes)', 'Google DL (Bytes)', 'Email DL (Bytes)', 'Youtube DL (Bytes)', 'Netflix DL (Bytes)', 'Gaming DL (Bytes)', 'Other DL (Bytes)']]
+
+engagement_scores = KMeans(n_clusters=3, random_state=42).fit_transform(MinMaxScaler().fit_transform(engagement_data)).min(axis=1)
+ 
+experience_scores = KMeans(n_clusters=3, random_state=42).fit_transform(MinMaxScaler().fit_transform(engagement_data)).min(axis=1)
+ 
+satisfaction_scores = (engagement_scores + experience_scores) / 2
+ 
+raw_df['Satisfaction Score'] = satisfaction_scores
+ 
+top_10_satisfied_customers = raw_df.nlargest(10, 'Satisfaction Score')
+
+print("Top 10 satisfied customers:")
+
+print(top_10_satisfied_customers[['MSISDN/Number', 'Satisfaction Score']])
+ 
+from sklearn.ensemble import RandomForestRegressor
+
+from sklearn.model_selection import train_test_split
+
+from sklearn.metrics import mean_squared_error, r2_score
+ 
+features = raw_df[['Social Media DL (Bytes)', 'Google DL (Bytes)', 'Email DL (Bytes)', 'Youtube DL (Bytes)', 'Netflix DL (Bytes)', 'Gaming DL (Bytes)', 'Other DL (Bytes)']]
+
+target = raw_df['Satisfaction Score']
+ 
+X_train, X_test, y_train, y_test = train_test_split(features, target, test_size=0.2, random_state=42)
+ 
+rf_model = RandomForestRegressor(n_estimators=100, random_state=42)
+
+rf_model.fit(X_train, y_train)
+ 
+y_pred = rf_model.predict(X_test)
+ 
+mse = mean_squared_error(y_test, y_pred)
+
+r2 = r2_score(y_test, y_pred)
+ 
+print("Mean Squared Error (MSE):", mse)
+
+print("R-squared (R2) Score:", r2)
+ 
+from sklearn.cluster import KMeans
+
+from sklearn.preprocessing import MinMaxScaler
+ 
+engagement_columns = ['Social Media DL (Bytes)', 'Google DL (Bytes)', 'Email DL (Bytes)', 'Youtube DL (Bytes)', 'Netflix DL (Bytes)', 'Gaming DL (Bytes)', 'Other DL (Bytes)']
+
+engagement_data = raw_df[engagement_columns]
+ 
+scaler = MinMaxScaler().fit(engagement_data)
+
+scaled_engagement_data = scaler.transform(engagement_data)
+ 
+kmeans = KMeans(n_clusters=2, random_state=42).fit(scaled_engagement_data)
+ 
+cluster_labels = kmeans.labels_
+ 
+raw_df['Engagement Cluster'] = cluster_labels
+ 
+experience_scores = kmeans.transform(scaled_engagement_data).min(axis=1)
+ 
+raw_df['Experience Score'] = experience_scores
+ 
+print("Engagement Clusters:")
+
+print(raw_df['Engagement Cluster'].value_counts())
+
+print("\nExperience Scores:")
+
+print(raw_df['Experience Score'])
+
+cluster_agg = raw_df.groupby('Engagement Cluster').agg({'Satisfaction Score': 'mean', 'Experience Score': 'mean'})
+
+print(cluster_agg)
+data_to_export = raw_df[['MSISDN/Number', 'Engagement Score', 'Experience Score', 'Satisfaction Score']]
+
+def export_table_to_postgres(pgconn, df, table_name):
+  cursor = pgconn.cursor()
+  create_table_query = """
+  CREATE TABLE {} (
+  user_id VARCHAR(255),
+  engagement_score FLOAT,
+  experience_score FLOAT,
+  satisfaction_score FLOAT
+  );
+  """.format(table_name)
+  cursor.execute(create_table_query)
+  pgconn.commit()
+  for _, row in df.iterrows():
+  insert_query = """
+  INSERT INTO {} (user_id, engagement_score, experience_score, satisfaction_score)
+  VALUES (%s, %s, %s, %s);
+  """.format(table_name)
+  cursor.execute(insert_query, tuple(row))
+  pgconn.commit()
+  print("Data exported successfully to PostgreSQL table:", table_name)
+ 

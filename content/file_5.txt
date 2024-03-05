@@ -1,0 +1,31 @@
+import pandas as pd
+
+from sqlalchemy import create_engine, MetaData, Table
+
+import psycopg2
+
+databse_name = 'telecome'
+
+table_name = 'xdr_data'
+
+con_param ={"host": "localhost","user": "postgres", "password":"1272", "port":"5432", "database":databse_name}
+
+print(databse_name)
+
+engin  = create_engine(f"postgresql://{con_param['user']}:{con_param['password']}@{con_param['host']}/{con_param['port']}/{con_param['database']}")
+ 
+sql_query = 'SELECT * FROM xdr_data'
+ 
+conn = psycopg2.connect(
+  host="localhost",
+  port=5432,
+  database="telecome",
+  user="postgres",
+  password="1272"
+
+)
+
+cursor =conn.cursor()
+
+cursor.execute(sql_query)
+ 

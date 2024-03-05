@@ -1,0 +1,243 @@
+import sys
+
+import pandas as pd
+
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+import numpy as np
+
+from sklearn.decomposition import PCA
+
+from sklearn.preprocessing import StandardScaler
+
+from sklearn.impute import SimpleImputer
+
+from sklearn.cluster import KMeans
+sys.path.append('script')
+
+sys.path.append('analysis')
+from script import dbconn
+
+from analysis import data_preprocessing
+
+from analysis  import user_overview_analysis
+
+from analysis import user_engagement_analysis
+df_telecom = data_preprocessing.load_data_from_postgres()
+
+df_telecom.head(5)
+df_telecom.isnull().sum()
+df1 = data_preprocessing.load_data_from_sqlalchemy()
+
+df1.info()
+df_clean = data_preprocessing.clear_data(df1)
+
+df_clean.head()
+df_clean.info()
+final_data = data_preprocessing.read_data()
+
+final_data.head(10)
+final_data.describe()
+user_overview_analysis.history_graph(df_clean)
+df_clean.isnull().sum()
+final_data.describe()
+user_overview_analysis.top_handsets_identifier(final_data)
+user_overview_analysis.top_manfacturers(final_data)
+user_overview_analysis.handsets_per_manufacturers(final_data)
+user_overview_analysis.user_aggregation(final_data)
+display(user_overview_analysis.total_user_aggregation(final_data).head(10))
+data_description = final_data.dtypes.reset_index()
+
+data_description.columns = ['Variable', 'Data Type']
+ 
+data_description
+user_overview_analysis.dispersion_parameters(final_data).head(20)
+user_overview_analysis.histogram_of_session_duration(final_data)
+user_overview_analysis.bivariate_analysis(final_data)
+user_overview_analysis.correlation_matrix(final_data)
+user_overview_analysis.principal_variance(final_data)
+user_engagement_analysis.user_engagement_metrics(final_data)
+user_engagement_analysis.normalized_engagment_metrics(final_data)
+user_engagement_analysis.app_traffic(final_data)
+user_engagement_analysis.top_apps_per_user_engagement(final_data)
+user_engagement_analysis.KElbowVisualizer_on_normalized_metrics(final_data)
+import pandas.io.sql as sqlio
+import psycopg2
+from psycopg2 import sql
+from sqlalchemy import create_engine
+import pandas as pd
+ 
+def db_connection_sqlalchemy():
+  engine = create_engine('postgresql+psycopg2://postgres:1234@localhost/telecom')
+  return engine
+
+def db_read_table_sqlalchemy(engine, table_name):
+  query = f'SELECT * FROM {table_name}'
+  df= pd.read_sql_query(query, engine)
+  return df
+ 
+def db_connection_psycopg():
+  pgconn = psycopg2.connect(dbname="telecom",user="postgres",password="1234",host="localhost",port="5432")
+  return pgconn
+ 
+def db_read_table_psycopg(pgconn, table_name):
+  sql = f'SELECT * FROM {table_name}'
+  df = sqlio.read_sql_query(sql, pgconn)
+  return df
+
+def db_write_table_psycopg(pgconn, tablename, df):
+  pass
+
+def db_delete_table_pyscopg():
+  cursor = pgconn.cursor()
+  drop_table_query = sql.SQL("DROP TABLE IF EXISTS {} CASCADE").format(sql.Identifier(table_name))
+  cursor.execute(drop_table_query)
+  pgconn.commit()
+  print(f"Table `{table_name}` has been successfully deleted.")
+  if cursor:
+  cursor.close()
+
+def marketing_recommendation(df,self):
+  interpretation = "Based on the user overview analysis, the marketing team should focus on:"
+  top_handsets_list = top_handsets(df).index.tolist()
+  interpretation += f"\n- Promoting the top handsets: {', '.join(top_handsets_list)}"
+  top_manufacturers_list = top_manufacturers(df).index.tolist()
+  interpretation += f"\n- Collaborating with the top manufacturers: {', '.join(top_manufacturers_list)}"
+  for manufacturer in top_manufacturers_list:
+  top_handsets_list = top_handsets_per_manufacturer(df, manufacturer).index.tolist()
+  interpretation += f"\n- Highlighting top handsets for {manufacturer}: {', '.join(top_handsets_list)}"
+  return interpretation
+import pandas as pd
+import numpy as np
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import pairwise_distances_argmin_min
+from sklearn.linear_model import LinearRegression
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error
+import matplotlib.pyplot as plt
+from sklearn.decomposition import PCA
+import joblib
+import pymysql
+
+def assign_engagement_experience_scores(df, clustering_results, features_for_clustering):
+  scaler = StandardScaler()
+  user_data_for_clustering = df[features_for_clustering].copy()
+  user_data_for_clustering_scaled = scaler.fit_transform(user_data_for_clustering)
+  less_engaged_cluster_center = clustering_results.groupby('Cluster')[features_for_clustering].mean().iloc[0]
+  engagement_scores = np.linalg.norm(user_data_for_clustering_scaled - less_engaged_cluster_center, axis=1)
+  worst_experience_cluster_center = clustering_results.groupby('Cluster')[features_for_clustering].mean().idxmax()
+  experience_scores = np.linalg.norm(user_data_for_clustering_scaled - worst_experience_cluster_center, axis=1)
+  df['Engagement Score'] = engagement_scores
+  df['Experience Score'] = experience_scores
+  return df
+
+def calculate_satisfaction_score(df):
+  df['Satisfaction Score'] = (df['Engagement Score'] + df['Experience Score']) / 2
+  return df
+
+def top_satisfied_customers(df, n=10):
+  top_satisfied = df.nlargest(n, 'Satisfaction Score')
+  return top_satisfied
+
+def build_regression_model(df, target_column='Satisfaction Score'):
+  features = ['Engagement Score', 'Experience Score']
+  X = df[features]
+  y = df[target_column]
+  X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+  model = LinearRegression()
+  model.fit(X_train, y_train)
+  y_pred = model.predict(X_test)
+  mse = mean_squared_error(y_test, y_pred)
+  return model, mse
+
+def kmeans_clustering_2(df, features, n_clusters=2):
+  scaler = StandardScaler()
+  data_for_clustering = df[features].copy()
+  data_for_clustering_scaled = scaler.fit_transform(data_for_clustering)
+  kmeans = KMeans(n_clusters=n_clusters, random_state=42)
+  df['Cluster 2'] = kmeans.fit_predict(data_for_clustering_scaled)
+  cluster_summary = df.groupby('Cluster 2')[features].mean()
+  return df, cluster_summary
+
+def aggregate_scores_per_cluster(df, cluster_column='Cluster 2'):
+  agg_per_cluster = df.groupby(cluster_column)['Satisfaction Score', 'Experience Score'].mean()
+  return agg_per_cluster
+
+def export_to_mysql(df, table_name='satisfaction_scores', host='localhost', user='root', password='password', database='telecom_analysis'):
+  connection = pymysql.connect(host=host, user=user, password=password, database=database)
+  cursor = connection.cursor()
+  create_table_query = f"""
+  CREATE TABLE IF NOT EXISTS {table_name} (
+  `MSISDN/Number` INT PRIMARY KEY,
+  `Engagement Score` FLOAT,
+  `Experience Score` FLOAT,
+  `Satisfaction Score` FLOAT,
+  `Cluster 2` INT
+  );
+  """
+  cursor.execute(create_table_query)
+  insert_query = f"""
+  INSERT INTO {table_name} (`MSISDN/Number`, `Engagement Score`, `Experience Score`, `Satisfaction Score`, `Cluster 2`)
+  VALUES (%s, %s, %s, %s, %s);
+  """
+  for _, row in df.iterrows():
+  cursor.execute(insert_query, (row['MSISDN/Number'], row['Engagement Score'], row['Experience Score'], row['Satisfaction Score'], row['Cluster 2']))
+  connection.commit()
+  connection.close()
+
+if __name__ == "__main__":
+  features_for_clustering = ['TCP Retransmission', 'RTT', 'Throughput']
+  df = assign_engagement_experience_scores(df, clustering_results, features_for_clustering)
+  print(df[['MSISDN/Number', 'Engagement Score', 'Experience Score']].head())
+  df = calculate_satisfaction_score(df)
+  top_satisfied = top_satisfied_customers(df, n=10)
+  print("\nTask 5.2 - Top Satisfied Customers:")
+  print(top_satisfied[['MSISDN/Number', 'Satisfaction Score']])
+  regression_model, mse = build_regression_model(df)
+  print("\nTask 5.3 - Regression Model Evaluation:")
+  print(f"Mean Squared Error: {mse}")
+import pandas as pd
+import numpy as np
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+def clean_data(df):
+  df_cleaned = df.copy()
+  df_cleaned['TCP Retransmission'] = df_cleaned['TCP Retransmission'].fillna(df_cleaned['TCP Retransmission'].mean())
+  df_cleaned['RTT'] = df_cleaned['RTT'].fillna(df_cleaned['RTT'].mean())
+  df_cleaned['Handset Type'] = df_cleaned['Handset Type'].fillna(df_cleaned['Handset Type'].mode()[0])
+  df_cleaned['Throughput'] = df_cleaned['Throughput'].fillna(df_cleaned['Throughput'].mean())
+  return df_cleaned
+
+def aggregate_user_experience(df):
+  user_experience_agg = df.groupby('MSISDN/Number').agg({
+  'TCP Retransmission': 'mean',
+  'RTT': 'mean',
+  'Handset Type': 'first',   'Throughput': 'mean'
+  }).reset_index()
+  return user_experience_agg
+
+def top_bottom_frequent_values(df, column, n=10):
+  top_values = df[column].nlargest(n)
+  bottom_values = df[column].nsmallest(n)
+  frequent_values = df[column].value_counts().nlargest(n)
+  return top_values, bottom_values, frequent_values
+
+def compute_and_report_distribution(df, column_group, column_value, title):
+  plt.figure(figsize=(12, 6))
+  sns.boxplot(x=column_group, y=column_value, data=df)
+  plt.title(title)
+  plt.show()
+
+def kmeans_clustering(df, features, n_clusters=3):
+  scaler = StandardScaler()
+  data_for_clustering = df[features].copy()
+  data_for_clustering_scaled = scaler.fit_transform(data_for_clustering)
+  kmeans = KMeans(n_clusters=n_clusters, random_state=42)
+  df['Cluster'] = kmeans.fit_predict(data_for_clustering_scaled)
+  cluster_summary = df.groupby('Cluster')[features].mean()
+  return df, cluster_summary

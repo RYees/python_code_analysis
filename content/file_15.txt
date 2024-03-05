@@ -1,0 +1,726 @@
+import pandas as pd
+
+import numpy as np
+
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+
+import os
+
+import sys
+
+import warnings
+
+warnings.filterwarnings('ignore')
+ 
+sys.path.append('../helpers/')
+ 
+from data import Database
+
+from utils import Helpers
+db = Database(host="localhost", database="telecom", user="postgres", password="heisenberg")
+
+df = db.read_table_to_dataframe('xdr_data')
+
+df.head()
+df.info()
+df.describe()
+def percent_missing(df):
+  totalCells = np.product(df.shape)
+  missingCount = df.isnull().sum()
+  totalMissing = missingCount.sum()
+  print("The dataset contains", round(((totalMissing/totalCells) * 100), 2), "%", "missing values.")
+percent_missing(df)
+df.isna().sum()
+percent_missing(df['Nb of sec with 6250B < Vol UL < 37500B'])
+df['Handset Manufacturer'].unique()
+df['Handset Type'].describe()
+top_10_handsets = df['Handset Type'].value_counts().head(10)
+
+print(top_10_handsets)
+top_3_manufacturers = df['Handset Manufacturer'].value_counts().head(3)
+
+print(top_3_manufacturers)
+top_3_manufacturers_list = top_3_manufacturers.index.tolist()
+
+top_5_handsets_per_manufacturer = df[df['Handset Manufacturer'].isin(top_3_manufacturers_list)]
+ 
+top_5_handsets_per_manufacturer = top_5_handsets_per_manufacturer.groupby(['Handset Manufacturer', 'Handset Type']).size().reset_index(name='Count')
+ 
+top_5_handsets_per_manufacturer = top_5_handsets_per_manufacturer.sort_values(by=['Handset Manufacturer', 'Count'], ascending=[True, False])
+
+top_5_handsets_per_manufacturer = top_5_handsets_per_manufacturer.groupby('Handset Manufacturer').head(5)
+
+top_5_handsets_per_manufacturer
+user_data = df.groupby('MSISDN/Number')
+
+user_data.head()
+ 
+num_xdr = user_data.size().rename('Number of XDR Sessions')
+
+session_duration = user_data['Dur. (ms)'].sum() / 1000
+
+total_up_dl_per_user = user_data[['Total DL (Bytes)', 'Total UL (Bytes)']].sum()
+ 
+app_columns = ['Social Media DL (Bytes)', 'Social Media UL (Bytes)', 'Google DL (Bytes)', 'Google UL (Bytes)',
+  'Email DL (Bytes)', 'Email UL (Bytes)', 'Youtube DL (Bytes)', 'Youtube UL (Bytes)',
+  'Netflix DL (Bytes)', 'Netflix UL (Bytes)', 'Gaming DL (Bytes)', 'Gaming UL (Bytes)',
+  'Other DL (Bytes)', 'Other UL (Bytes)']
+ 
+for data in app_columns:
+  df[data] /= (1024 * 1024)
+
+total_data = user_data[app_columns].sum()
+ 
+user_behavior = pd.concat([num_xdr, session_duration, total_up_dl_per_user, total_data], axis=1) 
+user_behavior
+user_behavior.describe()
+ 
+top_10_xdr = user_behavior['Number of XDR Sessions'].nlargest(10)
+
+top_10_xdr
+ 
+top_10_duration = user_behavior['Dur. (ms)'].nlargest(10)
+
+top_10_duration_seconds = top_10_duration / 1000
+
+top_10_duration_seconds
+ 
+top_10_download = user_behavior['Total DL (Bytes)'].nlargest(10)
+
+top_10_download /= (1024 * 1024)
+
+top_10_download
+missing_values = df.isnull().sum()
+
+missing_values
+data_types = df.dtypes
+
+type_counts = data_types.value_counts()
+
+type_counts
+ 
+for column in df.columns:
+  if df[column].dtype == 'float64' and df[column].isnull().any():
+  mean_value = df[column].mean()
+  df[column].fillna(mean_value, inplace=True)
+
+df.isnull().sum()
+description = df.describe(include='all')
+
+description
+numeric_columns = df.select_dtypes(include=['float64', 'int64'])
+ 
+mean_values_all = numeric_columns.mean()
+
+median_values = numeric_columns.median()
+
+std_deviation = numeric_columns.std()
+ 
+median_values
+numeric_columns = df.select_dtypes(include=['float64', 'int64'])
+
+dispersion_parameters = numeric_columns.agg(['std', 'var'])
+
+dispersion_parameters
+numeric_columns = df.select_dtypes(include=['float64', 'int64'])
+
+numeric_columns.hist(bins=20, figsize=(12, 10))
+
+plt.tight_layout()
+
+plt.show()
+plt.figure(figsize=(8,6))
+
+plt.hist(df['Total UL (Bytes)'], bins= 20, color='skyblue')
+
+plt.show()
+plt.figure(figsize=(8,6))
+
+plt.hist(df['Avg Bearer TP DL (kbps)'], bins= 20, color='skyblue')
+
+plt.show()
+plt.figure(figsize=(8,6))
+
+plt.hist(df['Total UL (Bytes)'], bins= 20, color='skyblue')
+
+plt.show()
+plt.figure(figsize=(8,6))
+
+plt.hist(df['Start ms'], bins= 20, color='skyblue')
+
+plt.show()
+ 
+threshold = 30
+ 
+cols_with_outliers = []
+ 
+for col in df.columns:
+  if df[col].dtype in ['int64', 'float64']:
+  mean = df[col].mean()
+  std = df[col].std()
+  outliers = df[(df[col] - mean).abs() > threshold * std]
+  if len(outliers) > 0:
+  cols_with_outliers.append(col)
+print('Potential columns with outliers: ', cols_with_outliers)
+
+print(len(cols_with_outliers))
+ 
+import matplotlib.pyplot as plt
+ 
+plt.figure(figsize=(8,6))
+ 
+plt.hist(df['Activity Duration UL (ms)'], bins = 20, color='skyblue', edgecolor='black')
+
+plt.xlabel('Activity Duration UL (ms)')
+
+plt.ylabel('Number')
+
+plt.show()
+df['Activity Duration UL (ms)'].describe()
+ 
+Q1 = df['Activity Duration UL (ms)'].quantile(0.25)
+
+Q3 = df['Activity Duration UL (ms)'].quantile(0.75)
+ 
+IQR = Q3 - Q1
+
+upper_ts = Q3 + 1.5 * IQR
+ 
+outliers_activity_duration = df[df['Activity Duration UL (ms)'] > upper_ts]
+
+outliers_activity_duration
+outliers_activity_duration['Activity Duration UL (ms)'].describe()
+plt.figure(figsize=(8, 6))
+
+plt.hist(outliers_activity_duration['Activity Duration UL (ms)'], bins=30, color='skyblue', edgecolor='black')
+
+plt.xlabel('Activity Duration UL (ms)')
+
+plt.ylabel('Frequency')
+
+plt.title('Distribution of Activity Duration UL (ms) - Outliers Subset')
+
+plt.grid(True)
+
+plt.show()
+import pandas as pd
+import psycopg2
+from sqlalchemy import create_engine
+ 
+def connect_to_database(connection_params):
+  try:
+  connection = psycopg2.connect(**connection_params)
+  return connection
+  except psycopg2.Error as e:
+  print(f"Error: Unable to connect to the database. {e}")
+  return None
+ 
+class Database:
+  def __init__(self, host, database, user, password):
+  self.connection_params = {
+  'dbname': 'telecom',
+  'user': 'postgres',
+  'password': 'heisenberg',
+  'host': 'localhost',
+  'port': '5432'
+  }
+  self.conn = connect_to_database(self.connection_params)
+  def read_table_to_dataframe(self, table_name):
+  if self.conn:
+  query = f"SELECT * FROM {table_name};"
+  df = pd.read_sql_query(query, self.conn)
+  return df
+  else:
+  print("Error: No connection detected!")
+  return None
+  def write_dataframe_to_table(self, df, table_name, if_exists='replace'):
+  engine = create_engine(
+  f"postgresql://{self.connection_params['user']}:{self.connection_params['password']}@"
+  f"{self.connection_params['host']}:{self.connection_params['port']}/{self.connection_params['dbname']}"
+  )
+  df.to_sql(table_name, engine, index=False, if_exists=if_exists)
+  print(f"Dataframe successfully written to the '{table_name}' table.")
+  def update_table_by_appending(self, df, table_name):
+  self.write_dataframe_to_table(df, table_name, if_exists='append')
+  def delete_table(self, table_name):
+  if self.conn:
+  cursor = self.conn.cursor()
+  cursor.execute(f"DROP TABLE IF EXISTS {table_name};")
+  self.conn.commit()
+  cursor.close()
+  print(f"Table '{table_name}' successfully deleted.")
+  else:
+  print("Error: No connection detected.")
+import pandas as pd
+
+import numpy as np
+
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+
+import os
+
+import sys
+
+import warnings
+
+warnings.filterwarnings('ignore')
+ 
+sys.path.append('../helpers/')
+ 
+from data import Database
+
+from utils import Helpers
+db = Database(host="localhost", database="telecom", user="postgres", password="heisenberg")
+
+df = db.read_table_to_dataframe('xdr_data')
+
+df.head()
+ 
+for column in df.columns:
+  if df[column].dtype == 'float64' and df[column].isnull().any():
+  mean_value = df[column].mean()
+  df[column].fillna(mean_value, inplace=True)
+
+df.isnull().sum()
+
+correlation_matrix_UL = df[['Google UL (Bytes)', 'Social Media UL (Bytes)', 'Email UL (Bytes)', 'Youtube UL (Bytes)', 'Netflix UL (Bytes)', 'Gaming UL (Bytes)']].corr()
+ 
+correlation_matrix_DL = df[['Google DL (Bytes)', 'Social Media DL (Bytes)', 'Email DL (Bytes)', 'Youtube DL (Bytes)', 'Netflix DL (Bytes)', 'Gaming DL (Bytes)']].corr()
+ 
+plt.figure(figsize=(8, 6))
+
+sns.heatmap(correlation_matrix_UL, annot=True, cmap=sns.cubehelix_palette(as_cmap=True),)
+
+plt.title('Correlation Matrix of Applications and Total DL+UL')
+
+plt.show()
+plt.figure(figsize=(8, 6))
+
+sns.heatmap(correlation_matrix_DL, annot=True, cmap=sns.cubehelix_palette(as_cmap=True),)
+
+plt.title('Correlation Matrix of Applications and Total DL+UL')
+
+plt.show()
+import pandas as pd
+
+import matplotlib.pyplot as plt
+ 
+upload_columns = ['Google UL (Bytes)', 'Social Media UL (Bytes)', 'Email UL (Bytes)',
+  'Youtube UL (Bytes)', 'Netflix UL (Bytes)', 'Gaming UL (Bytes)']
+ 
+def bytes_to_megabytes(value):
+  try:
+  return float(value) / (1024 * 1024)
+  except (ValueError, TypeError):
+  return pd.NA  
+total_upload_data = df[upload_columns].applymap(bytes_to_megabytes).sum()
+ 
+plt.figure(figsize=(8, 6))
+
+total_upload_data.sort_values(ascending=False).plot(kind='bar', color='skyblue')
+
+plt.xlabel('Applications')
+
+plt.ylabel('Total Upload Data (MB)')
+
+plt.title('Total Upload Data for Each Application (in MB)')
+
+plt.xticks(rotation=45)
+
+plt.show()
+
+download_columns = ['Google DL (Bytes)', 'Social Media DL (Bytes)', 'Email DL (Bytes)',
+  'Youtube DL (Bytes)', 'Netflix DL (Bytes)', 'Gaming DL (Bytes)']
+ 
+def bytes_to_megabytes(value):
+  try:
+  return float(value) / (1024 * 1024)
+  except (ValueError, TypeError):
+  return pd.NA  
+total_download_data = df[download_columns].applymap(bytes_to_megabytes).sum()
+ 
+plt.figure(figsize=(8, 6))
+
+total_download_data.sort_values(ascending=False).plot(kind='bar', color='skyblue')
+
+plt.xlabel('Applications')
+
+plt.ylabel('Total Upload Data (MB)')
+
+plt.title('Total Upload Data for Each Application (in MB)')
+
+plt.xticks(rotation=45)
+
+plt.show()
+ 
+df['Total_Session_Duration'] = df['Dur. (ms)'] + df['Dur. (ms).1']
+ 
+df['Decile_Rank'] = pd.qcut(df['Total_Session_Duration'], q=10, labels=False)
+ 
+df['Total_Data_DL_UL'] = df['Total UL (Bytes)'] + df['Total DL (Bytes)']
+ 
+data_per_decile = df.groupby('Decile_Rank')['Total_Data_DL_UL'].sum()
+ 
+data_per_decile
+
+from sklearn.preprocessing import StandardScaler
+
+from sklearn.decomposition import PCA
+ 
+numerical_columns = df.select_dtypes(include=['float64', 'int64']).columns
+
+numerical_columns = numerical_columns.drop('MSISDN/Number', errors='ignore')  
+numerical_columns = numerical_columns.drop('Bearer Id', errors='ignore')  
+numerical_data = df[numerical_columns]
+
+numerical_data = numerical_data.dropna()
+ 
+scaler = StandardScaler()
+
+numerical_data = scaler.fit_transform(numerical_data)
+ 
+pca = PCA(n_components=2)
+
+pca_result = pca.fit_transform(numerical_data)
+
+pca_df = pd.DataFrame(data=pca_result, columns=['PC1', 'PC2'])
+
+final_df = pd.concat([df, pca_df], axis=1)
+ 
+final_df
+
+final_df.info()
+df.info()
+import pandas as pd
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
+from sklearn.cluster import KMeans
+import matplotlib.pyplot as plt
+ 
+class Helpers:
+  @staticmethod
+  def normalize(df, columns):
+  scaler = StandardScaler()
+  df_normalized = df.copy()
+  df_normalized[columns] = scaler.fit_transform(df_normalized[columns])
+  return df_normalized
+  @staticmethod
+  def reduce(df):
+  numerical_columns = df.select_dtypes(include=['float64', 'int64']).columns
+  numerical_columns = numerical_columns.drop('MSISDN/Number', axis=1)
+  numerical_data = df[numerical_columns]
+  numerical_data = numerical_data.dropna()
+  scaler = StandardScaler()
+  numerical_data = scaler.fit_transform(numerical_data)
+  pca = PCA(n_components=2)
+  pca_result = pca.fit_transform(numerical_data)
+  pca_df = pd.DataFrame(data=pca_result, columns=['PC1', 'PC2'])
+  final_df = pd.concat([df, pca_df], axis=1)
+  return final_df
+  @staticmethod
+  def perform_kmeans(agg_data: pd.DataFrame, columns: list, n_clusters: int):
+  cluster_data = agg_data[columns]
+  kmeans = KMeans(n_clusters=n_clusters, random_state=42)
+  agg_data['Cluster'] = kmeans.fit_predict(cluster_data)
+  return agg_data[['MSISDN/Number', 'Cluster']]
+  @staticmethod
+  def plot_clusters(data, x_column, y_column, cluster_column):
+  plt.figure(figsize=(8, 6))
+  clusters = data[cluster_column].unique()
+  for cluster in clusters:
+  cluster_data = data[data[cluster_column] == cluster]
+  plt.scatter(cluster_data[x_column], cluster_data[y_column], label=f'Cluster {cluster}')
+  plt.xlabel(x_column)
+  plt.ylabel(y_column)
+  plt.title(f'Clusters based on {x_column} vs {y_column}')
+  plt.legend()
+  plt.show()
+import pandas as pd
+
+import numpy as np
+
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+
+import os
+
+import sys
+
+import warnings
+
+warnings.filterwarnings('ignore')
+ 
+sys.path.append('../helpers/')
+ 
+from data import Database
+
+from utils import Helpers
+db = Database(host="localhost", database="telecom", user="postgres", password="heisenberg")
+
+df = db.read_table_to_dataframe('xdr_data')
+
+df.head()
+ 
+for column in df.columns:
+  if df[column].dtype == 'float64' and df[column].isnull().any():
+  mean_value = df[column].mean()
+  df[column].fillna(mean_value, inplace=True)
+ 
+df.isnull().sum()
+
+no_null_df = df
+
+no_null_df.isnull().sum()
+ 
+task_4_1_columns = [
+  'MSISDN/Number',
+  'Avg RTT DL (ms)',
+  'Avg RTT UL (ms)',
+  'Handset Type',
+  'Avg Bearer TP DL (kbps)',
+  'Avg Bearer TP UL (kbps)',
+  'TCP DL Retrans. Vol (Bytes)',
+  'TCP UL Retrans. Vol (Bytes)'
+
+]
+ 
+task4_1_data = no_null_df[task_4_1_columns]
+
+task4_1_data.isnull().sum()
+ 
+tcp_retransmission = (
+  task4_1_data.groupby('MSISDN/Number')
+  .agg({'TCP DL Retrans. Vol (Bytes)': 'mean', 'TCP UL Retrans. Vol (Bytes)': 'mean'})
+  .reset_index()
+
+)
+ 
+tcp_retransmission.columns = ['MSISDN/Number', 'Avg_TCP_DL_Retrans (MB)', 'Avg_TCP_UL_Retrans (MB)']
+
+tcp_retransmission /= (1024 * 1024)
+
+tcp_retransmission.head()
+ 
+rtt_data = no_null_df[task_4_1_columns]
+ 
+rtt_data = (
+  task4_1_data.groupby('MSISDN/Number')
+  .agg({'Avg RTT DL (ms)': 'mean', 'Avg RTT UL (ms)': 'mean'})
+  .reset_index()
+
+)
+ 
+rtt_data.columns = ['MSISDN/Number', 'Avg_RTT_DL (ms)', 'Avg_RTT_UL (ms)']
+
+rtt_data.head()
+most_freq = task4_1_data['Handset Type'].mode()[0]
+ 
+task4_1_data['Handset Type'].fillna(most_freq, inplace=True)
+ 
+handset = task4_1_data.groupby('MSISDN/Number')['Handset Type'].agg(lambda x: x.mode()[0]).reset_index()
+
+handset.columns = ['MSISDN/Number', 'Most Used Handset Type']
+
+handset.head()
+
+import matplotlib.pyplot as plt
+ 
+handset_counts = handset['Most Used Handset Type'].value_counts().nlargest(10)
+ 
+plt.figure(figsize=(10, 6))
+
+handset_counts.sort_values().plot(kind='barh', color='skyblue')  
+plt.title('Most Used Handset Types')
+
+plt.xlabel('Frequency')
+
+plt.ylabel('Handset Types')
+
+plt.tight_layout()
+
+plt.show()
+
+handset['Most Used Handset Type'].value_counts()
+
+throughput_df = task4_1_data[['Avg Bearer TP DL (kbps)', 'Avg Bearer TP UL (kbps)']]
+
+throughput_df['Avg Throughput (kbps)'] = (throughput_df['Avg Bearer TP DL (kbps)'] + throughput_df['Avg Bearer TP UL (kbps)']) / 2
+ 
+throughput_df
+ 
+top_10_tcp = tcp_retransmission.nlargest(10, 'Avg_TCP_DL_Retrans (MB)')
+
+top_10_tcp
+ 
+bottom_10_tcp = tcp_retransmission.nsmallest(10, 'Avg_TCP_DL_Retrans (MB)')
+
+bottom_10_tcp
+top_10_rtt = rtt_data.nsmallest(10, 'Avg_RTT_DL (ms)')
+
+top_10_rtt
+
+bottom_10_rtt = rtt_data.nlargest(10, 'Avg_RTT_DL (ms)')
+
+bottom_10_rtt
+top_10_throughput = throughput_df.nlargest(10, 'Avg Throughput (kbps)')
+
+top_10_throughput
+bottom_10_throughput = throughput_df.nsmallest(10, 'Avg Throughput (kbps)')
+
+bottom_10_throughput
+avg_tp_per_handset = task4_1_data.groupby('Handset Type')[['Avg Bearer TP DL (kbps)', 'Avg Bearer TP UL (kbps)']].mean()
+
+avg_tp_per_handset
+ 
+avg_tp_per_handset.nlargest(10, 'Avg Bearer TP DL (kbps)')
+
+avg_tp_per_handset.nsmallest(10, 'Avg Bearer TP DL (kbps)')
+avg_tcp_ret_p_handset = task4_1_data.groupby('Handset Type')[['TCP DL Retrans. Vol (Bytes)']].mean()
+
+avg_tcp_ret_p_handset /= (1024 * 1024)
+
+avg_tcp_ret_p_handset.nlargest(10, 'TCP DL Retrans. Vol (Bytes)')
+numeric_columns = [
+  'Avg RTT DL (ms)',
+  'Avg RTT UL (ms)',
+  'Avg Bearer TP DL (kbps)',
+  'Avg Bearer TP UL (kbps)',
+  'TCP DL Retrans. Vol (Bytes)',
+  'TCP UL Retrans. Vol (Bytes)'
+
+]
+ 
+numeric_data = no_null_df[['MSISDN/Number'] + numeric_columns]
+ 
+agg_data = numeric_data.groupby('MSISDN/Number').agg('mean').reset_index()
+ 
+agg_data.head()
+columns_for_kmeans = [
+  'Avg RTT DL (ms)',
+  'Avg RTT UL (ms)',
+  'Avg Bearer TP DL (kbps)',
+  'Avg Bearer TP UL (kbps)',
+  'TCP DL Retrans. Vol (Bytes)',
+  'TCP UL Retrans. Vol (Bytes)'
+
+]
+ 
+result_clusters = Helpers.perform_kmeans(agg_data=agg_data, columns=columns_for_kmeans, n_clusters=3)
+
+result_clusters.head(10)
+
+result_clusters['Cluster'].unique()
+x_column = 'Avg RTT DL (ms)'  
+y_column = 'Avg Bearer TP DL (kbps)'  
+cluster_column = 'Cluster'  
+Helpers.plot_clusters(agg_data, x_column, y_column, cluster_column)
+x_column = 'TCP DL Retrans. Vol (Bytes)'  
+y_column = 'Avg Bearer TP DL (kbps)'  
+cluster_column = 'Cluster'  
+Helpers.plot_clusters(agg_data, x_column, y_column, cluster_column)
+x_column = 'TCP DL Retrans. Vol (Bytes)'  
+y_column = 'Avg RTT DL (ms)'  
+cluster_column = 'Cluster'  
+Helpers.plot_clusters(agg_data, x_column, y_column, cluster_column)
+x_column = 'TCP DL Retrans. Vol (Bytes)'  
+y_column = 'Avg Bearer TP UL (kbps)'  
+cluster_column = 'Cluster'  
+Helpers.plot_clusters(agg_data, x_column, y_column, cluster_column)
+from scipy.spatial import distance
+ 
+centroids = result_clusters.groupby('Cluster').mean()
+ 
+for idx, user_data in agg_data.iterrows():
+  user_point = user_data[columns_for_kmeans]   distances = [distance.euclidean(user_point, centroid) for _, centroid in centroids.iterrows()]
+  less_engaged_centroid = distances.index(min(distances))
+  worst_experience_centroid = distances.index(max(distances))
+  agg_data.at[idx, 'Engagement_Score'] = min(distances)
+  agg_data.at[idx, 'Experience_Score'] = max(distances)
+
+agg_data.info()
+agg_data['Satisfaction_Score'] = (agg_data['Engagement_Score'] + agg_data['Experience_Score']) / 2
+
+top_10_satisfied_customers = agg_data.nsmallest(10, 'Satisfaction_Score')[['MSISDN/Number', 'Satisfaction_Score']]
+
+top_10_satisfied_customers
+
+agg_data['Satisfaction_Score'] = (agg_data['Engagement_Score'] + agg_data['Experience_Score']) / 2
+
+bottom_10_satisfied_customers = agg_data.nlargest(10, 'Satisfaction_Score')[['MSISDN/Number', 'Satisfaction_Score']]
+
+bottom_10_satisfied_customers
+add_data['Satisfaction Score] = 
+from sklearn.model_selection import train_test_split
+
+from sklearn.linear_model import LinearRegression
+
+from sklearn.metrics import mean_squared_error, r2_score
+ 
+X = agg_data.drop(['Satisfaction_Score', 'MSISDN/Number'], axis=1)  
+y = agg_data['Satisfaction_Score']  
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+ 
+model = LinearRegression()
+
+model.fit(X_train, y_train)
+ 
+y_pred = model.predict(X_test)
+
+mse = mean_squared_error(y_test, y_pred)
+
+rmse = np.sqrt(mse)
+
+r2 = r2_score(y_test, y_pred)
+ 
+print(f"Mean Squared Error: {mse}")
+
+print(f"Root Mean Squared Error: {rmse}")
+
+print(f"R-squared Score: {r2}")
+plt.figure(figsize=(8, 6))
+
+sns.scatterplot(x=y_test, y=y_pred)
+
+plt.plot(y_test, y_test, color='red')
+
+plt.title('Actual vs. Predicted Values')
+
+plt.xlabel('Actual Values')
+
+plt.ylabel('Predicted Values')
+
+plt.show()
+from sklearn.cluster import KMeans
+
+import pandas as pd
+ 
+scores = agg_data[['Engagement_Score', 'Experience_Score']]
+ 
+kmeans = KMeans(n_clusters=2, random_state=42)
+
+kmeans.fit(scores)
+ 
+agg_data['Score_Cluster'] = kmeans.labels_
+ 
+plt.figure(figsize=(8, 6))
+
+plt.scatter(agg_data['Engagement_Score'], agg_data['Experience_Score'], c=agg_data['Score_Cluster'], cmap='viridis', edgecolors='k')
+
+plt.title('K-Means Clustering of Engagement & Experience Scores (k=2)')
+
+plt.xlabel('Engagement Score')
+
+plt.ylabel('Experience Score')
+
+plt.colorbar(label='Cluster')
+
+plt.show()
+
+cluster_centers = pd.DataFrame(kmeans.cluster_centers_, columns=['Engagement_Score', 'Experience_Score'])
+
+cluster_centers

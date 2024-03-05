@@ -1,0 +1,5248 @@
+import psycopg2
+ 
+db_params = {
+  'dbname': 'week1',
+  'user': 'postgres',
+  'password': 'habte',
+  'host': 'localhost',
+  'port': '5432'
+
+}
+ 
+conn = psycopg2.connect(**db_params)
+ 
+cursor = conn.cursor()
+ 
+cursor.execute("SELECT * FROM xdr_data;")
+ 
+row = cursor.fetchone()
+ 
+if row:
+  print(row)
+
+else:
+  print("No results to fetch")
+ 
+cursor.close()
+
+conn.close()
+ 
+column_names = [desc[0] for desc in cursor.description]
+
+print(column_names)
+ 
+print(row)
+ 
+bearer_id = row[0]
+
+start_time = row[1]
+ 
+print(f"Bearer ID: {bearer_id}")
+
+print(f"Start Time: {start_time}")
+ 
+import pandas as pd
+
+import psycopg2
+
+import psycopg2
+ 
+db_params = {
+  'dbname': 'week1',
+  'user': 'postgres',
+  'password': 'habte',
+  'host': 'localhost',
+  'port': '5432'
+
+}
+ 
+conn = psycopg2.connect(**db_params)
+ 
+cursor = conn.cursor()
+ 
+cursor.execute("SELECT * FROM xdr_data;")
+ 
+rows = cursor.fetchall()
+ 
+column_names = [desc[0] for desc in cursor.description]
+ 
+df = pd.DataFrame(rows, columns=column_names)
+ 
+print(df)
+ 
+cursor.close()
+
+conn.close()
+
+print(df.head)
+
+df_cleaned = df.dropna()
+df_cleaned
+import seaborn as sns
+
+import matplotlib.pyplot as plt
+ 
+numeric_df = df.select_dtypes(include=['float64', 'int64'])
+ 
+correlation_matrix = numeric_df.corr()
+
+plt.figure(figsize=(15, 12))
+
+sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', fmt=".2f")
+
+plt.title('Correlation Matrix')
+
+plt.show()
+
+selected_columns = ['Dur. (ms)', 'Avg RTT DL (ms)', 'Avg RTT UL (ms)', 'Total UL (Bytes)', 'Total DL (Bytes)']
+
+numeric_df = df[selected_columns]
+
+numeric_df
+import numpy as np
+
+import pandas as pd
+
+import psycopg2
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+import pandas as pd
+
+from sqlalchemy import create_engine
+ 
+db_params = {
+  'dbname': 'week1',
+  'user': 'postgres',
+  'password': 'habte',
+  'host': 'localhost',
+  'port': '5432'
+
+}
+ 
+engine = create_engine(f'postgresql+psycopg2://{db_params["user"]}:{db_params["password"]}@{db_params["host"]}:{db_params["port"]}/{db_params["dbname"]}')
+ 
+sql_query = "SELECT * FROM xdr_data;"
+ 
+mydata = pd.read_sql_query(sql_query, engine)
+
+print(mydata.shape)
+print(mydata.info())
+sns.heatmap(mydata.isnull(), cbar=False, cmap='viridis')
+
+plt.show()
+missing_percentage = mydata.isnull().mean() * 100
+
+print(missing_percentage)
+top_10_summary = mydata.head(10).describe(include='all')
+
+print(top_10_summary)
+
+activity_columns = ['Social Media DL (Bytes)', 'Social Media UL (Bytes)',
+  'Gaming DL (Bytes)', 'Gaming UL (Bytes)',
+  'Netflix DL (Bytes)', 'Netflix UL (Bytes)',
+  'Youtube DL (Bytes)', 'Youtube UL (Bytes)',
+  'Other DL (Bytes)', 'Other UL (Bytes)']
+ 
+activity_data = mydata[activity_columns]
+ 
+plt.figure(figsize=(14, 8))
+
+activity_data.sum().plot(kind='bar')
+
+plt.title('Distribution of Activity Types')
+
+plt.ylabel('Total Bytes')
+
+plt.show()
+
+session_frequency = mydata['MSISDN/Number'].value_counts()
+ 
+plt.figure(figsize=(12, 6))
+
+session_frequency.hist(bins=30, edgecolor='black')
+
+plt.title('Distribution of User Session Frequency')
+
+plt.xlabel('Number of Sessions')
+
+plt.ylabel('Frequency')
+
+plt.show()
+
+plt.figure(figsize=(10, 6))
+ 
+sns.histplot(mydata['Dur. (ms)'], bins=20, kde=True, color='skyblue')
+ 
+plt.xlabel('Session Duration (ms)')
+
+plt.ylabel('Frequency')
+
+plt.title('Distribution of Session Duration in Top 10 Rows')
+ 
+plt.show()
+ 
+columns_to_input = ['Start', 'End', 'Dur. (ms)', 'Avg Bearer TP DL (kbps)', 'Avg Bearer TP UL (kbps)']
+ 
+for column in columns_to_input:
+  if pd.api.types.is_numeric_dtype(mydata[column]):
+  mydata[column].fillna(mydata[column].mean(), inplace=True)
+  else:
+  mydata[column].fillna(method='ffill', inplace=True)
+
+columns_to_input  
+total_users = mydata['MSISDN/Number'].nunique()
+
+print("Total Number of Unique Users:", total_users)
+
+top_10_handsets = mydata['Handset Type'].value_counts().head(10)
+ 
+print("Top 10 Handsets Used by Customers:")
+
+print(top_10_handsets)
+ 
+top_10_handsets = mydata['Handset Type'].value_counts().head(10).index
+ 
+mydata_top_10 = mydata[mydata['Handset Type'].isin(top_10_handsets)]
+ 
+plt.figure(figsize=(14, 6))
+
+sns.countplot(x='Handset Type', data=mydata_top_10, order=top_10_handsets, palette='viridis')
+ 
+plt.xticks(rotation=45, ha='right')
+ 
+for index, value in enumerate(mydata_top_10['Handset Type'].value_counts()):
+  plt.text(index, value + 0.1, f"{value}", ha='center', va='bottom')  
+plt.title('Distribution of Users by Handset Type (Top 10)')
+
+plt.xlabel('Handset Type')
+
+plt.ylabel('Count')
+
+plt.tight_layout()
+
+plt.show()
+ 
+average_duration = mydata['Dur. (ms)'].mean()
+
+print("Average Duration of User Sessions (in ms):", average_duration)
+
+top_3_manufacturers = mydata['Handset Manufacturer'].value_counts().head(3).index
+ 
+mydata_top_3_manufacturers = mydata[mydata['Handset Manufacturer'].isin(top_3_manufacturers)]
+ 
+top_5_handsets_per_manufacturer = (
+  mydata_top_3_manufacturers.groupby('Handset Manufacturer')['Handset Type']
+  .value_counts()
+  .groupby(level=0, group_keys=False)
+  .nlargest(5)
+  .reset_index(name='Count')
+
+)
+ 
+print("Top 5 Handsets per Top 3 Handset Manufacturers:")
+
+print(top_5_handsets_per_manufacturer)
+ 
+top_3_manufacturers = mydata['Handset Manufacturer'].value_counts().head(3)
+ 
+print("Top 3 Handset Manufacturers:")
+
+print(top_3_manufacturers)
+ 
+data = {
+  'Handset Manufacturer': ['Apple', 'Samsung', 'Huawei'],
+  'Count': [59565, 40839, 34423]
+
+}
+ 
+df = pd.DataFrame(data)
+ 
+plt.figure(figsize=(8, 8))
+
+plt.pie(df['Count'], labels=df['Handset Manufacturer'], autopct='%1.1f%%', startangle=90, colors=['skyblue', 'lightcoral', 'lightgreen'])
+
+plt.title('Distribution of Top 3 Handset Manufacturers')
+
+plt.show()
+ 
+plt.figure(figsize=(16, 8))
+
+sns.barplot(x='Handset Type', y='Count', hue='Handset Manufacturer', data=top_5_handsets_per_manufacturer, palette='viridis')
+
+plt.xticks(rotation=45, ha='right')
+
+plt.title('Top 5 Handsets per Top 3 Handset Manufacturers')
+
+plt.xlabel('Handset Type')
+
+plt.ylabel('Count')
+
+plt.tight_layout()
+
+plt.legend(title='Handset Manufacturer')
+
+plt.show()
+
+data = {
+  'Handset Type': ['Apple iPhone 6S (A1688)', 'Apple iPhone 6 (A1586)', 'Apple iPhone 7 (A1778)', 'Apple iPhone Se (A1723)', 'Apple iPhone 8 (A1905)'],
+  'Count': [9419, 9023, 6326, 5187, 4993]
+
+}
+ 
+df = pd.DataFrame(data)
+ 
+manufacturers = ['Apple', 'Samsung', 'Huawei']
+ 
+plt.figure(figsize=(20, 5))
+ 
+for i, manufacturer in enumerate(manufacturers, 1):
+  plt.subplot(1, 3, i)
+  manufacturer_data = df[df['Handset Type'].str.contains(manufacturer)]
+  plt.pie(manufacturer_data['Count'], labels=manufacturer_data['Handset Type'], autopct='%1.1f%%', startangle=140)
+  plt.title(f'Distribution of Users for {manufacturer}')
+ 
+plt.tight_layout()
+ 
+plt.show()
+ 
+user_xdr_sessions = mydata.groupby('MSISDN/Number')['Bearer Id'].count().reset_index(name='Number_of_xDR_sessions')
+ 
+print("Aggregated Information - Number of xDR Sessions per User:")
+
+print(user_xdr_sessions)
+ 
+mydata['Start'] = pd.to_datetime(mydata['Start'])
+
+mydata['End'] = pd.to_datetime(mydata['End'])
+
+mydata['Session_Duration'] = (mydata['End'] - mydata['Start']).dt.total_seconds()
+
+user_session_duration = mydata.groupby('MSISDN/Number')['Session_Duration'].sum().reset_index(name='Total_Session_Duration')
+
+print("Aggregated Session Duration per User:")
+
+print(user_session_duration)
+
+user_data_volume = mydata.groupby('MSISDN/Number').agg(
+  Total_DL_data=('Total DL (Bytes)', 'sum'),
+  Total_UL_data=('Total UL (Bytes)', 'sum')
+
+).reset_index()
+ 
+print("Aggregated Download and Upload Data per User:")
+
+print(user_data_volume)
+ 
+user_app_data_volume = mydata.groupby('MSISDN/Number').agg(
+  Social_Media_DL=('Social Media DL (Bytes)', 'sum'),
+  Social_Media_UL=('Social Media UL (Bytes)', 'sum'),
+  Google_DL=('Google DL (Bytes)', 'sum'),
+  Google_UL=('Google UL (Bytes)', 'sum'),
+  Email_DL=('Email DL (Bytes)', 'sum'),
+  Email_UL=('Email UL (Bytes)', 'sum'),
+  Youtube_DL=('Youtube DL (Bytes)', 'sum'),
+  Youtube_UL=('Youtube UL (Bytes)', 'sum'),
+  Netflix_DL=('Netflix DL (Bytes)', 'sum'),
+  Netflix_UL=('Netflix UL (Bytes)', 'sum'),
+  Gaming_DL=('Gaming DL (Bytes)', 'sum'),
+  Gaming_UL=('Gaming UL (Bytes)', 'sum'),
+  Other_DL=('Other DL (Bytes)', 'sum'),
+  Other_UL=('Other UL (Bytes)', 'sum')
+
+).reset_index()
+ 
+print("Aggregated Data Volume per User for Each Application:")
+
+print(user_app_data_volume)
+ 
+user_aggregated_data = mydata.groupby('MSISDN/Number').agg(
+  Number_of_xDR_sessions=('Bearer Id', 'count'),
+  Session_Duration=('Session_Duration', 'sum'),
+  Total_DL_data=('Total DL (Bytes)', 'sum'),
+  Total_UL_data=('Total UL (Bytes)', 'sum'),
+  Social_Media_DL=('Social Media DL (Bytes)', 'sum'),
+  Social_Media_UL=('Social Media UL (Bytes)', 'sum'),
+  Google_DL=('Google DL (Bytes)', 'sum'),
+  Google_UL=('Google UL (Bytes)', 'sum'),
+  Email_DL=('Email DL (Bytes)', 'sum'),
+  Email_UL=('Email UL (Bytes)', 'sum'),
+  Youtube_DL=('Youtube DL (Bytes)', 'sum'),
+  Youtube_UL=('Youtube UL (Bytes)', 'sum'),
+  Netflix_DL=('Netflix DL (Bytes)', 'sum'),
+  Netflix_UL=('Netflix UL (Bytes)', 'sum'),
+  Gaming_DL=('Gaming DL (Bytes)', 'sum'),
+  Gaming_UL=('Gaming UL (Bytes)', 'sum'),
+  Other_DL=('Other DL (Bytes)', 'sum'),
+  Other_UL=('Other UL (Bytes)', 'sum')
+
+).reset_index()
+ 
+plt.figure(figsize=(15, 10))
+
+plt.bar(user_aggregated_data['MSISDN/Number'], user_aggregated_data['Number_of_xDR_sessions'], label='Number of xDR Sessions')
+
+plt.bar(user_aggregated_data['MSISDN/Number'], user_aggregated_data['Session_Duration'], label='Session Duration', alpha=0.7)
+
+plt.bar(user_aggregated_data['MSISDN/Number'], user_aggregated_data['Total_DL_data'], label='Total DL Data', alpha=0.7)
+
+plt.bar(user_aggregated_data['MSISDN/Number'], user_aggregated_data['Total_UL_data'], label='Total UL Data', alpha=0.7)
+
+plt.legend()
+
+plt.xlabel('MSISDN/Number')
+
+plt.ylabel('Aggregated Values')
+
+plt.title('Aggregated Information per User')
+
+plt.xticks(rotation=45, ha='right')
+
+plt.tight_layout()
+
+plt.show()
+
+summary_statistics = mydata.describe()
+ 
+top_handsets = mydata['Handset Type'].value_counts().head(10)
+
+plt.figure(figsize=(12, 6))
+
+sns.barplot(x=top_handsets.index, y=top_handsets.values)
+
+plt.xticks(rotation=45, ha='right')
+
+plt.title('Distribution of Users by Handset Type (Top 10)')
+
+plt.xlabel('Handset Type')
+
+plt.ylabel('Count')
+
+plt.show()
+
+plt.figure(figsize=(10, 6))
+
+sns.histplot(mydata['Session_Duration'], bins=30, kde=True)
+
+plt.title('Distribution of Session Durations')
+
+plt.xlabel('Session Duration (seconds)')
+
+plt.ylabel('Frequency')
+
+plt.show()
+
+plt.figure(figsize=(10, 6))
+
+sns.scatterplot(x='Total DL (Bytes)', y='Total UL (Bytes)', data=mydata)
+
+plt.title('Scatter Plot of Total DL vs Total UL Data')
+
+plt.xlabel('Total DL Data (Bytes)')
+
+plt.ylabel('Total UL Data (Bytes)')
+
+plt.show()
+
+mixed_data_columns = mydata.select_dtypes(include='object').columns
+
+print(f'Columns with mixed data types: {mixed_data_columns}')
+ 
+plt.figure(figsize=(10, 6))
+
+sns.scatterplot(x='Total DL (Bytes)', y='Total UL (Bytes)', data=mydata)
+
+plt.title('Scatter Plot of Total DL vs Total UL Data')
+
+plt.xlabel('Total DL Data (Bytes)')
+
+plt.ylabel('Total UL Data (Bytes)')
+
+plt.show()
+ 
+summary_statistics = mydata.describe()
+ 
+top_handsets = mydata['Handset Type'].value_counts().head(10)
+
+plt.figure(figsize=(12, 6))
+
+sns.barplot(x=top_handsets.values, y=top_handsets.index, orient='h')
+
+plt.title('Distribution of Users by Handset Type (Top 10)')
+
+plt.xlabel('Count')
+
+plt.ylabel('Handset Type')
+
+plt.show()
+
+basic_metrics = mydata.describe()
+ 
+dispersion_parameters = mydata.describe().loc[['std', 'min', '25%', '50%', '75%', 'max']]
+ 
+plt.figure(figsize=(15, 10))
+
+sns.boxplot(data=mydata.select_dtypes(include=['float64']))
+
+plt.title('Boxplot for Quantitative Variables')
+
+plt.show()
+
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+ 
+application = 'Social Media'
+ 
+subset_data = mydata[[f'{application} DL (Bytes)', f'{application} UL (Bytes)', 'Total DL (Bytes)', 'Total UL (Bytes)']]
+ 
+subset_data['Total DL+UL Data'] = subset_data['Total DL (Bytes)'] + subset_data['Total UL (Bytes)']
+ 
+plt.figure(figsize=(10, 6))
+
+sns.scatterplot(x=f'{application} DL (Bytes)', y='Total DL+UL Data', data=subset_data)
+
+plt.title(f'Relationship between {application} and Total DL+UL Data')
+
+plt.xlabel(f'{application} DL (Bytes)')
+
+plt.ylabel('Total DL+UL Data')
+
+plt.show()
+ 
+customer_engagement = mydata.groupby('MSISDN/Number').agg({
+  'Bearer Id': 'count',
+  'Dur. (ms)': 'sum',
+  'Total UL (Bytes)': 'sum',
+  'Total DL (Bytes)': 'sum'
+
+}).reset_index()
+ 
+customer_engagement.columns = ['MSISDN', 'Session Count', 'Total Duration', 'Total UL (Bytes)', 'Total DL (Bytes)']
+ 
+customer_engagement['Total Traffic (Bytes)'] = customer_engagement['Total UL (Bytes)'] + customer_engagement['Total DL (Bytes)']
+ 
+top_10_session_count = customer_engagement.sort_values(by='Session Count', ascending=False).head(10)
+
+top_10_duration = customer_engagement.sort_values(by='Total Duration', ascending=False).head(10)
+
+top_10_total_traffic = customer_engagement.sort_values(by='Total Traffic (Bytes)', ascending=False).head(10)
+ 
+print("Top 10 Customers by Session Count:")
+
+print(top_10_session_count[['MSISDN', 'Session Count']])
+
+print("\nTop 10 Customers by Total Duration:")
+
+print(top_10_duration[['MSISDN', 'Total Duration']])
+
+print("\nTop 10 Customers by Total Traffic:")
+
+print(top_10_total_traffic[['MSISDN', 'Total Traffic (Bytes)']])
+
+import matplotlib.pyplot as plt
+ 
+def plot_top_10(data, metric, title):
+  plt.figure(figsize=(10, 6))
+  plt.bar(data['MSISDN'], data[metric], color='skyblue')
+  plt.xlabel('MSISDN')
+  plt.ylabel(metric)
+  plt.title(title)
+  plt.xticks(rotation=45, ha='right')
+  plt.tight_layout()
+  plt.show()
+ 
+plot_top_10(top_10_session_count, 'Session Count', 'Top 10 Customers by Session Count')
+ 
+plot_top_10(top_10_duration, 'Total Duration', 'Top 10 Customers by Total Duration')
+ 
+plot_top_10(top_10_total_traffic, 'Total Traffic (Bytes)', 'Top 10 Customers by Total Traffic')
+
+import pandas as pd
+
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+
+from sqlalchemy import create_engine
+
+from sklearn.preprocessing import StandardScaler
+
+from sklearn.decomposition import PCA
+
+from sklearn.impute import SimpleImputer
+ 
+db_params = {
+  'dbname': 'week1',
+  'user': 'postgres',
+  'password': 'habte',
+  'host': 'localhost',
+  'port': '5432'
+
+}
+ 
+engine = create_engine(f'postgresql+psycopg2://{db_params["user"]}:{db_params["password"]}@{db_params["host"]}:{db_params["port"]}/{db_params["dbname"]}')
+ 
+sql_query = "SELECT * FROM xdr_data;"
+ 
+mydata = pd.read_sql_query(sql_query, engine)
+ 
+imputer = SimpleImputer(strategy='mean')
+
+imputed_data = imputer.fit_transform(mydata.select_dtypes(include=['float64']))
+ 
+scaler = StandardScaler()
+
+scaled_data = scaler.fit_transform(imputed_data)
+ 
+pca = PCA()
+
+principal_components = pca.fit_transform(scaled_data)
+ 
+pca_df = pd.DataFrame(data=principal_components, columns=[f'PC{i}' for i in range(1, pca.n_components_ + 1)])
+ 
+pca_interpretation = [
+  "Principal components capture the variance in the data.",
+  "Each principal component is a linear combination of the original features.",
+  "The first few principal components explain a significant portion of the total variance.",
+  "PCA is useful for dimensionality reduction and identifying patterns in high-dimensional data."
+
+]
+ 
+from pptx import Presentation
+
+from pptx.util import Inches
+
+import os
+ 
+presentation = Presentation()
+ 
+def add_slide(title, content):
+  slide = presentation.slides.add_slide(presentation.slide_layouts[1])   title_box = slide.shapes.title
+  content_box = slide.placeholders[1]
+  title_box.text = title
+  content_box.text = content
+ 
+variable_description = mydata.dtypes.reset_index()
+
+variable_description.columns = ['Variable', 'Data Type']
+
+add_slide("Variable Description", variable_description.to_string(index=False))
+ 
+basic_metrics = mydata.describe()
+
+add_slide("Basic Metrics", basic_metrics.to_string())
+ 
+dispersion_parameters = mydata.describe().loc[['std', 'min', '25%', '50%', '75%', 'max']]
+
+add_slide("Non-Graphical Univariate Analysis", dispersion_parameters.to_string())
+ 
+image_path = 'univariate_analysis_plot.png'
+
+plt.figure(figsize=(15, 10))
+
+sns.boxplot(data=mydata.select_dtypes(include=['float64']))
+
+plt.title('Boxplot for Quantitative Variables')
+
+plt.savefig(image_path)
+
+plt.close()
+
+presentation.slides.add_slide(presentation.slide_layouts[5])  
+presentation.slides[-1].shapes.add_picture(image_path, Inches(1), Inches(1), width=Inches(8))
+
+os.remove(image_path)  
+application_cols = ['Social Media DL (Bytes)', 'Google DL (Bytes)', 'Email DL (Bytes)',
+  'Youtube DL (Bytes)', 'Netflix DL (Bytes)', 'Gaming DL (Bytes)', 'Other DL (Bytes)',
+  'Social Media UL (Bytes)', 'Google UL (Bytes)', 'Email UL (Bytes)',
+  'Youtube UL (Bytes)', 'Netflix UL (Bytes)', 'Gaming UL (Bytes)', 'Other UL (Bytes)']
+ 
+total_data_cols = ['Total DL (Bytes)', 'Total UL (Bytes)']
+
+bivariate_analysis = mydata[application_cols + total_data_cols].corr()
+
+add_slide("Bivariate Analysis", bivariate_analysis.to_string())
+ 
+mydata['Total_Session_Duration'] = mydata['Dur. (ms).1'] / 1000  
+mydata['Decile_Class'] = pd.qcut(mydata['Total_Session_Duration'], q=5, labels=False, duplicates='drop')
+
+total_data_per_decile = mydata.groupby('Decile_Class')[total_data_cols].sum()
+
+add_slide("Variable Transformations", total_data_per_decile.to_string())
+ 
+correlation_matrix = mydata[['Social Media DL (Bytes)', 'Google DL (Bytes)', 'Email DL (Bytes)',
+  'Youtube DL (Bytes)', 'Netflix DL (Bytes)', 'Gaming DL (Bytes)', 'Other DL (Bytes)',
+  'Social Media UL (Bytes)', 'Google UL (Bytes)', 'Email UL (Bytes)',
+  'Youtube UL (Bytes)', 'Netflix UL (Bytes)', 'Gaming UL (Bytes)', 'Other UL (Bytes)']].corr()
+
+add_slide("Correlation Analysis", correlation_matrix.to_string())
+ 
+add_slide("PCA Interpretation", "\n".join(pca_interpretation))
+ 
+presentation.save("telecom_analysis_results.pptx")
+
+import pandas as pd
+
+from sklearn.cluster import KMeans
+
+from sklearn.preprocessing import StandardScaler
+
+import matplotlib.pyplot as plt
+ 
+engagement_metrics = mydata.groupby('MSISDN/Number').agg({
+  'Bearer Id': 'count',   'Dur. (ms).1': 'sum',   'Total UL (Bytes)': 'sum',   'Total DL (Bytes)': 'sum'  
+}).reset_index()
+ 
+engagement_metrics.columns = ['MSISDN', 'Session Frequency', 'Total Session Duration', 'Total UL Traffic', 'Total DL Traffic']
+ 
+top_10_session_frequency = engagement_metrics.sort_values(by='Session Frequency', ascending=False).head(10)
+
+top_10_duration = engagement_metrics.sort_values(by='Total Session Duration', ascending=False).head(10)
+
+top_10_ul_traffic = engagement_metrics.sort_values(by='Total UL Traffic', ascending=False).head(10)
+
+top_10_dl_traffic = engagement_metrics.sort_values(by='Total DL Traffic', ascending=False).head(10)
+ 
+print("Top 10 Customers by Session Frequency:")
+
+print(top_10_session_frequency)
+ 
+print("\nTop 10 Customers by Total Session Duration:")
+
+print(top_10_duration)
+ 
+print("\nTop 10 Customers by Total UL Traffic:")
+
+print(top_10_ul_traffic)
+ 
+print("\nTop 10 Customers by Total DL Traffic:")
+
+print(top_10_dl_traffic)
+ 
+scaler = StandardScaler()
+
+normalized_metrics = scaler.fit_transform(engagement_metrics.iloc[:, 1:])
+ 
+kmeans = KMeans(n_clusters=3, random_state=42)
+
+engagement_metrics['Cluster'] = kmeans.fit_predict(normalized_metrics)
+ 
+cluster_stats = engagement_metrics.groupby('Cluster').agg({
+  'Session Frequency': ['min', 'max', 'mean', 'sum'],
+  'Total Session Duration': ['min', 'max', 'mean', 'sum'],
+  'Total UL Traffic': ['min', 'max', 'mean', 'sum'],
+  'Total DL Traffic': ['min', 'max', 'mean', 'sum']
+
+}).reset_index()
+ 
+print("\nCluster Statistics:")
+
+print(cluster_stats)
+ 
+app_traffic = mydata.groupby('MSISDN/Number').agg({
+  'Social Media DL (Bytes)': 'sum',
+  'Google DL (Bytes)': 'sum',
+  'Email DL (Bytes)': 'sum',
+  'Youtube DL (Bytes)': 'sum',
+  'Netflix DL (Bytes)': 'sum',
+  'Gaming DL (Bytes)': 'sum',
+  'Other DL (Bytes)': 'sum',
+  'Social Media UL (Bytes)': 'sum',
+  'Google UL (Bytes)': 'sum',
+  'Email UL (Bytes)': 'sum',
+  'Youtube UL (Bytes)': 'sum',
+  'Netflix UL (Bytes)': 'sum',
+  'Gaming UL (Bytes)': 'sum',
+  'Other UL (Bytes)': 'sum'
+
+}).reset_index()
+ 
+top_10_social_media = app_traffic.sort_values(by='Social Media DL (Bytes) + Social Media UL (Bytes)', ascending=False).head(10)
+
+top_10_youtube = app_traffic.sort_values(by='Youtube DL (Bytes) + Youtube UL (Bytes)', ascending=False).head(10)
+
+top_10_gaming = app_traffic.sort_values(by='Gaming DL (Bytes) + Gaming UL (Bytes)', ascending=False).head(10)
+ 
+print("\nTop 10 Most Engaged Users (Social Media):")
+
+print(top_10_social_media)
+ 
+print("\nTop 10 Most Engaged Users (YouTube):")
+
+print(top_10_youtube)
+ 
+print("\nTop 10 Most Engaged Users (Gaming):")
+
+print(top_10_gaming)
+ 
+top_3_apps = app_traffic.sum().nlargest(3)
+ 
+plt.figure(figsize=(10, 6))
+
+top_3_apps.plot(kind='bar', color='skyblue')
+
+plt.title('Top 3 Most Used Applications')
+
+plt.xlabel('Application')
+
+plt.ylabel('Total Traffic (Bytes)')
+
+plt.show()
+ 
+inertia_values = []
+
+possible_k_values = range(1, 11)
+ 
+for k in possible_k_values:
+  kmeans = KMeans(n_clusters=k, random_state=42)
+  kmeans.fit(normalized_metrics)
+  inertia_values.append(kmeans.inertia_)
+ 
+plt.figure(figsize=(10, 6))
+
+plt.plot(possible_k_values, inertia_values, marker='o')
+
+plt.title('Elbow Method for Optimal k')
+
+plt.xlabel('Number of Clusters (k)')
+
+plt.ylabel('Inertia')
+
+plt.show()
+
+import pandas as pd
+
+from sklearn.preprocessing import StandardScaler
+
+from sklearn.cluster import KMeans
+
+from sklearn.impute import SimpleImputer
+
+from kneed import KneeLocator
+ 
+identifier_column = 'MSISDN/Number'
+ 
+print(mydata.columns)
+ 
+engagement_metrics = mydata.groupby(identifier_column)['Bearer Id'].agg(['count', 'sum', 'mean'])
+
+engagement_metrics.columns = ['Session Frequency', 'Total Session Duration', 'Total Traffic']
+ 
+imputer = SimpleImputer(strategy='mean')
+
+engagement_metrics_imputed = imputer.fit_transform(engagement_metrics)
+ 
+scaler = StandardScaler()
+
+normalized_metrics = scaler.fit_transform(engagement_metrics_imputed)
+ 
+print("Length of mydata:", len(mydata))
+
+print("Length of normalized_metrics:", len(normalized_metrics))
+ 
+kmeans = KMeans(n_clusters=3, random_state=42)
+
+engagement_clusters = kmeans.fit_predict(normalized_metrics)
+ 
+print("Length of engagement_clusters:", len(engagement_clusters))
+ 
+if len(mydata) == len(engagement_clusters):
+  mydata['Engagement Cluster'] = engagement_clusters
+
+else:
+  print("Length mismatch! Unable to assign 'Engagement Cluster'.")
+ 
+print("Missing values in mydata:")
+
+print(mydata.isnull().sum())
+
+engagement_metrics = mydata.groupby(identifier_column)['Bearer Id'].agg(['count', 'sum', 'mean'])
+
+print("Length of engagement_metrics:", len(engagement_metrics))
+ 
+engagement_metrics_imputed = imputer.fit_transform(engagement_metrics)
+
+print("Length of engagement_metrics_imputed:", len(engagement_metrics_imputed))
+ 
+normalized_metrics = scaler.fit_transform(engagement_metrics_imputed)
+
+print("Length of normalized_metrics:", len(normalized_metrics))
+
+print("Duplicate rows based on identifier column:")
+
+print(mydata[mydata.duplicated(subset=identifier_column, keep=False)])
+import pandas as pd
+ 
+application_columns = ['Social Media DL (Bytes)', 'Google DL (Bytes)', 'Email DL (Bytes)',
+  'Youtube DL (Bytes)', 'Netflix DL (Bytes)', 'Gaming DL (Bytes)', 'Other DL (Bytes)',
+  'Social Media UL (Bytes)', 'Google UL (Bytes)', 'Email UL (Bytes)',
+  'Youtube UL (Bytes)', 'Netflix UL (Bytes)', 'Gaming UL (Bytes)', 'Other UL (Bytes)']
+ 
+total_data_per_user = mydata.groupby('MSISDN/Number')[application_columns].sum()
+ 
+total_data_per_user['Total Data Usage'] = total_data_per_user.sum(axis=1)
+ 
+top_engaged_users = total_data_per_user.nlargest(10, 'Total Data Usage')
+ 
+print(top_engaged_users)
+
+import matplotlib.pyplot as plt
+ 
+engagement_metric = 'Total Data Usage'
+ 
+plt.figure(figsize=(10, 6))
+
+top_engaged_users[engagement_metric].plot(kind='bar', color='skyblue')
+
+plt.title('Top 10 Engaged Users per Application')
+
+plt.xlabel('Bearer Id')
+
+plt.ylabel(engagement_metric)
+
+plt.show()
+ 
+mydata.hist(figsize=(20, 30))
+
+plt.show()
+
+sns.boxplot(data=mydata)
+
+plt.show()
+import pandas as pd
+
+from sqlalchemy import create_engine
+
+from analysis_modules.user_overview import UserOverviewAnalysis
+
+from analysis_modules.user_engagement import UserEngagementAnalysis
+
+from analysis_modules.user_experience import UserExperienceAnalysis
+
+from analysis_modules.user_satisfaction import UserSatisfactionAnalysis
+ 
+db_params = {
+  'dbname': 'week1',
+  'user': 'postgres',
+  'password': 'habte',
+  'host': 'localhost',
+  'port': '5432'
+
+}
+ 
+engine = create_engine(f'postgresql+psycopg2://{db_params["user"]}:{db_params["password"]}@{db_params["host"]}:{db_params["port"]}/{db_params["dbname"]}')
+ 
+sql_query = "SELECT * FROM xdr_data;"
+ 
+mydata = pd.read_sql_query(sql_query, engine)
+import numpy as np
+
+import pandas as pd
+
+import psycopg2
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+from sqlalchemy import create_engine
+ 
+db_params = {
+  'dbname': 'week1',
+  'user': 'postgres',
+  'password': 'habte',
+  'host': 'localhost',
+  'port': '5432'
+
+}
+ 
+engine = create_engine(f'postgresql+psycopg2://{db_params["user"]}:{db_params["password"]}@{db_params["host"]}:{db_params["port"]}/{db_params["dbname"]}')
+ 
+sql_query = "SELECT * FROM xdr_data;"
+ 
+mydata = pd.read_sql_query(sql_query, engine)
+mydata.head(5)
+
+mydata['Start'] = pd.to_datetime(mydata['Start'])
+
+mydata['End'] = pd.to_datetime(mydata['End'])
+
+mydata['session_duration'] = (mydata['End'] - mydata['Start']).dt.total_seconds()
+
+session_frequency = mydata.groupby('MSISDN/Number')['Bearer Id'].count()
+
+average_session_duration = mydata.groupby('MSISDN/Number')['session_duration'].mean()
+
+total_data_usage = mydata.groupby('MSISDN/Number')['Total UL (Bytes)'].sum() + mydata.groupby('MSISDN/Number')['Total DL (Bytes)'].sum()
+
+engagement_score = 0.4 * session_frequency + 0.6 * average_session_duration + 0.0 * total_data_usage
+
+engagement_mydata = pd.DataFrame({
+  'MSISDN/Number': engagement_score.index,
+  'session_frequency': session_frequency.values,
+  'average_session_duration': average_session_duration.values,
+  'total_data_usage': total_data_usage.values,
+  'engagement_score': engagement_score.values
+
+})
+
+print(engagement_mydata)
+
+plt.scatter(engagement_mydata['session_frequency'], engagement_mydata['engagement_score'])
+
+plt.xlabel('Session Frequency')
+
+plt.ylabel('Engagement Score')
+
+plt.title('Session Frequency vs. Engagement Score')
+
+plt.show()
+
+top_10_session_frequency = engagement_df.nlargest(10, 'session_frequency')
+
+top_10_average_session_duration = engagement_df.nlargest(10, 'average_session_duration')
+
+top_10_total_data_usage = engagement_df.nlargest(10, 'total_data_usage')
+
+top_10_engagement_score = engagement_df.nlargest(10, 'engagement_score')
+
+print("Top 10 Customers by Session Frequency:")
+
+print(top_10_session_frequency)
+ 
+print("\nTop 10 Customers by Average Session Duration:")
+
+print(top_10_average_session_duration)
+ 
+print("\nTop 10 Customers by Total Data Usage:")
+
+print(top_10_total_data_usage)
+ 
+print("\nTop 10 Customers by Engagement Score:")
+
+print(top_10_engagement_score)
+import matplotlib.pyplot as plt
+ 
+fig, axs = plt.subplots(2, 2, figsize=(12, 10))
+
+fig.suptitle('Distribution of Engagement Metrics Among Top 10 Customers', fontsize=16)
+ 
+axs[0, 0].hist(top_10_session_frequency['session_frequency'], bins=10, color='skyblue', edgecolor='black')
+
+axs[0, 0].set_title('Session Frequency')
+ 
+axs[0, 1].hist(top_10_average_session_duration['average_session_duration'], bins=10, color='salmon', edgecolor='black')
+
+axs[0, 1].set_title('Average Session Duration')
+ 
+axs[1, 0].hist(top_10_total_data_usage['total_data_usage'], bins=10, color='lightgreen', edgecolor='black')
+
+axs[1, 0].set_title('Total Data Usage')
+ 
+axs[1, 1].hist(top_10_engagement_score['engagement_score'], bins=10, color='orange', edgecolor='black')
+
+axs[1, 1].set_title('Engagement Score')
+ 
+plt.show()
+ 
+fig, axs = plt.subplots(2, 2, figsize=(12, 10))
+
+fig.suptitle('Top 10 Customers by Engagement Metric', fontsize=16)
+ 
+axs[0, 0].bar(top_10_session_frequency['MSISDN/Number'], top_10_session_frequency['session_frequency'], color='skyblue')
+
+axs[0, 0].set_title('Top 10 Customers by Session Frequency')
+ 
+axs[0, 1].bar(top_10_average_session_duration['MSISDN/Number'], top_10_average_session_duration['average_session_duration'], color='salmon')
+
+axs[0, 1].set_title('Top 10 Customers by Average Session Duration')
+ 
+axs[1, 0].bar(top_10_total_data_usage['MSISDN/Number'], top_10_total_data_usage['total_data_usage'], color='lightgreen')
+
+axs[1, 0].set_title('Top 10 Customers by Total Data Usage')
+ 
+axs[1, 1].bar(top_10_engagement_score['MSISDN/Number'], top_10_engagement_score['engagement_score'], color='orange')
+
+axs[1, 1].set_title('Top 10 Customers by Engagement Score')
+ 
+plt.show()
+ 
+total_session_frequency = top_10_session_frequency['session_frequency'].sum()
+
+total_average_session_duration = top_10_average_session_duration['average_session_duration'].sum()
+
+total_total_data_usage = top_10_total_data_usage['total_data_usage'].sum()
+
+total_engagement_score = top_10_engagement_score['engagement_score'].sum()
+ 
+data = [total_session_frequency, total_average_session_duration, total_total_data_usage, total_engagement_score]
+ 
+labels = ['Session Frequency', 'Average Session Duration', 'Total Data Usage', 'Engagement Score']
+ 
+colors = ['skyblue', 'salmon', 'lightgreen', 'orange']
+ 
+plt.figure(figsize=(8, 8))
+
+plt.pie(data, labels=labels, autopct='%1.1f%%', colors=colors, startangle=90)
+
+plt.title('Percentage Distribution of Engagement Metrics Among Top 10 Customers')
+
+plt.show()
+
+from sklearn.preprocessing import StandardScaler
+
+from sklearn.cluster import KMeans
+ 
+numeric_columns = ['session_frequency', 'average_session_duration', 'total_data_usage', 'engagement_score']
+
+engagement_metrics_subset = engagement_mydata[numeric_columns]
+ 
+scaler = StandardScaler()
+
+engagement_metrics_normalized = scaler.fit_transform(engagement_metrics_subset)
+ 
+kmeans = KMeans(n_clusters=3, random_state=42)
+
+engagement_mydata['cluster'] = kmeans.fit_predict(engagement_metrics_normalized)
+ 
+print(engagement_mydata[['MSISDN/Number', 'cluster']])
+
+cluster_means = engagement_mydata.groupby('cluster').mean()
+
+print(cluster_means)
+import matplotlib.pyplot as plt
+
+import numpy as np
+ 
+labels = ['Session Frequency', 'Session Duration', 'Total Data Usage', 'Engagement Score']
+ 
+cluster_0_values = [2.83, 102470, 1.58e9, 61483]
+
+cluster_1_values = [1.14, 190785, 5.47e8, 114471]
+
+cluster_2_values = [1.15, 68680, 5.41e8, 41208]
+ 
+num_metrics = len(labels)
+ 
+angles = np.linspace(0, 2 * np.pi, num_metrics, endpoint=False).tolist()
+ 
+values = cluster_0_values + cluster_0_values[:1]
+
+angles += angles[:1]
+ 
+fig, ax = plt.subplots(figsize=(8, 8), subplot_kw=dict(polar=True))
+
+ax.fill(angles, values, color='r', alpha=0.25, label='Cluster 0')
+ 
+values = cluster_1_values + cluster_1_values[:1]
+
+ax.fill(angles, values, color='b', alpha=0.25, label='Cluster 1')
+ 
+values = cluster_2_values + cluster_2_values[:1]
+
+ax.fill(angles, values, color='g', alpha=0.25, label='Cluster 2')
+ 
+ax.set_xticks(angles[:-1])
+
+ax.set_xticklabels(labels)
+ 
+ax.legend(loc='upper right', bbox_to_anchor=(0.1, 0.1))
+ 
+plt.show()
+
+numeric_columns = ['Avg RTT DL (ms)', 'Avg RTT UL (ms)', 'Avg Bearer TP DL (kbps)', 'Avg Bearer TP UL (kbps)', 'TCP DL Retrans. Vol (Bytes)', 'TCP UL Retrans. Vol (Bytes)', 'DL TP < 50 Kbps (%)', '50 Kbps < DL TP < 250 Kbps (%)', '250 Kbps < DL TP < 1 Mbps (%)', 'DL TP > 1 Mbps (%)', 'UL TP < 10 Kbps (%)', '10 Kbps < UL TP < 50 Kbps (%)', '50 Kbps < UL TP < 300 Kbps (%)', 'UL TP > 300 Kbps (%)', 'HTTP DL (Bytes)', 'HTTP UL (Bytes)', 'Activity Duration DL (ms)', 'Activity Duration UL (ms)', 'Social Media DL (Bytes)', 'Social Media UL (Bytes)', 'Google DL (Bytes)', 'Google UL (Bytes)', 'Email DL (Bytes)', 'Email UL (Bytes)', 'Youtube DL (Bytes)', 'Youtube UL (Bytes)', 'Netflix DL (Bytes)', 'Netflix UL (Bytes)', 'Gaming DL (Bytes)', 'Gaming UL (Bytes)', 'Other DL (Bytes)', 'Other UL (Bytes)', 'Total UL (Bytes)', 'Total DL (Bytes)', 'session_duration']
+import pandas as pd
+
+from sklearn.cluster import KMeans
+
+from sklearn.impute import SimpleImputer
+ 
+numeric_columns = ['Avg Bearer TP DL (kbps)', 'Avg Bearer TP UL (kbps)',
+  'TCP DL Retrans. Vol (Bytes)', 'TCP UL Retrans. Vol (Bytes)',
+  'Total UL (Bytes)', 'Total DL (Bytes)', 'session_duration']
+ 
+mydata_copy = mydata.copy()
+ 
+if mydata_copy[numeric_columns].isnull().any().any():
+  imputer = SimpleImputer(strategy='constant', fill_value=0.5)
+  clustered_data_imputed = imputer.fit_transform(mydata_copy[numeric_columns])
+
+else:
+  clustered_data_imputed = mydata_copy[numeric_columns]
+ 
+k = 3  
+kmeans = KMeans(n_clusters=k, random_state=42)
+ 
+kmeans.fit(clustered_data_imputed)
+ 
+mydata_copy['cluster'] = kmeans.labels_
+ 
+cluster_metrics = mydata_copy.groupby('cluster')[numeric_columns].agg(['min', 'max', 'mean', 'sum']).reset_index()
+ 
+print(cluster_metrics)
+
+import seaborn as sns
+
+import matplotlib.pyplot as plt
+ 
+sns.set(style="whitegrid")
+ 
+sns.pairplot(mydata, hue="cluster", palette="dark", diag_kind="kde")
+
+plt.show()
+ 
+plt.figure(figsize=(16, 10))
+
+for i, column in enumerate(numeric_columns, 1):
+  plt.subplot(2, 2, i)
+  sns.boxplot(x="cluster", y=column, data=mydata, palette="Set3")
+  plt.title(f"{column} distribution by cluster")
+
+plt.tight_layout()
+
+plt.show()
+import numpy as np
+
+import pandas as pd
+
+import psycopg2
+
+import pandas as pd
+
+from sqlalchemy import create_engine
+
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+
+from sklearn.model_selection import train_test_split
+
+from sklearn.linear_model import LinearRegression
+
+from sklearn.metrics import mean_squared_error, r2_score
+
+from sklearn.preprocessing import StandardScaler
+ 
+db_params = {
+  'dbname': 'week1',
+  'user': 'postgres',
+  'password': 'habte',
+  'host': 'localhost',
+  'port': '5432'
+
+}
+ 
+engine = create_engine(f'postgresql+psycopg2://{db_params["user"]}:{db_params["password"]}@{db_params["host"]}:{db_params["port"]}/{db_params["dbname"]}')
+ 
+sql_query = "SELECT * FROM xdr_data;"
+ 
+mydata = pd.read_sql_query(sql_query, engine)
+
+mydata = mydata.dropna()
+mydata['Start'] = pd.to_datetime(mydata['Start'], errors='coerce')
+
+mydata['End'] = pd.to_datetime(mydata['End'], errors='coerce')
+
+numeric_columns = mydata.select_dtypes(include='number').columns
+
+mydata[numeric_columns] = mydata[numeric_columns].fillna(mydata[numeric_columns].mean())
+mydata.columns
+
+plt.figure(figsize=(12, 8))
+
+sns.histplot(mydata['Avg Bearer TP DL (kbps)'], bins=30, kde=True, color='blue')
+
+plt.title('Distribution of Avg Bearer TP DL (kbps)')
+
+plt.xlabel('Avg Bearer TP DL (kbps)')
+
+plt.ylabel('Frequency')
+
+plt.show()
+
+numeric_columns = mydata.select_dtypes(include=['float64', 'int64']).columns
+
+correlation_matrix = mydata[numeric_columns].corr()
+ 
+plt.figure(figsize=(15, 10))
+
+sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', fmt=".2f")
+
+plt.title('Correlation Matrix')
+
+plt.show()
+ 
+plt.figure(figsize=(12, 8))
+
+sns.boxplot(x='Handset Type', y='Avg RTT DL (ms)', data=mydata)
+
+plt.title('Avg RTT DL (ms) by Handset Type')
+
+plt.xlabel('Handset Type')
+
+plt.ylabel('Avg RTT DL (ms)')
+
+plt.show()
+
+plt.figure(figsize=(12, 8))
+
+sns.scatterplot(x='Total UL (Bytes)', y='Total DL (Bytes)', data=mydata, hue='Handset Manufacturer')
+
+plt.title('User Engagement: Total UL vs Total DL')
+
+plt.xlabel('Total UL (Bytes)')
+
+plt.ylabel('Total DL (Bytes)')
+
+plt.legend()
+
+plt.show()
+ 
+features = mydata[['Avg Bearer TP DL (kbps)', 'Avg Bearer TP UL (kbps)', 'Avg RTT DL (ms)', 'Avg RTT UL (ms)']]
+
+target = mydata['cluster']  
+scaler = StandardScaler()
+
+features_scaled = scaler.fit_transform(features)
+ 
+X_train, X_test, y_train, y_test = train_test_split(features_scaled, target, test_size=0.2, random_state=42)
+ 
+model = LinearRegression()
+
+model.fit(X_train, y_train)
+ 
+y_pred = model.predict(X_test)
+ 
+mse = mean_squared_error(y_test, y_pred)
+
+r2 = r2_score(y_test, y_pred)
+ 
+print(f'Mean Squared Error: {mse}')
+
+print(f'R-squared: {r2}')
+import numpy as np
+
+import pandas as pd
+
+import psycopg2
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+from sqlalchemy import create_engine
+ 
+db_params = {
+  'dbname': 'week1',
+  'user': 'postgres',
+  'password': 'habte',
+  'host': 'localhost',
+  'port': '5432'
+
+}
+ 
+engine = create_engine(f'postgresql+psycopg2://{db_params["user"]}:{db_params["password"]}@{db_params["host"]}:{db_params["port"]}/{db_params["dbname"]}')
+ 
+sql_query = "SELECT * FROM xdr_data;"
+ 
+mydata = pd.read_sql_query(sql_query, engine)
+print(mydata.info())
+
+print(mydata.shape)
+
+mydata = mydata.dropna()
+mydata['Start'] = pd.to_datetime(mydata['Start'], errors='coerce')
+
+mydata['End'] = pd.to_datetime(mydata['End'], errors='coerce')
+
+numeric_columns = mydata.select_dtypes(include='number').columns
+
+mydata[numeric_columns] = mydata[numeric_columns].fillna(mydata[numeric_columns].mean())
+
+print(mydata.head(5))
+print(mydata.describe())
+
+user_device_mapping = mydata.groupby(['IMSI', 'MSISDN/Number'])['IMEI'].unique()
+ 
+print(user_device_mapping)
+import matplotlib.pyplot as plt
+ 
+plt.hist(mydata['Dur. (ms)'])
+
+plt.xlabel('Session Duration (ms)')
+
+plt.ylabel('Frequency')
+
+plt.show()
+
+top_users = mydata.nlargest(10, 'Total UL (Bytes)')
+
+print(top_users)
+ 
+app_columns = ['Social Media DL (Bytes)', 'Gaming UL (Bytes)']
+
+app_usage = mydata[app_columns].sum()
+
+print(app_usage)
+
+network_tech_distribution = mydata['Bearer Id'].value_counts()
+
+print(network_tech_distribution)
+
+location_analysis = mydata.groupby('Last Location Name').agg({'Dur. (ms)': 'mean', 'Total DL (Bytes)': 'sum'})
+
+print(location_analysis)
+
+mydata['Start'] = pd.to_datetime(mydata['Start'])
+
+mydata['Hour'] = mydata['Start'].dt.hour
+
+time_analysis = mydata.groupby('Hour').agg({'Dur. (ms)': 'mean', 'Total DL (Bytes)': 'sum'})
+
+print(time_analysis)
+
+top_handsets = mydata['IMEI'].value_counts().nlargest(10)
+ 
+print(top_handsets)
+
+mydata['IMEI'] = mydata['IMEI'].astype(str)
+ 
+mydata['Manufacturer'] = mydata['IMEI'].str[:8]
+ 
+top_manufacturers = mydata['Manufacturer'].value_counts().nlargest(3)
+ 
+print(top_manufacturers)
+mydata['IMEI'] = mydata['IMEI'].astype(str)
+ 
+mydata['Manufacturer'] = mydata['IMEI'].str[:8]
+ 
+top_manufacturers = mydata['Manufacturer'].value_counts().nlargest(3).index
+ 
+for manufacturer in top_manufacturers:
+  manufacturer_data = mydata[mydata['Manufacturer'] == manufacturer]
+  top_handsets = manufacturer_data['IMEI'].value_counts().nlargest(5)
+  print(f"\nTop 5 handsets for {manufacturer}:")
+  print(top_handsets)
+ 
+sessions_per_user = mydata['MSISDN/Number'].value_counts()
+ 
+print(sessions_per_user)
+import matplotlib.pyplot as plt
+ 
+plt.hist(sessions_per_user, bins=20, edgecolor='black')
+
+plt.xlabel('Number of Sessions')
+
+plt.ylabel('Number of Users')
+
+plt.title('Distribution of xDR Sessions per User')
+
+plt.show()
+
+session_duration_per_user = mydata.groupby('MSISDN/Number')['Dur. (ms)'].sum()
+ 
+print(session_duration_per_user)
+
+plt.hist(session_duration_per_user, bins=20, edgecolor='black')
+
+plt.xlabel('Total Session Duration (ms)')
+
+plt.ylabel('Number of Users')
+
+plt.title('Distribution of Session Durations per User')
+
+plt.show()
+
+total_data_per_user = mydata.groupby('MSISDN/Number').agg({
+  'Total DL (Bytes)': 'sum',
+  'Total UL (Bytes)': 'sum'
+
+})
+ 
+print(total_data_per_user)
+import matplotlib.pyplot as plt
+ 
+plt.scatter(total_data_per_user['Total DL (Bytes)'], total_data_per_user['Total UL (Bytes)'])
+
+plt.xlabel('Total Download (Bytes)')
+
+plt.ylabel('Total Upload (Bytes)')
+
+plt.title('Total Download vs Total Upload per User')
+
+plt.show()
+ 
+mydata['Total_Social_Media_Usage'] = mydata['Social Media DL (Bytes)'] + mydata['Social Media UL (Bytes)']
+
+mydata['Total_Google_Usage'] = mydata['Google DL (Bytes)'] + mydata['Google UL (Bytes)']
+ 
+aggregated_data = mydata.groupby('MSISDN/Number').agg({
+  'Total_Social_Media_Usage': 'sum',
+  'Total_Google_Usage': 'sum',
+ 
+})
+ 
+print(aggregated_data)
+
+applications_columns = [
+  'Social Media DL (Bytes)', 'Social Media UL (Bytes)',
+  'Google DL (Bytes)', 'Google UL (Bytes)',
+  'Email DL (Bytes)', 'Email UL (Bytes)',
+  'Youtube DL (Bytes)', 'Youtube UL (Bytes)',
+  'Netflix DL (Bytes)', 'Netflix UL (Bytes)',
+  'Gaming DL (Bytes)', 'Gaming UL (Bytes)'
+
+]
+ 
+for app_column in applications_columns:
+  app_name = app_column.split(' ')[0]   total_column = f'Total_{app_name}_Usage'
+  mydata[total_column] = mydata[app_column]
+ 
+aggregated_data = mydata.groupby(['MSISDN/Number', 'Start']).agg({
+  'Total_Social_Media_Usage': 'sum',
+  'Total_Google_Usage': 'sum',
+  'Total_Email_Usage': 'sum',
+  'Total_Youtube_Usage': 'sum',
+  'Total_Netflix_Usage': 'sum',
+  'Total_Gaming_Usage': 'sum',
+
+})
+ 
+print(aggregated_data)
+
+sessions_per_user = mydata['MSISDN/Number'].value_counts()
+
+sessions_per_user.describe()
+mydata['Session_Duration'] = mydata['Dur. (ms)'] / 1000  
+session_duration_stats = mydata['Session_Duration'].describe()
+session_duration_stats
+applications_columns = ['Total_Social_Media_Usage', 'Total_Google_Usage', 'Total_Email_Usage', 'Total_Youtube_Usage', 'Total_Netflix_Usage', 'Total_Gaming_Usage']
+
+total_data_per_app = mydata[applications_columns].sum()
+total_data_per_app 
+avg_data_per_app = mydata.groupby('MSISDN/Number')[applications_columns].mean()
+avg_data_per_app
+avg_rtt_dl = mydata['Avg RTT DL (ms)'].mean()
+
+avg_rtt_ul = mydata['Avg RTT UL (ms)'].mean()
+avg_rtt_dl
+avg_rtt_ul
+tcp_retransmission_dl = mydata['TCP DL Retrans. Vol (Bytes)'].sum()
+
+tcp_retransmission_ul = mydata['TCP UL Retrans. Vol (Bytes)'].sum()
+tcp_retransmission_dl
+tcp_retransmission_ul
+top_handsets = mydata['Handset Type'].value_counts().head(10)
+top_handsets
+top_manufacturers = mydata['Handset Manufacturer'].value_counts().head(3)
+top_manufacturers
+busiest_hours = mydata['Hour'].value_counts().sort_index()
+busiest_hours 
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+ 
+sns.set(style="whitegrid")
+ 
+plt.figure(figsize=(12, 6))
+
+sns.histplot(mydata['Session_Duration'], bins=30, kde=True, color='skyblue')
+
+plt.title('Distribution of Session Duration')
+
+plt.xlabel('Session Duration (seconds)')
+
+plt.ylabel('Frequency')
+
+plt.show()
+
+applications_columns = ['Total_Social_Media_Usage', 'Total_Google_Usage', 'Total_Email_Usage', 'Total_Youtube_Usage', 'Total_Netflix_Usage', 'Total_Gaming_Usage']
+
+plt.figure(figsize=(12, 8))
+
+sns.boxplot(data=mydata[applications_columns])
+
+plt.title('Box Plot of Total Data Volume per Application')
+
+plt.xlabel('Application')
+
+plt.ylabel('Total Data Volume (Bytes)')
+
+plt.xticks(rotation=45, ha='right')
+
+plt.show()
+ 
+busiest_hours = mydata['Hour'].value_counts().sort_index()
+
+plt.figure(figsize=(12, 6))
+
+sns.lineplot(x=busiest_hours.index, y=busiest_hours.values, marker='o', color='orange')
+
+plt.title('Busiest Hours of Network Usage')
+
+plt.xlabel('Hour of the Day')
+
+plt.ylabel('Number of Sessions')
+
+plt.show()
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+ 
+numeric_variables = mydata.select_dtypes(include='number')
+ 
+for col in numeric_variables.columns:
+  plt.figure(figsize=(8, 5))
+  sns.histplot(mydata[col], bins=20, kde=True, color='skyblue')
+  plt.title(f'Histogram of {col}')
+  plt.xlabel(col)
+  plt.ylabel('Frequency')
+  plt.show()
+
+for col in numeric_variables.columns:
+  plt.figure(figsize=(8, 5))
+  sns.boxplot(x=mydata[col], color='lightcoral')
+  plt.title(f'Box Plot of {col}')
+  plt.xlabel(col)
+  plt.show()
+
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+ 
+applications_columns = ['Social Media DL (Bytes)', 'Social Media UL (Bytes)',
+  'Google DL (Bytes)', 'Google UL (Bytes)',
+  'Email DL (Bytes)', 'Email UL (Bytes)',
+  'Youtube DL (Bytes)', 'Youtube UL (Bytes)',
+  'Netflix DL (Bytes)', 'Netflix UL (Bytes)',
+  'Gaming DL (Bytes)', 'Gaming UL (Bytes)']
+ 
+for app_col in applications_columns:
+  plt.figure(figsize=(8, 5))
+  sns.scatterplot(x=mydata[app_col], y=mydata['Total DL (Bytes)'] + mydata['Total UL (Bytes)'], alpha=0.7)
+  plt.title(f'Scatter Plot: {app_col} vs Total Data Usage')
+  plt.xlabel(app_col)
+  plt.ylabel('Total DL+UL Data Usage (Bytes)')
+  plt.show()
+
+correlation_matrix = mydata[applications_columns + ['Total DL (Bytes)', 'Total UL (Bytes)']].corr()
+ 
+print("Correlation Matrix:")
+
+print(correlation_matrix)
+
+import statsmodels.api as sm
+ 
+X = mydata['Social Media DL (Bytes)'] + mydata['Social Media UL (Bytes)']
+
+X = sm.add_constant(X)
+
+y = mydata['Total DL (Bytes)'] + mydata['Total UL (Bytes)']
+ 
+model = sm.OLS(y, X).fit()
+ 
+print(model.summary())
+
+import pandas as pd
+
+import numpy as np
+ 
+mydata['Total_Duration'] = mydata['Dur. (ms)']
+ 
+mydata['Duration_Decile'] = pd.qcut(mydata['Total_Duration'], q=[0, 0.2, 0.4, 0.6, 0.8, 1], labels=False, precision=0, duplicates='drop')
+ 
+mydata['Total_Data'] = mydata['Total DL (Bytes)'] + mydata['Total UL (Bytes)']
+ 
+data_per_decile = mydata.groupby('Duration_Decile')['Total_Data'].sum().reset_index()
+ 
+print(data_per_decile)
+ 
+selected_columns = ['Social Media DL (Bytes)', 'Google DL (Bytes)', 'Email DL (Bytes)',
+  'Youtube DL (Bytes)', 'Netflix DL (Bytes)', 'Gaming DL (Bytes)', 'Other DL (Bytes)']
+ 
+app_data = mydata[selected_columns]
+ 
+correlation_matrix = app_data.corr()
+ 
+print(correlation_matrix)
+
+from sklearn.decomposition import PCA
+
+from sklearn.preprocessing import StandardScaler
+
+selected_columns = ['Social Media DL (Bytes)', 'Google DL (Bytes)', 'Email DL (Bytes)',
+  'Youtube DL (Bytes)', 'Netflix DL (Bytes)', 'Gaming DL (Bytes)', 'Other DL (Bytes)']
+ 
+app_data = mydata[selected_columns]
+
+scaler = StandardScaler()
+
+app_data_standardized = scaler.fit_transform(app_data)
+
+pca = PCA()
+
+pca_result = pca.fit_transform(app_data_standardized)
+
+explained_variance_ratio = pca.explained_variance_ratio_
+ 
+print("Explained Variance Ratio:", explained_variance_ratio)
+
+top_components = pca_result[:, :2]
+ 
+print("Top 2 Principal Components:")
+
+print(top_components)
+
+top_3_manufacturers = mydata['Handset Manufacturer'].value_counts().head(3).index
+ 
+mydata_top_3_manufacturers = mydata[mydata['Handset Manufacturer'].isin(top_3_manufacturers)]
+ 
+top_5_handsets_per_manufacturer = (
+  mydata_top_3_manufacturers.groupby('Handset Manufacturer')['Handset Type']
+  .value_counts()
+  .groupby(level=0, group_keys=False)
+  .nlargest(5)
+  .reset_index(name='Count')
+
+)
+ 
+print("Top 5 Handsets per Top 3 Handset Manufacturers:")
+
+print(top_5_handsets_per_manufacturer)
+ 
+top_3_manufacturers = mydata['Handset Manufacturer'].value_counts().head(3)
+ 
+print("Top 3 Handset Manufacturers:")
+
+print(top_3_manufacturers)
+ 
+data = {
+  'Handset Manufacturer': ['Apple', 'Samsung', 'Huawei'],
+  'Count': [59565, 40839, 34423]
+
+}
+ 
+df = pd.DataFrame(data)
+ 
+plt.figure(figsize=(8, 8))
+
+plt.pie(df['Count'], labels=df['Handset Manufacturer'], autopct='%1.1f%%', startangle=90, colors=['skyblue', 'lightcoral', 'lightgreen'])
+
+plt.title('Distribution of Top 3 Handset Manufacturers')
+
+plt.show()
+ 
+plt.figure(figsize=(16, 8))
+
+sns.barplot(x='Handset Type', y='Count', hue='Handset Manufacturer', data=top_5_handsets_per_manufacturer, palette='viridis')
+
+plt.xticks(rotation=45, ha='right')
+
+plt.title('Top 5 Handsets per Top 3 Handset Manufacturers')
+
+plt.xlabel('Handset Type')
+
+plt.ylabel('Count')
+
+plt.tight_layout()
+
+plt.legend(title='Handset Manufacturer')
+
+plt.show()
+
+data = {
+  'Handset Type': ['Apple iPhone 6S (A1688)', 'Apple iPhone 6 (A1586)', 'Apple iPhone 7 (A1778)', 'Apple iPhone Se (A1723)', 'Apple iPhone 8 (A1905)'],
+  'Count': [9419, 9023, 6326, 5187, 4993]
+
+}
+ 
+df = pd.DataFrame(data)
+ 
+manufacturers = ['Apple', 'Samsung', 'Huawei']
+ 
+plt.figure(figsize=(20, 5))
+ 
+for i, manufacturer in enumerate(manufacturers, 1):
+  plt.subplot(1, 3, i)
+  manufacturer_data = df[df['Handset Type'].str.contains(manufacturer)]
+  plt.pie(manufacturer_data['Count'], labels=manufacturer_data['Handset Type'], autopct='%1.1f%%', startangle=140)
+  plt.title(f'Distribution of Users for {manufacturer}')
+ 
+plt.tight_layout()
+ 
+plt.show()
+ 
+user_xdr_sessions = mydata.groupby('MSISDN/Number')['Bearer Id'].count().reset_index(name='Number_of_xDR_sessions')
+ 
+print("Aggregated Information - Number of xDR Sessions per User:")
+
+print(user_xdr_sessions)
+ 
+mydata['Start'] = pd.to_datetime(mydata['Start'])
+
+mydata['End'] = pd.to_datetime(mydata['End'])
+
+mydata['Session_Duration'] = (mydata['End'] - mydata['Start']).dt.total_seconds()
+
+user_session_duration = mydata.groupby('MSISDN/Number')['Session_Duration'].sum().reset_index(name='Total_Session_Duration')
+
+print("Aggregated Session Duration per User:")
+
+print(user_session_duration)
+
+user_data_volume = mydata.groupby('MSISDN/Number').agg(
+  Total_DL_data=('Total DL (Bytes)', 'sum'),
+  Total_UL_data=('Total UL (Bytes)', 'sum')
+
+).reset_index()
+ 
+print("Aggregated Download and Upload Data per User:")
+
+print(user_data_volume)
+ 
+user_app_data_volume = mydata.groupby('MSISDN/Number').agg(
+  Social_Media_DL=('Social Media DL (Bytes)', 'sum'),
+  Social_Media_UL=('Social Media UL (Bytes)', 'sum'),
+  Google_DL=('Google DL (Bytes)', 'sum'),
+  Google_UL=('Google UL (Bytes)', 'sum'),
+  Email_DL=('Email DL (Bytes)', 'sum'),
+  Email_UL=('Email UL (Bytes)', 'sum'),
+  Youtube_DL=('Youtube DL (Bytes)', 'sum'),
+  Youtube_UL=('Youtube UL (Bytes)', 'sum'),
+  Netflix_DL=('Netflix DL (Bytes)', 'sum'),
+  Netflix_UL=('Netflix UL (Bytes)', 'sum'),
+  Gaming_DL=('Gaming DL (Bytes)', 'sum'),
+  Gaming_UL=('Gaming UL (Bytes)', 'sum'),
+  Other_DL=('Other DL (Bytes)', 'sum'),
+  Other_UL=('Other UL (Bytes)', 'sum')
+
+).reset_index()
+ 
+print("Aggregated Data Volume per User for Each Application:")
+
+print(user_app_data_volume)
+ 
+user_aggregated_data = mydata.groupby('MSISDN/Number').agg(
+  Number_of_xDR_sessions=('Bearer Id', 'count'),
+  Session_Duration=('Session_Duration', 'sum'),
+  Total_DL_data=('Total DL (Bytes)', 'sum'),
+  Total_UL_data=('Total UL (Bytes)', 'sum'),
+  Social_Media_DL=('Social Media DL (Bytes)', 'sum'),
+  Social_Media_UL=('Social Media UL (Bytes)', 'sum'),
+  Google_DL=('Google DL (Bytes)', 'sum'),
+  Google_UL=('Google UL (Bytes)', 'sum'),
+  Email_DL=('Email DL (Bytes)', 'sum'),
+  Email_UL=('Email UL (Bytes)', 'sum'),
+  Youtube_DL=('Youtube DL (Bytes)', 'sum'),
+  Youtube_UL=('Youtube UL (Bytes)', 'sum'),
+  Netflix_DL=('Netflix DL (Bytes)', 'sum'),
+  Netflix_UL=('Netflix UL (Bytes)', 'sum'),
+  Gaming_DL=('Gaming DL (Bytes)', 'sum'),
+  Gaming_UL=('Gaming UL (Bytes)', 'sum'),
+  Other_DL=('Other DL (Bytes)', 'sum'),
+  Other_UL=('Other UL (Bytes)', 'sum')
+
+).reset_index()
+ 
+plt.figure(figsize=(15, 10))
+
+plt.bar(user_aggregated_data['MSISDN/Number'], user_aggregated_data['Number_of_xDR_sessions'], label='Number of xDR Sessions')
+
+plt.bar(user_aggregated_data['MSISDN/Number'], user_aggregated_data['Session_Duration'], label='Session Duration', alpha=0.7)
+
+plt.bar(user_aggregated_data['MSISDN/Number'], user_aggregated_data['Total_DL_data'], label='Total DL Data', alpha=0.7)
+
+plt.bar(user_aggregated_data['MSISDN/Number'], user_aggregated_data['Total_UL_data'], label='Total UL Data', alpha=0.7)
+
+plt.legend()
+
+plt.xlabel('MSISDN/Number')
+
+plt.ylabel('Aggregated Values')
+
+plt.title('Aggregated Information per User')
+
+plt.xticks(rotation=45, ha='right')
+
+plt.tight_layout()
+
+plt.show()
+
+summary_statistics = mydata.describe()
+ 
+top_handsets = mydata['Handset Type'].value_counts().head(10)
+
+plt.figure(figsize=(12, 6))
+
+sns.barplot(x=top_handsets.index, y=top_handsets.values)
+
+plt.xticks(rotation=45, ha='right')
+
+plt.title('Distribution of Users by Handset Type (Top 10)')
+
+plt.xlabel('Handset Type')
+
+plt.ylabel('Count')
+
+plt.show()
+
+plt.figure(figsize=(10, 6))
+
+sns.histplot(mydata['Session_Duration'], bins=30, kde=True)
+
+plt.title('Distribution of Session Durations')
+
+plt.xlabel('Session Duration (seconds)')
+
+plt.ylabel('Frequency')
+
+plt.show()
+
+plt.figure(figsize=(10, 6))
+
+sns.scatterplot(x='Total DL (Bytes)', y='Total UL (Bytes)', data=mydata)
+
+plt.title('Scatter Plot of Total DL vs Total UL Data')
+
+plt.xlabel('Total DL Data (Bytes)')
+
+plt.ylabel('Total UL Data (Bytes)')
+
+plt.show()
+
+mixed_data_columns = mydata.select_dtypes(include='object').columns
+
+print(f'Columns with mixed data types: {mixed_data_columns}')
+ 
+plt.figure(figsize=(10, 6))
+
+sns.scatterplot(x='Total DL (Bytes)', y='Total UL (Bytes)', data=mydata)
+
+plt.title('Scatter Plot of Total DL vs Total UL Data')
+
+plt.xlabel('Total DL Data (Bytes)')
+
+plt.ylabel('Total UL Data (Bytes)')
+
+plt.show()
+ 
+summary_statistics = mydata.describe()
+ 
+top_handsets = mydata['Handset Type'].value_counts().head(10)
+
+plt.figure(figsize=(12, 6))
+
+sns.barplot(x=top_handsets.values, y=top_handsets.index, orient='h')
+
+plt.title('Distribution of Users by Handset Type (Top 10)')
+
+plt.xlabel('Count')
+
+plt.ylabel('Handset Type')
+
+plt.show()
+
+basic_metrics = mydata.describe()
+ 
+dispersion_parameters = mydata.describe().loc[['std', 'min', '25%', '50%', '75%', 'max']]
+ 
+plt.figure(figsize=(15, 10))
+
+sns.boxplot(data=mydata.select_dtypes(include=['float64']))
+
+plt.title('Boxplot for Quantitative Variables')
+
+plt.show()
+
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+ 
+application = 'Social Media'
+ 
+subset_data = mydata[[f'{application} DL (Bytes)', f'{application} UL (Bytes)', 'Total DL (Bytes)', 'Total UL (Bytes)']]
+ 
+subset_data['Total DL+UL Data'] = subset_data['Total DL (Bytes)'] + subset_data['Total UL (Bytes)']
+ 
+plt.figure(figsize=(10, 6))
+
+sns.scatterplot(x=f'{application} DL (Bytes)', y='Total DL+UL Data', data=subset_data)
+
+plt.title(f'Relationship between {application} and Total DL+UL Data')
+
+plt.xlabel(f'{application} DL (Bytes)')
+
+plt.ylabel('Total DL+UL Data')
+
+plt.show()
+ 
+customer_engagement = mydata.groupby('MSISDN/Number').agg({
+  'Bearer Id': 'count',
+  'Dur. (ms)': 'sum',
+  'Total UL (Bytes)': 'sum',
+  'Total DL (Bytes)': 'sum'
+
+}).reset_index()
+ 
+customer_engagement.columns = ['MSISDN', 'Session Count', 'Total Duration', 'Total UL (Bytes)', 'Total DL (Bytes)']
+ 
+customer_engagement['Total Traffic (Bytes)'] = customer_engagement['Total UL (Bytes)'] + customer_engagement['Total DL (Bytes)']
+ 
+top_10_session_count = customer_engagement.sort_values(by='Session Count', ascending=False).head(10)
+
+top_10_duration = customer_engagement.sort_values(by='Total Duration', ascending=False).head(10)
+
+top_10_total_traffic = customer_engagement.sort_values(by='Total Traffic (Bytes)', ascending=False).head(10)
+ 
+print("Top 10 Customers by Session Count:")
+
+print(top_10_session_count[['MSISDN', 'Session Count']])
+
+print("\nTop 10 Customers by Total Duration:")
+
+print(top_10_duration[['MSISDN', 'Total Duration']])
+
+print("\nTop 10 Customers by Total Traffic:")
+
+print(top_10_total_traffic[['MSISDN', 'Total Traffic (Bytes)']])
+
+import matplotlib.pyplot as plt
+ 
+def plot_top_10(data, metric, title):
+  plt.figure(figsize=(10, 6))
+  plt.bar(data['MSISDN'], data[metric], color='skyblue')
+  plt.xlabel('MSISDN')
+  plt.ylabel(metric)
+  plt.title(title)
+  plt.xticks(rotation=45, ha='right')
+  plt.tight_layout()
+  plt.show()
+ 
+plot_top_10(top_10_session_count, 'Session Count', 'Top 10 Customers by Session Count')
+ 
+plot_top_10(top_10_duration, 'Total Duration', 'Top 10 Customers by Total Duration')
+ 
+plot_top_10(top_10_total_traffic, 'Total Traffic (Bytes)', 'Top 10 Customers by Total Traffic')
+
+import pandas as pd
+
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+
+from sqlalchemy import create_engine
+
+from sklearn.preprocessing import StandardScaler
+
+from sklearn.decomposition import PCA
+
+from sklearn.impute import SimpleImputer
+ 
+db_params = {
+  'dbname': 'week1',
+  'user': 'postgres',
+  'password': 'habte',
+  'host': 'localhost',
+  'port': '5432'
+
+}
+ 
+engine = create_engine(f'postgresql+psycopg2://{db_params["user"]}:{db_params["password"]}@{db_params["host"]}:{db_params["port"]}/{db_params["dbname"]}')
+ 
+sql_query = "SELECT * FROM xdr_data;"
+ 
+mydata = pd.read_sql_query(sql_query, engine)
+ 
+imputer = SimpleImputer(strategy='mean')
+
+imputed_data = imputer.fit_transform(mydata.select_dtypes(include=['float64']))
+ 
+scaler = StandardScaler()
+
+scaled_data = scaler.fit_transform(imputed_data)
+ 
+pca = PCA()
+
+principal_components = pca.fit_transform(scaled_data)
+ 
+pca_df = pd.DataFrame(data=principal_components, columns=[f'PC{i}' for i in range(1, pca.n_components_ + 1)])
+ 
+pca_interpretation = [
+  "Principal components capture the variance in the data.",
+  "Each principal component is a linear combination of the original features.",
+  "The first few principal components explain a significant portion of the total variance.",
+  "PCA is useful for dimensionality reduction and identifying patterns in high-dimensional data."
+
+]
+ 
+from pptx import Presentation
+
+from pptx.util import Inches
+
+import os
+ 
+presentation = Presentation()
+ 
+def add_slide(title, content):
+  slide = presentation.slides.add_slide(presentation.slide_layouts[1])   title_box = slide.shapes.title
+  content_box = slide.placeholders[1]
+  title_box.text = title
+  content_box.text = content
+ 
+variable_description = mydata.dtypes.reset_index()
+
+variable_description.columns = ['Variable', 'Data Type']
+
+add_slide("Variable Description", variable_description.to_string(index=False))
+ 
+basic_metrics = mydata.describe()
+
+add_slide("Basic Metrics", basic_metrics.to_string())
+ 
+dispersion_parameters = mydata.describe().loc[['std', 'min', '25%', '50%', '75%', 'max']]
+
+add_slide("Non-Graphical Univariate Analysis", dispersion_parameters.to_string())
+ 
+image_path = 'univariate_analysis_plot.png'
+
+plt.figure(figsize=(15, 10))
+
+sns.boxplot(data=mydata.select_dtypes(include=['float64']))
+
+plt.title('Boxplot for Quantitative Variables')
+
+plt.savefig(image_path)
+
+plt.close()
+
+presentation.slides.add_slide(presentation.slide_layouts[5])  
+presentation.slides[-1].shapes.add_picture(image_path, Inches(1), Inches(1), width=Inches(8))
+
+os.remove(image_path)  
+application_cols = ['Social Media DL (Bytes)', 'Google DL (Bytes)', 'Email DL (Bytes)',
+  'Youtube DL (Bytes)', 'Netflix DL (Bytes)', 'Gaming DL (Bytes)', 'Other DL (Bytes)',
+  'Social Media UL (Bytes)', 'Google UL (Bytes)', 'Email UL (Bytes)',
+  'Youtube UL (Bytes)', 'Netflix UL (Bytes)', 'Gaming UL (Bytes)', 'Other UL (Bytes)']
+ 
+total_data_cols = ['Total DL (Bytes)', 'Total UL (Bytes)']
+
+bivariate_analysis = mydata[application_cols + total_data_cols].corr()
+
+add_slide("Bivariate Analysis", bivariate_analysis.to_string())
+ 
+mydata['Total_Session_Duration'] = mydata['Dur. (ms).1'] / 1000  
+mydata['Decile_Class'] = pd.qcut(mydata['Total_Session_Duration'], q=5, labels=False, duplicates='drop')
+
+total_data_per_decile = mydata.groupby('Decile_Class')[total_data_cols].sum()
+
+add_slide("Variable Transformations", total_data_per_decile.to_string())
+ 
+correlation_matrix = mydata[['Social Media DL (Bytes)', 'Google DL (Bytes)', 'Email DL (Bytes)',
+  'Youtube DL (Bytes)', 'Netflix DL (Bytes)', 'Gaming DL (Bytes)', 'Other DL (Bytes)',
+  'Social Media UL (Bytes)', 'Google UL (Bytes)', 'Email UL (Bytes)',
+  'Youtube UL (Bytes)', 'Netflix UL (Bytes)', 'Gaming UL (Bytes)', 'Other UL (Bytes)']].corr()
+
+add_slide("Correlation Analysis", correlation_matrix.to_string())
+ 
+add_slide("PCA Interpretation", "\n".join(pca_interpretation))
+ 
+presentation.save("telecom_analysis_results.pptx")
+
+import pandas as pd
+
+from sklearn.cluster import KMeans
+
+from sklearn.preprocessing import StandardScaler
+
+import matplotlib.pyplot as plt
+ 
+engagement_metrics = mydata.groupby('MSISDN/Number').agg({
+  'Bearer Id': 'count',   'Dur. (ms).1': 'sum',   'Total UL (Bytes)': 'sum',   'Total DL (Bytes)': 'sum'  
+}).reset_index()
+ 
+engagement_metrics.columns = ['MSISDN', 'Session Frequency', 'Total Session Duration', 'Total UL Traffic', 'Total DL Traffic']
+ 
+top_10_session_frequency = engagement_metrics.sort_values(by='Session Frequency', ascending=False).head(10)
+
+top_10_duration = engagement_metrics.sort_values(by='Total Session Duration', ascending=False).head(10)
+
+top_10_ul_traffic = engagement_metrics.sort_values(by='Total UL Traffic', ascending=False).head(10)
+
+top_10_dl_traffic = engagement_metrics.sort_values(by='Total DL Traffic', ascending=False).head(10)
+ 
+print("Top 10 Customers by Session Frequency:")
+
+print(top_10_session_frequency)
+ 
+print("\nTop 10 Customers by Total Session Duration:")
+
+print(top_10_duration)
+ 
+print("\nTop 10 Customers by Total UL Traffic:")
+
+print(top_10_ul_traffic)
+ 
+print("\nTop 10 Customers by Total DL Traffic:")
+
+print(top_10_dl_traffic)
+ 
+scaler = StandardScaler()
+
+normalized_metrics = scaler.fit_transform(engagement_metrics.iloc[:, 1:])
+ 
+kmeans = KMeans(n_clusters=3, random_state=42)
+
+engagement_metrics['Cluster'] = kmeans.fit_predict(normalized_metrics)
+ 
+cluster_stats = engagement_metrics.groupby('Cluster').agg({
+  'Session Frequency': ['min', 'max', 'mean', 'sum'],
+  'Total Session Duration': ['min', 'max', 'mean', 'sum'],
+  'Total UL Traffic': ['min', 'max', 'mean', 'sum'],
+  'Total DL Traffic': ['min', 'max', 'mean', 'sum']
+
+}).reset_index()
+ 
+print("\nCluster Statistics:")
+
+print(cluster_stats)
+ 
+app_traffic = mydata.groupby('MSISDN/Number').agg({
+  'Social Media DL (Bytes)': 'sum',
+  'Google DL (Bytes)': 'sum',
+  'Email DL (Bytes)': 'sum',
+  'Youtube DL (Bytes)': 'sum',
+  'Netflix DL (Bytes)': 'sum',
+  'Gaming DL (Bytes)': 'sum',
+  'Other DL (Bytes)': 'sum',
+  'Social Media UL (Bytes)': 'sum',
+  'Google UL (Bytes)': 'sum',
+  'Email UL (Bytes)': 'sum',
+  'Youtube UL (Bytes)': 'sum',
+  'Netflix UL (Bytes)': 'sum',
+  'Gaming UL (Bytes)': 'sum',
+  'Other UL (Bytes)': 'sum'
+
+}).reset_index()
+ 
+top_10_social_media = app_traffic.sort_values(by='Social Media DL (Bytes) + Social Media UL (Bytes)', ascending=False).head(10)
+
+top_10_youtube = app_traffic.sort_values(by='Youtube DL (Bytes) + Youtube UL (Bytes)', ascending=False).head(10)
+
+top_10_gaming = app_traffic.sort_values(by='Gaming DL (Bytes) + Gaming UL (Bytes)', ascending=False).head(10)
+ 
+print("\nTop 10 Most Engaged Users (Social Media):")
+
+print(top_10_social_media)
+ 
+print("\nTop 10 Most Engaged Users (YouTube):")
+
+print(top_10_youtube)
+ 
+print("\nTop 10 Most Engaged Users (Gaming):")
+
+print(top_10_gaming)
+ 
+top_3_apps = app_traffic.sum().nlargest(3)
+ 
+plt.figure(figsize=(10, 6))
+
+top_3_apps.plot(kind='bar', color='skyblue')
+
+plt.title('Top 3 Most Used Applications')
+
+plt.xlabel('Application')
+
+plt.ylabel('Total Traffic (Bytes)')
+
+plt.show()
+ 
+inertia_values = []
+
+possible_k_values = range(1, 11)
+ 
+for k in possible_k_values:
+  kmeans = KMeans(n_clusters=k, random_state=42)
+  kmeans.fit(normalized_metrics)
+  inertia_values.append(kmeans.inertia_)
+ 
+plt.figure(figsize=(10, 6))
+
+plt.plot(possible_k_values, inertia_values, marker='o')
+
+plt.title('Elbow Method for Optimal k')
+
+plt.xlabel('Number of Clusters (k)')
+
+plt.ylabel('Inertia')
+
+plt.show()
+
+import pandas as pd
+
+from sklearn.preprocessing import StandardScaler
+
+from sklearn.cluster import KMeans
+
+from sklearn.impute import SimpleImputer
+
+from kneed import KneeLocator
+ 
+identifier_column = 'MSISDN/Number'
+ 
+print(mydata.columns)
+ 
+engagement_metrics = mydata.groupby(identifier_column)['Bearer Id'].agg(['count', 'sum', 'mean'])
+
+engagement_metrics.columns = ['Session Frequency', 'Total Session Duration', 'Total Traffic']
+ 
+imputer = SimpleImputer(strategy='mean')
+
+engagement_metrics_imputed = imputer.fit_transform(engagement_metrics)
+ 
+scaler = StandardScaler()
+
+normalized_metrics = scaler.fit_transform(engagement_metrics_imputed)
+ 
+print("Length of mydata:", len(mydata))
+
+print("Length of normalized_metrics:", len(normalized_metrics))
+ 
+kmeans = KMeans(n_clusters=3, random_state=42)
+
+engagement_clusters = kmeans.fit_predict(normalized_metrics)
+ 
+print("Length of engagement_clusters:", len(engagement_clusters))
+ 
+if len(mydata) == len(engagement_clusters):
+  mydata['Engagement Cluster'] = engagement_clusters
+
+else:
+  print("Length mismatch! Unable to assign 'Engagement Cluster'.")
+ 
+print("Missing values in mydata:")
+
+print(mydata.isnull().sum())
+
+engagement_metrics = mydata.groupby(identifier_column)['Bearer Id'].agg(['count', 'sum', 'mean'])
+
+print("Length of engagement_metrics:", len(engagement_metrics))
+ 
+engagement_metrics_imputed = imputer.fit_transform(engagement_metrics)
+
+print("Length of engagement_metrics_imputed:", len(engagement_metrics_imputed))
+ 
+normalized_metrics = scaler.fit_transform(engagement_metrics_imputed)
+
+print("Length of normalized_metrics:", len(normalized_metrics))
+
+print("Duplicate rows based on identifier column:")
+
+print(mydata[mydata.duplicated(subset=identifier_column, keep=False)])
+import pandas as pd
+ 
+application_columns = ['Social Media DL (Bytes)', 'Google DL (Bytes)', 'Email DL (Bytes)',
+  'Youtube DL (Bytes)', 'Netflix DL (Bytes)', 'Gaming DL (Bytes)', 'Other DL (Bytes)',
+  'Social Media UL (Bytes)', 'Google UL (Bytes)', 'Email UL (Bytes)',
+  'Youtube UL (Bytes)', 'Netflix UL (Bytes)', 'Gaming UL (Bytes)', 'Other UL (Bytes)']
+ 
+total_data_per_user = mydata.groupby('MSISDN/Number')[application_columns].sum()
+ 
+total_data_per_user['Total Data Usage'] = total_data_per_user.sum(axis=1)
+ 
+top_engaged_users = total_data_per_user.nlargest(10, 'Total Data Usage')
+ 
+print(top_engaged_users)
+
+import matplotlib.pyplot as plt
+ 
+engagement_metric = 'Total Data Usage'
+ 
+plt.figure(figsize=(10, 6))
+
+top_engaged_users[engagement_metric].plot(kind='bar', color='skyblue')
+
+plt.title('Top 10 Engaged Users per Application')
+
+plt.xlabel('Bearer Id')
+
+plt.ylabel(engagement_metric)
+
+plt.show()
+ 
+mydata.hist(figsize=(20, 30))
+
+plt.show()
+
+sns.boxplot(data=mydata)
+
+plt.show()
+
+import streamlit as st
+import numpy as np
+import pandas as pd
+from sklearn import datasets
+from sqlalchemy import create_engine
+
+db_params = {
+  'dbname': 'week1',
+  'user': 'postgres',
+  'password': 'habte',
+  'host': 'localhost',
+  'port': '5432'
+}
+
+engine = create_engine(f'postgresql+psycopg2://{db_params["user"]}:{db_params["password"]}@{db_params["host"]}:{db_params["port"]}/{db_params["dbname"]}')
+
+sql_query = "SELECT * FROM xdr_data;"
+
+mydata = pd.read_sql_query(sql_query, engine)
+
+st.title('Welcome to Streamlit')
+
+st.write("""
+  Select the best one here
+ 
+""")
+my_dataset = st.sidebar.selectbox("Select Dataset", ("Iris", "Breast Cancer", "Wine Dataset", "Custom", "PostgreSQL Data"))
+
+if my_dataset == "Custom":
+  uploaded_file = st.sidebar.file_uploader("Upload a CSV file", type=["csv"])
+  if uploaded_file is not None:
+  data = pd.read_csv(uploaded_file)
+  x = data.iloc[:, :-1].values
+  y = data.iloc[:, -1].values
+  st.write("Custom Dataset:")
+  st.write("First 5 rows of the dataset:")
+  st.write(data.head())
+  else:
+  st.warning("Please upload a CSV file.")
+  st.stop()
+
+elif my_dataset == "PostgreSQL Data":
+  st.write("PostgreSQL Dataset:")
+  st.write("First 5 rows of the dataset:")
+  st.write(mydata.head())
+
+else:
+  def get_dataset(my_dataset):
+  if my_dataset == "Iris":
+  data = datasets.load_iris()
+  elif my_dataset == "Breast Cancer":
+  data = datasets.load_breast_cancer()
+  elif my_dataset == "Wine Dataset":
+  data = datasets.load_wine()
+  else:
+  st.warning("Please select a valid dataset.")
+  st.stop()
+  x = data.data
+  y = data.target
+  return x, y
+  x, y = get_dataset(my_dataset)
+  st.write("Shape of dataset", x.shape)
+  st.write("Number of classes", len(np.unique(y)))
+import numpy as np
+
+import pandas as pd
+
+import psycopg2
+
+import pandas as pd
+
+from sqlalchemy import create_engine
+
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+
+from sklearn.model_selection import train_test_split
+
+from sklearn.linear_model import LinearRegression
+
+from sklearn.metrics import mean_squared_error, r2_score
+
+from sklearn.preprocessing import StandardScaler
+ 
+db_params = {
+  'dbname': 'week1',
+  'user': 'postgres',
+  'password': 'habte',
+  'host': 'localhost',
+  'port': '5432'
+
+}
+ 
+engine = create_engine(f'postgresql+psycopg2://{db_params["user"]}:{db_params["password"]}@{db_params["host"]}:{db_params["port"]}/{db_params["dbname"]}')
+ 
+sql_query = "SELECT * FROM xdr_data;"
+ 
+mydata = pd.read_sql_query(sql_query, engine)
+
+mydata = mydata.dropna()
+mydata['Start'] = pd.to_datetime(mydata['Start'], errors='coerce')
+
+mydata['End'] = pd.to_datetime(mydata['End'], errors='coerce')
+
+numeric_columns = mydata.select_dtypes(include='number').columns
+
+mydata[numeric_columns] = mydata[numeric_columns].fillna(mydata[numeric_columns].mean())
+mydata.columns
+
+plt.figure(figsize=(12, 8))
+
+sns.histplot(mydata['Avg Bearer TP DL (kbps)'], bins=30, kde=True, color='blue')
+
+plt.title('Distribution of Avg Bearer TP DL (kbps)')
+
+plt.xlabel('Avg Bearer TP DL (kbps)')
+
+plt.ylabel('Frequency')
+
+plt.show()
+
+numeric_columns = mydata.select_dtypes(include=['float64', 'int64']).columns
+
+correlation_matrix = mydata[numeric_columns].corr()
+ 
+plt.figure(figsize=(15, 10))
+
+sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', fmt=".2f")
+
+plt.title('Correlation Matrix')
+
+plt.show()
+ 
+plt.figure(figsize=(12, 8))
+
+sns.boxplot(x='Handset Type', y='Avg RTT DL (ms)', data=mydata)
+
+plt.title('Avg RTT DL (ms) by Handset Type')
+
+plt.xlabel('Handset Type')
+
+plt.ylabel('Avg RTT DL (ms)')
+
+plt.show()
+
+plt.figure(figsize=(12, 8))
+
+sns.scatterplot(x='Total UL (Bytes)', y='Total DL (Bytes)', data=mydata, hue='Handset Manufacturer')
+
+plt.title('User Engagement: Total UL vs Total DL')
+
+plt.xlabel('Total UL (Bytes)')
+
+plt.ylabel('Total DL (Bytes)')
+
+plt.legend()
+
+plt.show()
+ 
+features = mydata[['Avg Bearer TP DL (kbps)', 'Avg Bearer TP UL (kbps)', 'Avg RTT DL (ms)', 'Avg RTT UL (ms)']]
+
+target = mydata['cluster']  
+scaler = StandardScaler()
+
+features_scaled = scaler.fit_transform(features)
+ 
+X_train, X_test, y_train, y_test = train_test_split(features_scaled, target, test_size=0.2, random_state=42)
+ 
+model = LinearRegression()
+
+model.fit(X_train, y_train)
+ 
+y_pred = model.predict(X_test)
+ 
+mse = mean_squared_error(y_test, y_pred)
+
+r2 = r2_score(y_test, y_pred)
+ 
+print(f'Mean Squared Error: {mse}')
+
+print(f'R-squared: {r2}')
+import pandas as pd
+
+import seaborn as sns
+
+import matplotlib.pyplot as plt
+
+from sqlalchemy import create_engine
+ 
+class UserOverviewAnalysis:
+  def __init__(self, mydata):
+  self.mydata = mydata
+  def clean_and_preprocess(self):
+  cleaned_data = self.mydata.dropna()
+  cleaned_data['Start'] = pd.to_datetime(cleaned_data['Start'], errors='coerce')
+  cleaned_data['End'] = pd.to_datetime(cleaned_data['End'], errors='coerce')
+  numeric_columns = cleaned_data.select_dtypes(include='number').columns
+  cleaned_data.loc[:, numeric_columns] = cleaned_data.loc[:, numeric_columns].fillna(cleaned_data[numeric_columns].mean())
+  return cleaned_data
+  def visualize_results(self):
+  sns.set_theme(style="whitegrid")
+  plt.figure(figsize=(10, 6))
+  plt.show()
+  def aggregate_user_behaviour(self):
+  user_device_mapping = self.mydata.groupby(['IMSI', 'MSISDN/Number'])['IMEI'].unique()
+  aggregated_data = self.mydata.groupby('Bearer Id').sum()   return aggregated_data
+  def top_10_handsets(self):
+  top_10_handsets = self.mydata['IMEI'].value_counts().nlargest(10)
+  return top_10_handsets
+  def top_3_manufacturers(self):
+  cleaned_data = self.clean_and_preprocess()   cleaned_data['IMEI'] = cleaned_data['IMEI'].astype(str)
+  cleaned_data['Manufacturer'] = cleaned_data['IMEI'].str[:8]
+  top_3_manufacturers = cleaned_data['Manufacturer'].value_counts().nlargest(3)
+  return top_3_manufacturers
+  def top_5_handsets_per_manufacturer(self):
+  cleaned_data = self.clean_and_preprocess()   cleaned_data['IMEI'] = cleaned_data['IMEI'].astype(str)
+  cleaned_data['Manufacturer'] = cleaned_data['IMEI'].str[:8]
+  top_manufacturers = cleaned_data['Manufacturer'].value_counts().nlargest(3).index
+  combined_top_handsets = pd.DataFrame()
+  for manufacturer in top_manufacturers:
+  manufacturer_data = cleaned_data[cleaned_data['Manufacturer'] == manufacturer]
+  top_handsets = manufacturer_data['IMEI'].value_counts().nlargest(5).reset_index()
+  top_handsets.columns = ['IMEI', f'Top 5 Handsets for {manufacturer}']
+  combined_top_handsets = pd.concat([combined_top_handsets, top_handsets], axis=1)
+  return combined_top_handsets
+  def data_analysis(self):
+  applications = ['Social Media DL (Bytes)', 'Gaming UL (Bytes)']
+  plt.figure(figsize=(12, 8))
+  for app in applications:
+  sns.histplot(self.mydata[self.mydata[app] > 0][app], label=app, kde=True)
+  plt.title('Distribution of Session Durations for Each Application')
+  plt.xlabel('Session Duration')
+  plt.ylabel('Frequency')
+  plt.legend()
+  plt.show()
+ 
+db_params = {
+  'dbname': 'week1',
+  'user': 'postgres',
+  'password': 'habte',
+  'host': 'localhost',
+  'port': '5432'
+
+}
+ 
+engine = create_engine(f'postgresql+psycopg2://{db_params["user"]}:{db_params["password"]}@{db_params["host"]}:{db_params["port"]}/{db_params["dbname"]}')
+ 
+sql_query = "SELECT * FROM xdr_data;"
+
+mydata = pd.read_sql_query(sql_query, engine)
+ 
+user_analysis = UserOverviewAnalysis(mydata)
+
+cleaned_data = user_analysis.clean_and_preprocess()
+
+aggregated_data = user_analysis.aggregate_user_behaviour()
+
+top_10_handsets = user_analysis.top_10_handsets()
+
+top_3_manufacturers = user_analysis.top_3_manufacturers()
+
+top_5_handsets_per_manufacturer = user_analysis.top_5_handsets_per_manufacturer()
+
+user_analysis.visualize_results()
+
+user_analysis.data_analysis()
+import pandas as pd
+from sqlalchemy import create_engine
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+class UserEngagementAnalysis:
+  def __init__(self, db_params):
+  self.db_params = db_params
+  self.mydata = self.load_data_from_database()
+  def load_data_from_database(self):
+  engine = create_engine(f'postgresql+psycopg2://{self.db_params["user"]}:{self.db_params["password"]}@{self.db_params["host"]}:{self.db_params["port"]}/{self.db_params["dbname"]}')
+  sql_query = "SELECT * FROM xdr_data;"
+  mydata = pd.read_sql_query(sql_query, engine)
+  return mydata
+  def perform_analysis(self):
+  """
+  Perform user engagement analysis by calling various analysis functions.
+  """
+  self.aggregate_per_user_session_duration()
+  self.aggregate_per_user_data_usage()
+  self.aggregate_per_user_social_media_usage()
+  def aggregate_per_user_session_duration(self):
+  """
+  Aggregate per user the total session duration.
+  """
+  result = self.mydata.groupby('MSISDN/Number')['Dur. (ms)'].sum().reset_index()
+  print("Per user total session duration:")
+  print(result)
+  def aggregate_per_user_data_usage(self):
+  """
+  Aggregate per user the total download (DL) and upload (UL) data.
+  """
+  data_columns = ['Total DL (Bytes)', 'Total UL (Bytes)']
+  result = self.mydata.groupby('MSISDN/Number')[data_columns].sum().reset_index()
+  print("Per user total download and upload data:")
+  print(result)
+  self.plot_data_usage_distribution(result, 'Data Usage Distribution')
+  def aggregate_per_user_social_media_usage(self):
+  """
+  Aggregate per user the total data volume for Social Media.
+  """
+  social_media_columns = ['Social Media DL (Bytes)', 'Social Media UL (Bytes)']
+  result = self.mydata.groupby('MSISDN/Number')[social_media_columns].sum().reset_index()
+  print("Per user total social media usage:")
+  print(result)
+  def plot_data_usage_distribution(self, data, title):
+  """
+  Plot the distribution of data usage.
+  """
+  plt.figure(figsize=(10, 6))
+  sns.histplot(data['Total DL (Bytes)'] + data['Total UL (Bytes)'], bins=30, kde=True, color='skyblue')
+  plt.title(title)
+  plt.xlabel('Total Data Usage (Bytes)')
+  plt.ylabel('Frequency')
+  plt.show()
+
+db_params = {
+  'dbname': 'week1',
+  'user': 'postgres',
+  'password': 'habte',
+  'host': 'localhost',
+  'port': '5432'
+}
+import pandas as pd
+import seaborn as sns
+import numpy as np
+import psycopg2
+import matplotlib.pyplot as plt
+from sqlalchemy import create_engine
+
+class UserOverviewAnalysis:
+  def __init__(self, mydata):
+  self.mydata = mydata
+  def clean_and_preprocess(self):
+  cleaned_data = self.mydata.dropna()
+  cleaned_data['Start'] = pd.to_datetime(cleaned_data['Start'], errors='coerce')
+  cleaned_data['End'] = pd.to_datetime(cleaned_data['End'], errors='coerce')
+  numeric_columns = cleaned_data.select_dtypes(include='number').columns
+  cleaned_data.loc[:, numeric_columns] = cleaned_data.loc[:, numeric_columns].fillna(cleaned_data[numeric_columns].mean())
+  return cleaned_data
+  def aggregate_user_behaviour(self):
+  aggregated_data = self.mydata.drop(columns=['datetime_column']).groupby('Bearer Id').sum()
+  return aggregated_data
+  def sessions_per_user(self):
+  sessions_user = mydata['MSISDN/Number'].value_counts()
+  return sessions_user
+  def total_data_per_user(self):
+  total_per_user= mydata.groupby('MSISDN/Number').agg({
+  'Total DL (Bytes)': 'sum',
+  'Total UL (Bytes)': 'sum'
+})
+  return total_per_user
+  def top_handsets_by(self):
+  top_by= self.mydata['Handset Type'].value_counts().head(10)
+  return top_by
+  def user_device_mapping(self):
+  user_mapping = mydata.groupby(['IMSI', 'MSISDN/Number'])['IMEI'].unique()
+  return user_mapping
+  def top_10_user(self):
+  top_users = mydata.nlargest(10, 'Total UL (Bytes)')
+  return top_users
+  def application_columns(self):
+  app_columns = ['Social Media DL (Bytes)', 'Gaming UL (Bytes)']
+  app_usage = mydata[app_columns].sum()
+  return app_usage
+  def network_tech_distribution(self):
+  network_distribution = mydata['Bearer Id'].value_counts()
+  return network_distribution
+  def top_10_handsets(self):
+  top_10_handsets = self.mydata['Handset Type'].value_counts().head(10)
+  return top_10_handsets
+  def top_3_manufacturers(self):
+  top_manufacturer=self.mydata['Handset Manufacturer'].value_counts().head(3)
+  return top_manufacturer
+  def top_5_handsets_per_manufacturer(self):
+  cleaned_data = self.clean_and_preprocess()   cleaned_data.loc[:, 'Start'] = pd.to_datetime(cleaned_data['Start'], errors='coerce')
+  cleaned_data.loc[:, 'End'] = pd.to_datetime(cleaned_data['End'], errors='coerce')
+  cleaned_data.loc[:, 'IMEI'] = cleaned_data['IMEI'].astype(str)
+  cleaned_data.loc[:, 'Manufacturer'] = cleaned_data['IMEI'].str[:8]
+  top_manufacturers = cleaned_data.loc[:, 'Manufacturer'].value_counts().nlargest(3).index
+  combined_top_handsets = pd.DataFrame()
+  for manufacturer in top_manufacturers:
+  manufacturer_data = cleaned_data[cleaned_data['Manufacturer'] == manufacturer]
+  top_handsets = manufacturer_data['IMEI'].value_counts().nlargest(5).reset_index()
+  top_handsets.columns = ['IMEI', f'Top 5 Handsets for {manufacturer}']
+  combined_top_handsets = pd.concat([combined_top_handsets, top_handsets], axis=1)
+  return combined_top_handsets
+ 
+db_params = {
+  'dbname': 'week1',
+  'user': 'postgres',
+  'password': 'habte',
+  'host': 'localhost',
+  'port': '5432'
+}
+
+engine = create_engine(f'postgresql+psycopg2://{db_params["user"]}:{db_params["password"]}@{db_params["host"]}:{db_params["port"]}/{db_params["dbname"]}')
+
+sql_query = "SELECT * FROM xdr_data;"
+mydata = pd.read_sql_query(sql_query, engine)
+ 
+user_analysis = UserOverviewAnalysis(mydata)
+import streamlit as st
+import pandas as pd
+from sqlalchemy import create_engine
+from analysis_modules.user_overview import UserOverviewAnalysis
+from analysis_modules.user_engagement import UserEngagementAnalysis
+from analysis_modules.user_experience import UserExperienceAnalysis
+from analysis_modules.user_satisfaction import UserSatisfactionAnalysis
+
+db_params = {
+  'dbname': 'week1',
+  'user': 'postgres',
+  'password': 'habte',
+  'host': 'localhost',
+  'port': '5432'
+}
+
+engine = create_engine(f'postgresql+psycopg2://{db_params["user"]}:{db_params["password"]}@{db_params["host"]}:{db_params["port"]}/{db_params["dbname"]}')
+
+sql_query = "SELECT * FROM xdr_data;"
+
+mydata = pd.read_sql_query(sql_query, engine)
+
+selected_analysis = st.sidebar.selectbox("Select Analysis", ["User Overview", "User Engagement", "User Experience", "User Satisfaction"])
+
+if selected_analysis == "User Overview":
+  analysis = UserOverviewAnalysis(mydata)
+elif selected_analysis == "User Engagement":
+  analysis = UserEngagementAnalysis(mydata)
+elif selected_analysis == "User Experience":
+  analysis = UserExperienceAnalysis(mydata)
+elif selected_analysis == "User Satisfaction":
+  analysis = UserSatisfactionAnalysis(mydata)
+
+st.title(f"{selected_analysis} Analysis")
+result = analysis.perform_analysis()
+st.write(result)
+import numpy as np
+
+import pandas as pd
+
+import psycopg2
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+from sqlalchemy import create_engine
+ 
+db_params = {
+  'dbname': 'week1',
+  'user': 'postgres',
+  'password': 'habte',
+  'host': 'localhost',
+  'port': '5432'
+
+}
+ 
+engine = create_engine(f'postgresql+psycopg2://{db_params["user"]}:{db_params["password"]}@{db_params["host"]}:{db_params["port"]}/{db_params["dbname"]}')
+ 
+sql_query = "SELECT * FROM xdr_data;"
+ 
+mydata = pd.read_sql_query(sql_query, engine)
+
+print(mydata.info())
+
+print(mydata.shape)
+
+mydata = mydata.dropna()
+mydata['Start'] = pd.to_datetime(mydata['Start'], errors='coerce')
+
+mydata['End'] = pd.to_datetime(mydata['End'], errors='coerce')
+
+numeric_columns = mydata.select_dtypes(include='number').columns
+
+mydata[numeric_columns] = mydata[numeric_columns].fillna(mydata[numeric_columns].mean())
+
+print(mydata.head(5))
+print(mydata.describe())
+
+user_device_mapping = mydata.groupby(['IMSI', 'MSISDN/Number'])['IMEI'].unique()
+ 
+print(user_device_mapping)
+import matplotlib.pyplot as plt
+ 
+plt.hist(mydata['Dur. (ms)'])
+
+plt.xlabel('Session Duration (ms)')
+
+plt.ylabel('Frequency')
+
+plt.show()
+
+top_users = mydata.nlargest(10, 'Total UL (Bytes)')
+
+print(top_users)
+ 
+app_columns = ['Social Media DL (Bytes)', 'Gaming UL (Bytes)']
+
+app_usage = mydata[app_columns].sum()
+
+print(app_usage)
+
+network_tech_distribution = mydata['Bearer Id'].value_counts()
+
+print(network_tech_distribution)
+
+location_analysis = mydata.groupby('Last Location Name').agg({'Dur. (ms)': 'mean', 'Total DL (Bytes)': 'sum'})
+
+print(location_analysis)
+
+mydata['Start'] = pd.to_datetime(mydata['Start'])
+
+mydata['Hour'] = mydata['Start'].dt.hour
+
+time_analysis = mydata.groupby('Hour').agg({'Dur. (ms)': 'mean', 'Total DL (Bytes)': 'sum'})
+
+print(time_analysis)
+
+top_handsets = mydata['IMEI'].value_counts().nlargest(10)
+ 
+print(top_handsets)
+
+mydata['IMEI'] = mydata['IMEI'].astype(str)
+ 
+mydata['Manufacturer'] = mydata['IMEI'].str[:8]
+ 
+top_manufacturers = mydata['Manufacturer'].value_counts().nlargest(3)
+ 
+print(top_manufacturers)
+mydata['IMEI'] = mydata['IMEI'].astype(str)
+ 
+mydata['Manufacturer'] = mydata['IMEI'].str[:8]
+ 
+top_manufacturers = mydata['Manufacturer'].value_counts().nlargest(3).index
+ 
+for manufacturer in top_manufacturers:
+  manufacturer_data = mydata[mydata['Manufacturer'] == manufacturer]
+  top_handsets = manufacturer_data['IMEI'].value_counts().nlargest(5)
+  print(f"\nTop 5 handsets for {manufacturer}:")
+  print(top_handsets)
+ 
+sessions_per_user = mydata['MSISDN/Number'].value_counts()
+ 
+print(sessions_per_user)
+import matplotlib.pyplot as plt
+ 
+plt.hist(sessions_per_user, bins=20, edgecolor='black')
+
+plt.xlabel('Number of Sessions')
+
+plt.ylabel('Number of Users')
+
+plt.title('Distribution of xDR Sessions per User')
+
+plt.show()
+
+session_duration_per_user = mydata.groupby('MSISDN/Number')['Dur. (ms)'].sum()
+ 
+print(session_duration_per_user)
+
+plt.hist(session_duration_per_user, bins=20, edgecolor='black')
+
+plt.xlabel('Total Session Duration (ms)')
+
+plt.ylabel('Number of Users')
+
+plt.title('Distribution of Session Durations per User')
+
+plt.show()
+
+total_data_per_user = mydata.groupby('MSISDN/Number').agg({
+  'Total DL (Bytes)': 'sum',
+  'Total UL (Bytes)': 'sum'
+
+})
+ 
+print(total_data_per_user)
+import matplotlib.pyplot as plt
+ 
+plt.scatter(total_data_per_user['Total DL (Bytes)'], total_data_per_user['Total UL (Bytes)'])
+
+plt.xlabel('Total Download (Bytes)')
+
+plt.ylabel('Total Upload (Bytes)')
+
+plt.title('Total Download vs Total Upload per User')
+
+plt.show()
+ 
+mydata['Total_Social_Media_Usage'] = mydata['Social Media DL (Bytes)'] + mydata['Social Media UL (Bytes)']
+
+mydata['Total_Google_Usage'] = mydata['Google DL (Bytes)'] + mydata['Google UL (Bytes)']
+ 
+aggregated_data = mydata.groupby('MSISDN/Number').agg({
+  'Total_Social_Media_Usage': 'sum',
+  'Total_Google_Usage': 'sum',
+ 
+})
+ 
+print(aggregated_data)
+
+applications_columns = [
+  'Social Media DL (Bytes)', 'Social Media UL (Bytes)',
+  'Google DL (Bytes)', 'Google UL (Bytes)',
+  'Email DL (Bytes)', 'Email UL (Bytes)',
+  'Youtube DL (Bytes)', 'Youtube UL (Bytes)',
+  'Netflix DL (Bytes)', 'Netflix UL (Bytes)',
+  'Gaming DL (Bytes)', 'Gaming UL (Bytes)'
+
+]
+ 
+for app_column in applications_columns:
+  app_name = app_column.split(' ')[0]   total_column = f'Total_{app_name}_Usage'
+  mydata[total_column] = mydata[app_column]
+ 
+aggregated_data = mydata.groupby(['MSISDN/Number', 'Start']).agg({
+  'Total_Social_Media_Usage': 'sum',
+  'Total_Google_Usage': 'sum',
+  'Total_Email_Usage': 'sum',
+  'Total_Youtube_Usage': 'sum',
+  'Total_Netflix_Usage': 'sum',
+  'Total_Gaming_Usage': 'sum',
+
+})
+ 
+print(aggregated_data)
+
+sessions_per_user = mydata['MSISDN/Number'].value_counts()
+
+sessions_per_user.describe()
+mydata['Session_Duration'] = mydata['Dur. (ms)'] / 1000  
+session_duration_stats = mydata['Session_Duration'].describe()
+session_duration_stats
+applications_columns = ['Total_Social_Media_Usage', 'Total_Google_Usage', 'Total_Email_Usage', 'Total_Youtube_Usage', 'Total_Netflix_Usage', 'Total_Gaming_Usage']
+
+total_data_per_app = mydata[applications_columns].sum()
+total_data_per_app 
+avg_data_per_app = mydata.groupby('MSISDN/Number')[applications_columns].mean()
+avg_data_per_app
+avg_rtt_dl = mydata['Avg RTT DL (ms)'].mean()
+
+avg_rtt_ul = mydata['Avg RTT UL (ms)'].mean()
+avg_rtt_dl
+avg_rtt_ul
+tcp_retransmission_dl = mydata['TCP DL Retrans. Vol (Bytes)'].sum()
+
+tcp_retransmission_ul = mydata['TCP UL Retrans. Vol (Bytes)'].sum()
+tcp_retransmission_dl
+tcp_retransmission_ul
+top_handsets = mydata['Handset Type'].value_counts().head(10)
+top_handsets
+top_manufacturers = mydata['Handset Manufacturer'].value_counts().head(3)
+top_manufacturers
+busiest_hours = mydata['Hour'].value_counts().sort_index()
+busiest_hours 
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+ 
+sns.set(style="whitegrid")
+ 
+plt.figure(figsize=(12, 6))
+
+sns.histplot(mydata['Session_Duration'], bins=30, kde=True, color='skyblue')
+
+plt.title('Distribution of Session Duration')
+
+plt.xlabel('Session Duration (seconds)')
+
+plt.ylabel('Frequency')
+
+plt.show()
+
+applications_columns = ['Total_Social_Media_Usage', 'Total_Google_Usage', 'Total_Email_Usage', 'Total_Youtube_Usage', 'Total_Netflix_Usage', 'Total_Gaming_Usage']
+
+plt.figure(figsize=(12, 8))
+
+sns.boxplot(data=mydata[applications_columns])
+
+plt.title('Box Plot of Total Data Volume per Application')
+
+plt.xlabel('Application')
+
+plt.ylabel('Total Data Volume (Bytes)')
+
+plt.xticks(rotation=45, ha='right')
+
+plt.show()
+ 
+busiest_hours = mydata['Hour'].value_counts().sort_index()
+
+plt.figure(figsize=(12, 6))
+
+sns.lineplot(x=busiest_hours.index, y=busiest_hours.values, marker='o', color='orange')
+
+plt.title('Busiest Hours of Network Usage')
+
+plt.xlabel('Hour of the Day')
+
+plt.ylabel('Number of Sessions')
+
+plt.show()
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+ 
+numeric_variables = mydata.select_dtypes(include='number')
+ 
+for col in numeric_variables.columns:
+  plt.figure(figsize=(8, 5))
+  sns.histplot(mydata[col], bins=20, kde=True, color='skyblue')
+  plt.title(f'Histogram of {col}')
+  plt.xlabel(col)
+  plt.ylabel('Frequency')
+  plt.show()
+
+for col in numeric_variables.columns:
+  plt.figure(figsize=(8, 5))
+  sns.boxplot(x=mydata[col], color='lightcoral')
+  plt.title(f'Box Plot of {col}')
+  plt.xlabel(col)
+  plt.show()
+
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+ 
+applications_columns = ['Social Media DL (Bytes)', 'Social Media UL (Bytes)',
+  'Google DL (Bytes)', 'Google UL (Bytes)',
+  'Email DL (Bytes)', 'Email UL (Bytes)',
+  'Youtube DL (Bytes)', 'Youtube UL (Bytes)',
+  'Netflix DL (Bytes)', 'Netflix UL (Bytes)',
+  'Gaming DL (Bytes)', 'Gaming UL (Bytes)']
+ 
+for app_col in applications_columns:
+  plt.figure(figsize=(8, 5))
+  sns.scatterplot(x=mydata[app_col], y=mydata['Total DL (Bytes)'] + mydata['Total UL (Bytes)'], alpha=0.7)
+  plt.title(f'Scatter Plot: {app_col} vs Total Data Usage')
+  plt.xlabel(app_col)
+  plt.ylabel('Total DL+UL Data Usage (Bytes)')
+  plt.show()
+
+correlation_matrix = mydata[applications_columns + ['Total DL (Bytes)', 'Total UL (Bytes)']].corr()
+ 
+print("Correlation Matrix:")
+
+print(correlation_matrix)
+
+import statsmodels.api as sm
+ 
+X = mydata['Social Media DL (Bytes)'] + mydata['Social Media UL (Bytes)']
+
+X = sm.add_constant(X)
+
+y = mydata['Total DL (Bytes)'] + mydata['Total UL (Bytes)']
+ 
+model = sm.OLS(y, X).fit()
+ 
+print(model.summary())
+
+import pandas as pd
+
+import numpy as np
+ 
+mydata['Total_Duration'] = mydata['Dur. (ms)']
+ 
+mydata['Duration_Decile'] = pd.qcut(mydata['Total_Duration'], q=[0, 0.2, 0.4, 0.6, 0.8, 1], labels=False, precision=0, duplicates='drop')
+ 
+mydata['Total_Data'] = mydata['Total DL (Bytes)'] + mydata['Total UL (Bytes)']
+ 
+data_per_decile = mydata.groupby('Duration_Decile')['Total_Data'].sum().reset_index()
+ 
+print(data_per_decile)
+ 
+selected_columns = ['Social Media DL (Bytes)', 'Google DL (Bytes)', 'Email DL (Bytes)',
+  'Youtube DL (Bytes)', 'Netflix DL (Bytes)', 'Gaming DL (Bytes)', 'Other DL (Bytes)']
+ 
+app_data = mydata[selected_columns]
+ 
+correlation_matrix = app_data.corr()
+ 
+print(correlation_matrix)
+
+from sklearn.decomposition import PCA
+
+from sklearn.preprocessing import StandardScaler
+
+selected_columns = ['Social Media DL (Bytes)', 'Google DL (Bytes)', 'Email DL (Bytes)',
+  'Youtube DL (Bytes)', 'Netflix DL (Bytes)', 'Gaming DL (Bytes)', 'Other DL (Bytes)']
+ 
+app_data = mydata[selected_columns]
+
+scaler = StandardScaler()
+
+app_data_standardized = scaler.fit_transform(app_data)
+
+pca = PCA()
+
+pca_result = pca.fit_transform(app_data_standardized)
+
+explained_variance_ratio = pca.explained_variance_ratio_
+ 
+print("Explained Variance Ratio:", explained_variance_ratio)
+
+top_components = pca_result[:, :2]
+ 
+print("Top 2 Principal Components:")
+
+print(top_components)
+
+top_3_manufacturers = mydata['Handset Manufacturer'].value_counts().head(3).index
+ 
+mydata_top_3_manufacturers = mydata[mydata['Handset Manufacturer'].isin(top_3_manufacturers)]
+ 
+top_5_handsets_per_manufacturer = (
+  mydata_top_3_manufacturers.groupby('Handset Manufacturer')['Handset Type']
+  .value_counts()
+  .groupby(level=0, group_keys=False)
+  .nlargest(5)
+  .reset_index(name='Count')
+
+)
+ 
+print("Top 5 Handsets per Top 3 Handset Manufacturers:")
+
+print(top_5_handsets_per_manufacturer)
+ 
+top_3_manufacturers = mydata['Handset Manufacturer'].value_counts().head(3)
+ 
+print("Top 3 Handset Manufacturers:")
+
+print(top_3_manufacturers)
+ 
+data = {
+  'Handset Manufacturer': ['Apple', 'Samsung', 'Huawei'],
+  'Count': [59565, 40839, 34423]
+
+}
+ 
+df = pd.DataFrame(data)
+ 
+plt.figure(figsize=(8, 8))
+
+plt.pie(df['Count'], labels=df['Handset Manufacturer'], autopct='%1.1f%%', startangle=90, colors=['skyblue', 'lightcoral', 'lightgreen'])
+
+plt.title('Distribution of Top 3 Handset Manufacturers')
+
+plt.show()
+ 
+plt.figure(figsize=(16, 8))
+
+sns.barplot(x='Handset Type', y='Count', hue='Handset Manufacturer', data=top_5_handsets_per_manufacturer, palette='viridis')
+
+plt.xticks(rotation=45, ha='right')
+
+plt.title('Top 5 Handsets per Top 3 Handset Manufacturers')
+
+plt.xlabel('Handset Type')
+
+plt.ylabel('Count')
+
+plt.tight_layout()
+
+plt.legend(title='Handset Manufacturer')
+
+plt.show()
+
+data = {
+  'Handset Type': ['Apple iPhone 6S (A1688)', 'Apple iPhone 6 (A1586)', 'Apple iPhone 7 (A1778)', 'Apple iPhone Se (A1723)', 'Apple iPhone 8 (A1905)'],
+  'Count': [9419, 9023, 6326, 5187, 4993]
+
+}
+ 
+df = pd.DataFrame(data)
+ 
+manufacturers = ['Apple', 'Samsung', 'Huawei']
+ 
+plt.figure(figsize=(20, 5))
+ 
+for i, manufacturer in enumerate(manufacturers, 1):
+  plt.subplot(1, 3, i)
+  manufacturer_data = df[df['Handset Type'].str.contains(manufacturer)]
+  plt.pie(manufacturer_data['Count'], labels=manufacturer_data['Handset Type'], autopct='%1.1f%%', startangle=140)
+  plt.title(f'Distribution of Users for {manufacturer}')
+ 
+plt.tight_layout()
+ 
+plt.show()
+ 
+user_xdr_sessions = mydata.groupby('MSISDN/Number')['Bearer Id'].count().reset_index(name='Number_of_xDR_sessions')
+ 
+print("Aggregated Information - Number of xDR Sessions per User:")
+
+print(user_xdr_sessions)
+ 
+mydata['Start'] = pd.to_datetime(mydata['Start'])
+
+mydata['End'] = pd.to_datetime(mydata['End'])
+
+mydata['Session_Duration'] = (mydata['End'] - mydata['Start']).dt.total_seconds()
+
+user_session_duration = mydata.groupby('MSISDN/Number')['Session_Duration'].sum().reset_index(name='Total_Session_Duration')
+
+print("Aggregated Session Duration per User:")
+
+print(user_session_duration)
+
+user_data_volume = mydata.groupby('MSISDN/Number').agg(
+  Total_DL_data=('Total DL (Bytes)', 'sum'),
+  Total_UL_data=('Total UL (Bytes)', 'sum')
+
+).reset_index()
+ 
+print("Aggregated Download and Upload Data per User:")
+
+print(user_data_volume)
+ 
+user_app_data_volume = mydata.groupby('MSISDN/Number').agg(
+  Social_Media_DL=('Social Media DL (Bytes)', 'sum'),
+  Social_Media_UL=('Social Media UL (Bytes)', 'sum'),
+  Google_DL=('Google DL (Bytes)', 'sum'),
+  Google_UL=('Google UL (Bytes)', 'sum'),
+  Email_DL=('Email DL (Bytes)', 'sum'),
+  Email_UL=('Email UL (Bytes)', 'sum'),
+  Youtube_DL=('Youtube DL (Bytes)', 'sum'),
+  Youtube_UL=('Youtube UL (Bytes)', 'sum'),
+  Netflix_DL=('Netflix DL (Bytes)', 'sum'),
+  Netflix_UL=('Netflix UL (Bytes)', 'sum'),
+  Gaming_DL=('Gaming DL (Bytes)', 'sum'),
+  Gaming_UL=('Gaming UL (Bytes)', 'sum'),
+  Other_DL=('Other DL (Bytes)', 'sum'),
+  Other_UL=('Other UL (Bytes)', 'sum')
+
+).reset_index()
+ 
+print("Aggregated Data Volume per User for Each Application:")
+
+print(user_app_data_volume)
+ 
+user_aggregated_data = mydata.groupby('MSISDN/Number').agg(
+  Number_of_xDR_sessions=('Bearer Id', 'count'),
+  Session_Duration=('Session_Duration', 'sum'),
+  Total_DL_data=('Total DL (Bytes)', 'sum'),
+  Total_UL_data=('Total UL (Bytes)', 'sum'),
+  Social_Media_DL=('Social Media DL (Bytes)', 'sum'),
+  Social_Media_UL=('Social Media UL (Bytes)', 'sum'),
+  Google_DL=('Google DL (Bytes)', 'sum'),
+  Google_UL=('Google UL (Bytes)', 'sum'),
+  Email_DL=('Email DL (Bytes)', 'sum'),
+  Email_UL=('Email UL (Bytes)', 'sum'),
+  Youtube_DL=('Youtube DL (Bytes)', 'sum'),
+  Youtube_UL=('Youtube UL (Bytes)', 'sum'),
+  Netflix_DL=('Netflix DL (Bytes)', 'sum'),
+  Netflix_UL=('Netflix UL (Bytes)', 'sum'),
+  Gaming_DL=('Gaming DL (Bytes)', 'sum'),
+  Gaming_UL=('Gaming UL (Bytes)', 'sum'),
+  Other_DL=('Other DL (Bytes)', 'sum'),
+  Other_UL=('Other UL (Bytes)', 'sum')
+
+).reset_index()
+ 
+plt.figure(figsize=(15, 10))
+
+plt.bar(user_aggregated_data['MSISDN/Number'], user_aggregated_data['Number_of_xDR_sessions'], label='Number of xDR Sessions')
+
+plt.bar(user_aggregated_data['MSISDN/Number'], user_aggregated_data['Session_Duration'], label='Session Duration', alpha=0.7)
+
+plt.bar(user_aggregated_data['MSISDN/Number'], user_aggregated_data['Total_DL_data'], label='Total DL Data', alpha=0.7)
+
+plt.bar(user_aggregated_data['MSISDN/Number'], user_aggregated_data['Total_UL_data'], label='Total UL Data', alpha=0.7)
+
+plt.legend()
+
+plt.xlabel('MSISDN/Number')
+
+plt.ylabel('Aggregated Values')
+
+plt.title('Aggregated Information per User')
+
+plt.xticks(rotation=45, ha='right')
+
+plt.tight_layout()
+
+plt.show()
+
+summary_statistics = mydata.describe()
+ 
+top_handsets = mydata['Handset Type'].value_counts().head(10)
+
+plt.figure(figsize=(12, 6))
+
+sns.barplot(x=top_handsets.index, y=top_handsets.values)
+
+plt.xticks(rotation=45, ha='right')
+
+plt.title('Distribution of Users by Handset Type (Top 10)')
+
+plt.xlabel('Handset Type')
+
+plt.ylabel('Count')
+
+plt.show()
+
+plt.figure(figsize=(10, 6))
+
+sns.histplot(mydata['Session_Duration'], bins=30, kde=True)
+
+plt.title('Distribution of Session Durations')
+
+plt.xlabel('Session Duration (seconds)')
+
+plt.ylabel('Frequency')
+
+plt.show()
+
+plt.figure(figsize=(10, 6))
+
+sns.scatterplot(x='Total DL (Bytes)', y='Total UL (Bytes)', data=mydata)
+
+plt.title('Scatter Plot of Total DL vs Total UL Data')
+
+plt.xlabel('Total DL Data (Bytes)')
+
+plt.ylabel('Total UL Data (Bytes)')
+
+plt.show()
+
+mixed_data_columns = mydata.select_dtypes(include='object').columns
+
+print(f'Columns with mixed data types: {mixed_data_columns}')
+ 
+plt.figure(figsize=(10, 6))
+
+sns.scatterplot(x='Total DL (Bytes)', y='Total UL (Bytes)', data=mydata)
+
+plt.title('Scatter Plot of Total DL vs Total UL Data')
+
+plt.xlabel('Total DL Data (Bytes)')
+
+plt.ylabel('Total UL Data (Bytes)')
+
+plt.show()
+ 
+summary_statistics = mydata.describe()
+ 
+top_handsets = mydata['Handset Type'].value_counts().head(10)
+
+plt.figure(figsize=(12, 6))
+
+sns.barplot(x=top_handsets.values, y=top_handsets.index, orient='h')
+
+plt.title('Distribution of Users by Handset Type (Top 10)')
+
+plt.xlabel('Count')
+
+plt.ylabel('Handset Type')
+
+plt.show()
+
+basic_metrics = mydata.describe()
+ 
+dispersion_parameters = mydata.describe().loc[['std', 'min', '25%', '50%', '75%', 'max']]
+ 
+plt.figure(figsize=(15, 10))
+
+sns.boxplot(data=mydata.select_dtypes(include=['float64']))
+
+plt.title('Boxplot for Quantitative Variables')
+
+plt.show()
+
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+ 
+application = 'Social Media'
+ 
+subset_data = mydata[[f'{application} DL (Bytes)', f'{application} UL (Bytes)', 'Total DL (Bytes)', 'Total UL (Bytes)']]
+ 
+subset_data['Total DL+UL Data'] = subset_data['Total DL (Bytes)'] + subset_data['Total UL (Bytes)']
+ 
+plt.figure(figsize=(10, 6))
+
+sns.scatterplot(x=f'{application} DL (Bytes)', y='Total DL+UL Data', data=subset_data)
+
+plt.title(f'Relationship between {application} and Total DL+UL Data')
+
+plt.xlabel(f'{application} DL (Bytes)')
+
+plt.ylabel('Total DL+UL Data')
+
+plt.show()
+ 
+customer_engagement = mydata.groupby('MSISDN/Number').agg({
+  'Bearer Id': 'count',
+  'Dur. (ms)': 'sum',
+  'Total UL (Bytes)': 'sum',
+  'Total DL (Bytes)': 'sum'
+
+}).reset_index()
+ 
+customer_engagement.columns = ['MSISDN', 'Session Count', 'Total Duration', 'Total UL (Bytes)', 'Total DL (Bytes)']
+ 
+customer_engagement['Total Traffic (Bytes)'] = customer_engagement['Total UL (Bytes)'] + customer_engagement['Total DL (Bytes)']
+ 
+top_10_session_count = customer_engagement.sort_values(by='Session Count', ascending=False).head(10)
+
+top_10_duration = customer_engagement.sort_values(by='Total Duration', ascending=False).head(10)
+
+top_10_total_traffic = customer_engagement.sort_values(by='Total Traffic (Bytes)', ascending=False).head(10)
+ 
+print("Top 10 Customers by Session Count:")
+
+print(top_10_session_count[['MSISDN', 'Session Count']])
+
+print("\nTop 10 Customers by Total Duration:")
+
+print(top_10_duration[['MSISDN', 'Total Duration']])
+
+print("\nTop 10 Customers by Total Traffic:")
+
+print(top_10_total_traffic[['MSISDN', 'Total Traffic (Bytes)']])
+
+import matplotlib.pyplot as plt
+ 
+def plot_top_10(data, metric, title):
+  plt.figure(figsize=(10, 6))
+  plt.bar(data['MSISDN'], data[metric], color='skyblue')
+  plt.xlabel('MSISDN')
+  plt.ylabel(metric)
+  plt.title(title)
+  plt.xticks(rotation=45, ha='right')
+  plt.tight_layout()
+  plt.show()
+ 
+plot_top_10(top_10_session_count, 'Session Count', 'Top 10 Customers by Session Count')
+ 
+plot_top_10(top_10_duration, 'Total Duration', 'Top 10 Customers by Total Duration')
+ 
+plot_top_10(top_10_total_traffic, 'Total Traffic (Bytes)', 'Top 10 Customers by Total Traffic')
+
+import pandas as pd
+
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+
+from sqlalchemy import create_engine
+
+from sklearn.preprocessing import StandardScaler
+
+from sklearn.decomposition import PCA
+
+from sklearn.impute import SimpleImputer
+ 
+db_params = {
+  'dbname': 'week1',
+  'user': 'postgres',
+  'password': 'habte',
+  'host': 'localhost',
+  'port': '5432'
+
+}
+ 
+engine = create_engine(f'postgresql+psycopg2://{db_params["user"]}:{db_params["password"]}@{db_params["host"]}:{db_params["port"]}/{db_params["dbname"]}')
+ 
+sql_query = "SELECT * FROM xdr_data;"
+ 
+mydata = pd.read_sql_query(sql_query, engine)
+ 
+imputer = SimpleImputer(strategy='mean')
+
+imputed_data = imputer.fit_transform(mydata.select_dtypes(include=['float64']))
+ 
+scaler = StandardScaler()
+
+scaled_data = scaler.fit_transform(imputed_data)
+ 
+pca = PCA()
+
+principal_components = pca.fit_transform(scaled_data)
+ 
+pca_df = pd.DataFrame(data=principal_components, columns=[f'PC{i}' for i in range(1, pca.n_components_ + 1)])
+ 
+pca_interpretation = [
+  "Principal components capture the variance in the data.",
+  "Each principal component is a linear combination of the original features.",
+  "The first few principal components explain a significant portion of the total variance.",
+  "PCA is useful for dimensionality reduction and identifying patterns in high-dimensional data."
+
+]
+ 
+from pptx import Presentation
+
+from pptx.util import Inches
+
+import os
+ 
+presentation = Presentation()
+ 
+def add_slide(title, content):
+  slide = presentation.slides.add_slide(presentation.slide_layouts[1])   title_box = slide.shapes.title
+  content_box = slide.placeholders[1]
+  title_box.text = title
+  content_box.text = content
+ 
+variable_description = mydata.dtypes.reset_index()
+
+variable_description.columns = ['Variable', 'Data Type']
+
+add_slide("Variable Description", variable_description.to_string(index=False))
+ 
+basic_metrics = mydata.describe()
+
+add_slide("Basic Metrics", basic_metrics.to_string())
+ 
+dispersion_parameters = mydata.describe().loc[['std', 'min', '25%', '50%', '75%', 'max']]
+
+add_slide("Non-Graphical Univariate Analysis", dispersion_parameters.to_string())
+ 
+image_path = 'univariate_analysis_plot.png'
+
+plt.figure(figsize=(15, 10))
+
+sns.boxplot(data=mydata.select_dtypes(include=['float64']))
+
+plt.title('Boxplot for Quantitative Variables')
+
+plt.savefig(image_path)
+
+plt.close()
+
+presentation.slides.add_slide(presentation.slide_layouts[5])  
+presentation.slides[-1].shapes.add_picture(image_path, Inches(1), Inches(1), width=Inches(8))
+
+os.remove(image_path)  
+application_cols = ['Social Media DL (Bytes)', 'Google DL (Bytes)', 'Email DL (Bytes)',
+  'Youtube DL (Bytes)', 'Netflix DL (Bytes)', 'Gaming DL (Bytes)', 'Other DL (Bytes)',
+  'Social Media UL (Bytes)', 'Google UL (Bytes)', 'Email UL (Bytes)',
+  'Youtube UL (Bytes)', 'Netflix UL (Bytes)', 'Gaming UL (Bytes)', 'Other UL (Bytes)']
+ 
+total_data_cols = ['Total DL (Bytes)', 'Total UL (Bytes)']
+
+bivariate_analysis = mydata[application_cols + total_data_cols].corr()
+
+add_slide("Bivariate Analysis", bivariate_analysis.to_string())
+ 
+mydata['Total_Session_Duration'] = mydata['Dur. (ms).1'] / 1000  
+mydata['Decile_Class'] = pd.qcut(mydata['Total_Session_Duration'], q=5, labels=False, duplicates='drop')
+
+total_data_per_decile = mydata.groupby('Decile_Class')[total_data_cols].sum()
+
+add_slide("Variable Transformations", total_data_per_decile.to_string())
+ 
+correlation_matrix = mydata[['Social Media DL (Bytes)', 'Google DL (Bytes)', 'Email DL (Bytes)',
+  'Youtube DL (Bytes)', 'Netflix DL (Bytes)', 'Gaming DL (Bytes)', 'Other DL (Bytes)',
+  'Social Media UL (Bytes)', 'Google UL (Bytes)', 'Email UL (Bytes)',
+  'Youtube UL (Bytes)', 'Netflix UL (Bytes)', 'Gaming UL (Bytes)', 'Other UL (Bytes)']].corr()
+
+add_slide("Correlation Analysis", correlation_matrix.to_string())
+ 
+add_slide("PCA Interpretation", "\n".join(pca_interpretation))
+ 
+presentation.save("telecom_analysis_results.pptx")
+
+import pandas as pd
+
+from sklearn.cluster import KMeans
+
+from sklearn.preprocessing import StandardScaler
+
+import matplotlib.pyplot as plt
+ 
+engagement_metrics = mydata.groupby('MSISDN/Number').agg({
+  'Bearer Id': 'count',   'Dur. (ms).1': 'sum',   'Total UL (Bytes)': 'sum',   'Total DL (Bytes)': 'sum'  
+}).reset_index()
+ 
+engagement_metrics.columns = ['MSISDN', 'Session Frequency', 'Total Session Duration', 'Total UL Traffic', 'Total DL Traffic']
+ 
+top_10_session_frequency = engagement_metrics.sort_values(by='Session Frequency', ascending=False).head(10)
+
+top_10_duration = engagement_metrics.sort_values(by='Total Session Duration', ascending=False).head(10)
+
+top_10_ul_traffic = engagement_metrics.sort_values(by='Total UL Traffic', ascending=False).head(10)
+
+top_10_dl_traffic = engagement_metrics.sort_values(by='Total DL Traffic', ascending=False).head(10)
+ 
+print("Top 10 Customers by Session Frequency:")
+
+print(top_10_session_frequency)
+ 
+print("\nTop 10 Customers by Total Session Duration:")
+
+print(top_10_duration)
+ 
+print("\nTop 10 Customers by Total UL Traffic:")
+
+print(top_10_ul_traffic)
+ 
+print("\nTop 10 Customers by Total DL Traffic:")
+
+print(top_10_dl_traffic)
+ 
+scaler = StandardScaler()
+
+normalized_metrics = scaler.fit_transform(engagement_metrics.iloc[:, 1:])
+ 
+kmeans = KMeans(n_clusters=3, random_state=42)
+
+engagement_metrics['Cluster'] = kmeans.fit_predict(normalized_metrics)
+ 
+cluster_stats = engagement_metrics.groupby('Cluster').agg({
+  'Session Frequency': ['min', 'max', 'mean', 'sum'],
+  'Total Session Duration': ['min', 'max', 'mean', 'sum'],
+  'Total UL Traffic': ['min', 'max', 'mean', 'sum'],
+  'Total DL Traffic': ['min', 'max', 'mean', 'sum']
+
+}).reset_index()
+ 
+print("\nCluster Statistics:")
+
+print(cluster_stats)
+ 
+app_traffic = mydata.groupby('MSISDN/Number').agg({
+  'Social Media DL (Bytes)': 'sum',
+  'Google DL (Bytes)': 'sum',
+  'Email DL (Bytes)': 'sum',
+  'Youtube DL (Bytes)': 'sum',
+  'Netflix DL (Bytes)': 'sum',
+  'Gaming DL (Bytes)': 'sum',
+  'Other DL (Bytes)': 'sum',
+  'Social Media UL (Bytes)': 'sum',
+  'Google UL (Bytes)': 'sum',
+  'Email UL (Bytes)': 'sum',
+  'Youtube UL (Bytes)': 'sum',
+  'Netflix UL (Bytes)': 'sum',
+  'Gaming UL (Bytes)': 'sum',
+  'Other UL (Bytes)': 'sum'
+
+}).reset_index()
+ 
+top_10_social_media = app_traffic.sort_values(by='Social Media DL (Bytes) + Social Media UL (Bytes)', ascending=False).head(10)
+
+top_10_youtube = app_traffic.sort_values(by='Youtube DL (Bytes) + Youtube UL (Bytes)', ascending=False).head(10)
+
+top_10_gaming = app_traffic.sort_values(by='Gaming DL (Bytes) + Gaming UL (Bytes)', ascending=False).head(10)
+ 
+print("\nTop 10 Most Engaged Users (Social Media):")
+
+print(top_10_social_media)
+ 
+print("\nTop 10 Most Engaged Users (YouTube):")
+
+print(top_10_youtube)
+ 
+print("\nTop 10 Most Engaged Users (Gaming):")
+
+print(top_10_gaming)
+ 
+top_3_apps = app_traffic.sum().nlargest(3)
+ 
+plt.figure(figsize=(10, 6))
+
+top_3_apps.plot(kind='bar', color='skyblue')
+
+plt.title('Top 3 Most Used Applications')
+
+plt.xlabel('Application')
+
+plt.ylabel('Total Traffic (Bytes)')
+
+plt.show()
+ 
+inertia_values = []
+
+possible_k_values = range(1, 11)
+ 
+for k in possible_k_values:
+  kmeans = KMeans(n_clusters=k, random_state=42)
+  kmeans.fit(normalized_metrics)
+  inertia_values.append(kmeans.inertia_)
+ 
+plt.figure(figsize=(10, 6))
+
+plt.plot(possible_k_values, inertia_values, marker='o')
+
+plt.title('Elbow Method for Optimal k')
+
+plt.xlabel('Number of Clusters (k)')
+
+plt.ylabel('Inertia')
+
+plt.show()
+
+import pandas as pd
+
+from sklearn.preprocessing import StandardScaler
+
+from sklearn.cluster import KMeans
+
+from sklearn.impute import SimpleImputer
+
+from kneed import KneeLocator
+ 
+identifier_column = 'MSISDN/Number'
+ 
+print(mydata.columns)
+ 
+engagement_metrics = mydata.groupby(identifier_column)['Bearer Id'].agg(['count', 'sum', 'mean'])
+
+engagement_metrics.columns = ['Session Frequency', 'Total Session Duration', 'Total Traffic']
+ 
+imputer = SimpleImputer(strategy='mean')
+
+engagement_metrics_imputed = imputer.fit_transform(engagement_metrics)
+ 
+scaler = StandardScaler()
+
+normalized_metrics = scaler.fit_transform(engagement_metrics_imputed)
+ 
+print("Length of mydata:", len(mydata))
+
+print("Length of normalized_metrics:", len(normalized_metrics))
+ 
+kmeans = KMeans(n_clusters=3, random_state=42)
+
+engagement_clusters = kmeans.fit_predict(normalized_metrics)
+ 
+print("Length of engagement_clusters:", len(engagement_clusters))
+ 
+if len(mydata) == len(engagement_clusters):
+  mydata['Engagement Cluster'] = engagement_clusters
+
+else:
+  print("Length mismatch! Unable to assign 'Engagement Cluster'.")
+ 
+print("Missing values in mydata:")
+
+print(mydata.isnull().sum())
+
+engagement_metrics = mydata.groupby(identifier_column)['Bearer Id'].agg(['count', 'sum', 'mean'])
+
+print("Length of engagement_metrics:", len(engagement_metrics))
+ 
+engagement_metrics_imputed = imputer.fit_transform(engagement_metrics)
+
+print("Length of engagement_metrics_imputed:", len(engagement_metrics_imputed))
+ 
+normalized_metrics = scaler.fit_transform(engagement_metrics_imputed)
+
+print("Length of normalized_metrics:", len(normalized_metrics))
+
+print("Duplicate rows based on identifier column:")
+
+print(mydata[mydata.duplicated(subset=identifier_column, keep=False)])
+import pandas as pd
+ 
+application_columns = ['Social Media DL (Bytes)', 'Google DL (Bytes)', 'Email DL (Bytes)',
+  'Youtube DL (Bytes)', 'Netflix DL (Bytes)', 'Gaming DL (Bytes)', 'Other DL (Bytes)',
+  'Social Media UL (Bytes)', 'Google UL (Bytes)', 'Email UL (Bytes)',
+  'Youtube UL (Bytes)', 'Netflix UL (Bytes)', 'Gaming UL (Bytes)', 'Other UL (Bytes)']
+ 
+total_data_per_user = mydata.groupby('MSISDN/Number')[application_columns].sum()
+ 
+total_data_per_user['Total Data Usage'] = total_data_per_user.sum(axis=1)
+ 
+top_engaged_users = total_data_per_user.nlargest(10, 'Total Data Usage')
+ 
+print(top_engaged_users)
+
+import matplotlib.pyplot as plt
+ 
+engagement_metric = 'Total Data Usage'
+ 
+plt.figure(figsize=(10, 6))
+
+top_engaged_users[engagement_metric].plot(kind='bar', color='skyblue')
+
+plt.title('Top 10 Engaged Users per Application')
+
+plt.xlabel('Bearer Id')
+
+plt.ylabel(engagement_metric)
+
+plt.show()
+ 
+mydata.hist(figsize=(20, 30))
+
+plt.show()
+
+sns.boxplot(data=mydata)
+
+plt.show()
+import numpy as np
+
+import pandas as pd
+
+import psycopg2
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+from sqlalchemy import create_engine
+ 
+db_params = {
+  'dbname': 'week1',
+  'user': 'postgres',
+  'password': 'habte',
+  'host': 'localhost',
+  'port': '5432'
+
+}
+ 
+engine = create_engine(f'postgresql+psycopg2://{db_params["user"]}:{db_params["password"]}@{db_params["host"]}:{db_params["port"]}/{db_params["dbname"]}')
+ 
+sql_query = "SELECT * FROM xdr_data;"
+ 
+mydata = pd.read_sql_query(sql_query, engine)
+
+print(mydata.info())
+
+print(mydata.shape)
+
+mydata = mydata.dropna()
+mydata['Start'] = pd.to_datetime(mydata['Start'], errors='coerce')
+
+mydata['End'] = pd.to_datetime(mydata['End'], errors='coerce')
+
+numeric_columns = mydata.select_dtypes(include='number').columns
+
+mydata[numeric_columns] = mydata[numeric_columns].fillna(mydata[numeric_columns].mean())
+
+print(mydata.head(5))
+print(mydata.describe())
+
+user_device_mapping = mydata.groupby(['IMSI', 'MSISDN/Number'])['IMEI'].unique()
+ 
+print(user_device_mapping)
+import matplotlib.pyplot as plt
+ 
+plt.hist(mydata['Dur. (ms)'])
+
+plt.xlabel('Session Duration (ms)')
+
+plt.ylabel('Frequency')
+
+plt.show()
+
+top_users = mydata.nlargest(10, 'Total UL (Bytes)')
+
+print(top_users)
+
+all_users_sorted = mydata.sort_values(by='Total UL (Bytes)', ascending=False)
+
+print(all_users_sorted)
+ 
+app_columns = ['Social Media DL (Bytes)', 'Gaming UL (Bytes)']
+
+app_usage = mydata[app_columns].sum()
+
+print(app_usage)
+
+network_tech_distribution = mydata['Bearer Id'].value_counts()
+
+print(network_tech_distribution)
+
+location_analysis = mydata.groupby('Last Location Name').agg({'Dur. (ms)': 'mean', 'Total DL (Bytes)': 'sum'})
+
+print(location_analysis)
+
+mydata['Start'] = pd.to_datetime(mydata['Start'])
+
+mydata['Hour'] = mydata['Start'].dt.hour
+
+time_analysis = mydata.groupby('Hour').agg({'Dur. (ms)': 'mean', 'Total DL (Bytes)': 'sum'})
+
+print(time_analysis)
+
+top_handsets = mydata['IMEI'].value_counts().nlargest(10)
+ 
+print(top_handsets)
+
+mydata['IMEI'] = mydata['IMEI'].astype(str)
+ 
+mydata['Manufacturer'] = mydata['IMEI'].str[:8]
+ 
+top_manufacturers = mydata['Manufacturer'].value_counts().nlargest(3)
+ 
+print(top_manufacturers)
+mydata['IMEI'] = mydata['IMEI'].astype(str)
+ 
+mydata['Manufacturer'] = mydata['IMEI'].str[:8]
+ 
+top_manufacturers = mydata['Manufacturer'].value_counts().nlargest(3).index
+ 
+for manufacturer in top_manufacturers:
+  manufacturer_data = mydata[mydata['Manufacturer'] == manufacturer]
+  top_handsets = manufacturer_data['IMEI'].value_counts().nlargest(5)
+  print(f"\nTop 5 handsets for {manufacturer}:")
+  print(top_handsets)
+ 
+sessions_per_user = mydata['MSISDN/Number'].value_counts()
+ 
+print(sessions_per_user)
+import matplotlib.pyplot as plt
+ 
+plt.hist(sessions_per_user, bins=20, edgecolor='black')
+
+plt.xlabel('Number of Sessions')
+
+plt.ylabel('Number of Users')
+
+plt.title('Distribution of xDR Sessions per User')
+
+plt.show()
+
+session_duration_per_user = mydata.groupby('MSISDN/Number')['Dur. (ms)'].sum()
+ 
+print(session_duration_per_user)
+
+plt.hist(session_duration_per_user, bins=20, edgecolor='black')
+
+plt.xlabel('Total Session Duration (ms)')
+
+plt.ylabel('Number of Users')
+
+plt.title('Distribution of Session Durations per User')
+
+plt.show()
+
+total_data_per_user = mydata.groupby('MSISDN/Number').agg({
+  'Total DL (Bytes)': 'sum',
+  'Total UL (Bytes)': 'sum'
+
+})
+ 
+print(total_data_per_user)
+import matplotlib.pyplot as plt
+ 
+plt.scatter(total_data_per_user['Total DL (Bytes)'], total_data_per_user['Total UL (Bytes)'])
+
+plt.xlabel('Total Download (Bytes)')
+
+plt.ylabel('Total Upload (Bytes)')
+
+plt.title('Total Download vs Total Upload per User')
+
+plt.show()
+ 
+mydata['Total_Social_Media_Usage'] = mydata['Social Media DL (Bytes)'] + mydata['Social Media UL (Bytes)']
+
+mydata['Total_Google_Usage'] = mydata['Google DL (Bytes)'] + mydata['Google UL (Bytes)']
+ 
+aggregated_data = mydata.groupby('MSISDN/Number').agg({
+  'Total_Social_Media_Usage': 'sum',
+  'Total_Google_Usage': 'sum',
+ 
+})
+ 
+print(aggregated_data)
+
+applications_columns = [
+  'Social Media DL (Bytes)', 'Social Media UL (Bytes)',
+  'Google DL (Bytes)', 'Google UL (Bytes)',
+  'Email DL (Bytes)', 'Email UL (Bytes)',
+  'Youtube DL (Bytes)', 'Youtube UL (Bytes)',
+  'Netflix DL (Bytes)', 'Netflix UL (Bytes)',
+  'Gaming DL (Bytes)', 'Gaming UL (Bytes)'
+
+]
+ 
+for app_column in applications_columns:
+  app_name = app_column.split(' ')[0]   total_column = f'Total_{app_name}_Usage'
+  mydata[total_column] = mydata[app_column]
+ 
+aggregated_data = mydata.groupby(['MSISDN/Number', 'Start']).agg({
+  'Total_Social_Media_Usage': 'sum',
+  'Total_Google_Usage': 'sum',
+  'Total_Email_Usage': 'sum',
+  'Total_Youtube_Usage': 'sum',
+  'Total_Netflix_Usage': 'sum',
+  'Total_Gaming_Usage': 'sum',
+
+})
+ 
+print(aggregated_data)
+
+sessions_per_user = mydata['MSISDN/Number'].value_counts()
+
+sessions_per_user.describe()
+mydata['Session_Duration'] = mydata['Dur. (ms)'] / 1000  
+session_duration_stats = mydata['Session_Duration'].describe()
+session_duration_stats
+applications_columns = ['Total_Social_Media_Usage', 'Total_Google_Usage', 'Total_Email_Usage', 'Total_Youtube_Usage', 'Total_Netflix_Usage', 'Total_Gaming_Usage']
+
+total_data_per_app = mydata[applications_columns].sum()
+total_data_per_app 
+avg_data_per_app = mydata.groupby('MSISDN/Number')[applications_columns].mean()
+avg_data_per_app
+avg_rtt_dl = mydata['Avg RTT DL (ms)'].mean()
+
+avg_rtt_ul = mydata['Avg RTT UL (ms)'].mean()
+avg_rtt_dl
+avg_rtt_ul
+tcp_retransmission_dl = mydata['TCP DL Retrans. Vol (Bytes)'].sum()
+
+tcp_retransmission_ul = mydata['TCP UL Retrans. Vol (Bytes)'].sum()
+tcp_retransmission_dl
+tcp_retransmission_ul
+top_handsets = mydata['Handset Type'].value_counts().head(10)
+top_handsets
+top_manufacturers = mydata['Handset Manufacturer'].value_counts().head(3)
+top_manufacturers
+busiest_hours = mydata['Hour'].value_counts().sort_index()
+busiest_hours 
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+ 
+sns.set(style="whitegrid")
+ 
+plt.figure(figsize=(12, 6))
+
+sns.histplot(mydata['Session_Duration'], bins=30, kde=True, color='skyblue')
+
+plt.title('Distribution of Session Duration')
+
+plt.xlabel('Session Duration (seconds)')
+
+plt.ylabel('Frequency')
+
+plt.show()
+
+applications_columns = ['Total_Social_Media_Usage', 'Total_Google_Usage', 'Total_Email_Usage', 'Total_Youtube_Usage', 'Total_Netflix_Usage', 'Total_Gaming_Usage']
+
+plt.figure(figsize=(12, 8))
+
+sns.boxplot(data=mydata[applications_columns])
+
+plt.title('Box Plot of Total Data Volume per Application')
+
+plt.xlabel('Application')
+
+plt.ylabel('Total Data Volume (Bytes)')
+
+plt.xticks(rotation=45, ha='right')
+
+plt.show()
+ 
+busiest_hours = mydata['Hour'].value_counts().sort_index()
+
+plt.figure(figsize=(12, 6))
+
+sns.lineplot(x=busiest_hours.index, y=busiest_hours.values, marker='o', color='orange')
+
+plt.title('Busiest Hours of Network Usage')
+
+plt.xlabel('Hour of the Day')
+
+plt.ylabel('Number of Sessions')
+
+plt.show()
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+ 
+numeric_variables = mydata.select_dtypes(include='number')
+ 
+for col in numeric_variables.columns:
+  plt.figure(figsize=(8, 5))
+  sns.histplot(mydata[col], bins=20, kde=True, color='skyblue')
+  plt.title(f'Histogram of {col}')
+  plt.xlabel(col)
+  plt.ylabel('Frequency')
+  plt.show()
+
+for col in numeric_variables.columns:
+  plt.figure(figsize=(8, 5))
+  sns.boxplot(x=mydata[col], color='lightcoral')
+  plt.title(f'Box Plot of {col}')
+  plt.xlabel(col)
+  plt.show()
+
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+ 
+applications_columns = ['Social Media DL (Bytes)', 'Social Media UL (Bytes)',
+  'Google DL (Bytes)', 'Google UL (Bytes)',
+  'Email DL (Bytes)', 'Email UL (Bytes)',
+  'Youtube DL (Bytes)', 'Youtube UL (Bytes)',
+  'Netflix DL (Bytes)', 'Netflix UL (Bytes)',
+  'Gaming DL (Bytes)', 'Gaming UL (Bytes)']
+ 
+for app_col in applications_columns:
+  plt.figure(figsize=(8, 5))
+  sns.scatterplot(x=mydata[app_col], y=mydata['Total DL (Bytes)'] + mydata['Total UL (Bytes)'], alpha=0.7)
+  plt.title(f'Scatter Plot: {app_col} vs Total Data Usage')
+  plt.xlabel(app_col)
+  plt.ylabel('Total DL+UL Data Usage (Bytes)')
+  plt.show()
+
+correlation_matrix = mydata[applications_columns + ['Total DL (Bytes)', 'Total UL (Bytes)']].corr()
+ 
+print("Correlation Matrix:")
+
+print(correlation_matrix)
+
+import statsmodels.api as sm
+ 
+X = mydata['Social Media DL (Bytes)'] + mydata['Social Media UL (Bytes)']
+
+X = sm.add_constant(X)
+
+y = mydata['Total DL (Bytes)'] + mydata['Total UL (Bytes)']
+ 
+model = sm.OLS(y, X).fit()
+ 
+print(model.summary())
+
+import pandas as pd
+
+import numpy as np
+ 
+mydata['Total_Duration'] = mydata['Dur. (ms)']
+ 
+mydata['Duration_Decile'] = pd.qcut(mydata['Total_Duration'], q=[0, 0.2, 0.4, 0.6, 0.8, 1], labels=False, precision=0, duplicates='drop')
+ 
+mydata['Total_Data'] = mydata['Total DL (Bytes)'] + mydata['Total UL (Bytes)']
+ 
+data_per_decile = mydata.groupby('Duration_Decile')['Total_Data'].sum().reset_index()
+ 
+print(data_per_decile)
+ 
+selected_columns = ['Social Media DL (Bytes)', 'Google DL (Bytes)', 'Email DL (Bytes)',
+  'Youtube DL (Bytes)', 'Netflix DL (Bytes)', 'Gaming DL (Bytes)', 'Other DL (Bytes)']
+ 
+app_data = mydata[selected_columns]
+ 
+correlation_matrix = app_data.corr()
+ 
+print(correlation_matrix)
+
+from sklearn.decomposition import PCA
+
+from sklearn.preprocessing import StandardScaler
+
+selected_columns = ['Social Media DL (Bytes)', 'Google DL (Bytes)', 'Email DL (Bytes)',
+  'Youtube DL (Bytes)', 'Netflix DL (Bytes)', 'Gaming DL (Bytes)', 'Other DL (Bytes)']
+ 
+app_data = mydata[selected_columns]
+
+scaler = StandardScaler()
+
+app_data_standardized = scaler.fit_transform(app_data)
+
+pca = PCA()
+
+pca_result = pca.fit_transform(app_data_standardized)
+
+explained_variance_ratio = pca.explained_variance_ratio_
+ 
+print("Explained Variance Ratio:", explained_variance_ratio)
+
+top_components = pca_result[:, :2]
+ 
+print("Top 2 Principal Components:")
+
+print(top_components)
+
+top_3_manufacturers = mydata['Handset Manufacturer'].value_counts().head(3).index
+ 
+mydata_top_3_manufacturers = mydata[mydata['Handset Manufacturer'].isin(top_3_manufacturers)]
+ 
+top_5_handsets_per_manufacturer = (
+  mydata_top_3_manufacturers.groupby('Handset Manufacturer')['Handset Type']
+  .value_counts()
+  .groupby(level=0, group_keys=False)
+  .nlargest(5)
+  .reset_index(name='Count')
+
+)
+ 
+print("Top 5 Handsets per Top 3 Handset Manufacturers:")
+
+print(top_5_handsets_per_manufacturer)
+ 
+top_3_manufacturers = mydata['Handset Manufacturer'].value_counts().head(3)
+ 
+print("Top 3 Handset Manufacturers:")
+
+print(top_3_manufacturers)
+ 
+data = {
+  'Handset Manufacturer': ['Apple', 'Samsung', 'Huawei'],
+  'Count': [59565, 40839, 34423]
+
+}
+ 
+df = pd.DataFrame(data)
+ 
+plt.figure(figsize=(8, 8))
+
+plt.pie(df['Count'], labels=df['Handset Manufacturer'], autopct='%1.1f%%', startangle=90, colors=['skyblue', 'lightcoral', 'lightgreen'])
+
+plt.title('Distribution of Top 3 Handset Manufacturers')
+
+plt.show()
+ 
+plt.figure(figsize=(16, 8))
+
+sns.barplot(x='Handset Type', y='Count', hue='Handset Manufacturer', data=top_5_handsets_per_manufacturer, palette='viridis')
+
+plt.xticks(rotation=45, ha='right')
+
+plt.title('Top 5 Handsets per Top 3 Handset Manufacturers')
+
+plt.xlabel('Handset Type')
+
+plt.ylabel('Count')
+
+plt.tight_layout()
+
+plt.legend(title='Handset Manufacturer')
+
+plt.show()
+
+data = {
+  'Handset Type': ['Apple iPhone 6S (A1688)', 'Apple iPhone 6 (A1586)', 'Apple iPhone 7 (A1778)', 'Apple iPhone Se (A1723)', 'Apple iPhone 8 (A1905)'],
+  'Count': [9419, 9023, 6326, 5187, 4993]
+
+}
+ 
+df = pd.DataFrame(data)
+ 
+manufacturers = ['Apple', 'Samsung', 'Huawei']
+ 
+plt.figure(figsize=(20, 5))
+ 
+for i, manufacturer in enumerate(manufacturers, 1):
+  plt.subplot(1, 3, i)
+  manufacturer_data = df[df['Handset Type'].str.contains(manufacturer)]
+  plt.pie(manufacturer_data['Count'], labels=manufacturer_data['Handset Type'], autopct='%1.1f%%', startangle=140)
+  plt.title(f'Distribution of Users for {manufacturer}')
+ 
+plt.tight_layout()
+ 
+plt.show()
+ 
+user_xdr_sessions = mydata.groupby('MSISDN/Number')['Bearer Id'].count().reset_index(name='Number_of_xDR_sessions')
+ 
+print("Aggregated Information - Number of xDR Sessions per User:")
+
+print(user_xdr_sessions)
+ 
+mydata['Start'] = pd.to_datetime(mydata['Start'])
+
+mydata['End'] = pd.to_datetime(mydata['End'])
+
+mydata['Session_Duration'] = (mydata['End'] - mydata['Start']).dt.total_seconds()
+
+user_session_duration = mydata.groupby('MSISDN/Number')['Session_Duration'].sum().reset_index(name='Total_Session_Duration')
+
+print("Aggregated Session Duration per User:")
+
+print(user_session_duration)
+
+user_data_volume = mydata.groupby('MSISDN/Number').agg(
+  Total_DL_data=('Total DL (Bytes)', 'sum'),
+  Total_UL_data=('Total UL (Bytes)', 'sum')
+
+).reset_index()
+ 
+print("Aggregated Download and Upload Data per User:")
+
+print(user_data_volume)
+ 
+user_app_data_volume = mydata.groupby('MSISDN/Number').agg(
+  Social_Media_DL=('Social Media DL (Bytes)', 'sum'),
+  Social_Media_UL=('Social Media UL (Bytes)', 'sum'),
+  Google_DL=('Google DL (Bytes)', 'sum'),
+  Google_UL=('Google UL (Bytes)', 'sum'),
+  Email_DL=('Email DL (Bytes)', 'sum'),
+  Email_UL=('Email UL (Bytes)', 'sum'),
+  Youtube_DL=('Youtube DL (Bytes)', 'sum'),
+  Youtube_UL=('Youtube UL (Bytes)', 'sum'),
+  Netflix_DL=('Netflix DL (Bytes)', 'sum'),
+  Netflix_UL=('Netflix UL (Bytes)', 'sum'),
+  Gaming_DL=('Gaming DL (Bytes)', 'sum'),
+  Gaming_UL=('Gaming UL (Bytes)', 'sum'),
+  Other_DL=('Other DL (Bytes)', 'sum'),
+  Other_UL=('Other UL (Bytes)', 'sum')
+
+).reset_index()
+ 
+print("Aggregated Data Volume per User for Each Application:")
+
+print(user_app_data_volume)
+ 
+user_aggregated_data = mydata.groupby('MSISDN/Number').agg(
+  Number_of_xDR_sessions=('Bearer Id', 'count'),
+  Session_Duration=('Session_Duration', 'sum'),
+  Total_DL_data=('Total DL (Bytes)', 'sum'),
+  Total_UL_data=('Total UL (Bytes)', 'sum'),
+  Social_Media_DL=('Social Media DL (Bytes)', 'sum'),
+  Social_Media_UL=('Social Media UL (Bytes)', 'sum'),
+  Google_DL=('Google DL (Bytes)', 'sum'),
+  Google_UL=('Google UL (Bytes)', 'sum'),
+  Email_DL=('Email DL (Bytes)', 'sum'),
+  Email_UL=('Email UL (Bytes)', 'sum'),
+  Youtube_DL=('Youtube DL (Bytes)', 'sum'),
+  Youtube_UL=('Youtube UL (Bytes)', 'sum'),
+  Netflix_DL=('Netflix DL (Bytes)', 'sum'),
+  Netflix_UL=('Netflix UL (Bytes)', 'sum'),
+  Gaming_DL=('Gaming DL (Bytes)', 'sum'),
+  Gaming_UL=('Gaming UL (Bytes)', 'sum'),
+  Other_DL=('Other DL (Bytes)', 'sum'),
+  Other_UL=('Other UL (Bytes)', 'sum')
+
+).reset_index()
+ 
+plt.figure(figsize=(15, 10))
+
+plt.bar(user_aggregated_data['MSISDN/Number'], user_aggregated_data['Number_of_xDR_sessions'], label='Number of xDR Sessions')
+
+plt.bar(user_aggregated_data['MSISDN/Number'], user_aggregated_data['Session_Duration'], label='Session Duration', alpha=0.7)
+
+plt.bar(user_aggregated_data['MSISDN/Number'], user_aggregated_data['Total_DL_data'], label='Total DL Data', alpha=0.7)
+
+plt.bar(user_aggregated_data['MSISDN/Number'], user_aggregated_data['Total_UL_data'], label='Total UL Data', alpha=0.7)
+
+plt.legend()
+
+plt.xlabel('MSISDN/Number')
+
+plt.ylabel('Aggregated Values')
+
+plt.title('Aggregated Information per User')
+
+plt.xticks(rotation=45, ha='right')
+
+plt.tight_layout()
+
+plt.show()
+
+summary_statistics = mydata.describe()
+ 
+top_handsets = mydata['Handset Type'].value_counts().head(10)
+
+plt.figure(figsize=(12, 6))
+
+sns.barplot(x=top_handsets.index, y=top_handsets.values)
+
+plt.xticks(rotation=45, ha='right')
+
+plt.title('Distribution of Users by Handset Type (Top 10)')
+
+plt.xlabel('Handset Type')
+
+plt.ylabel('Count')
+
+plt.show()
+
+plt.figure(figsize=(10, 6))
+
+sns.histplot(mydata['Session_Duration'], bins=30, kde=True)
+
+plt.title('Distribution of Session Durations')
+
+plt.xlabel('Session Duration (seconds)')
+
+plt.ylabel('Frequency')
+
+plt.show()
+
+plt.figure(figsize=(10, 6))
+
+sns.scatterplot(x='Total DL (Bytes)', y='Total UL (Bytes)', data=mydata)
+
+plt.title('Scatter Plot of Total DL vs Total UL Data')
+
+plt.xlabel('Total DL Data (Bytes)')
+
+plt.ylabel('Total UL Data (Bytes)')
+
+plt.show()
+
+mixed_data_columns = mydata.select_dtypes(include='object').columns
+
+print(f'Columns with mixed data types: {mixed_data_columns}')
+ 
+plt.figure(figsize=(10, 6))
+
+sns.scatterplot(x='Total DL (Bytes)', y='Total UL (Bytes)', data=mydata)
+
+plt.title('Scatter Plot of Total DL vs Total UL Data')
+
+plt.xlabel('Total DL Data (Bytes)')
+
+plt.ylabel('Total UL Data (Bytes)')
+
+plt.show()
+ 
+summary_statistics = mydata.describe()
+ 
+top_handsets = mydata['Handset Type'].value_counts().head(10)
+
+plt.figure(figsize=(12, 6))
+
+sns.barplot(x=top_handsets.values, y=top_handsets.index, orient='h')
+
+plt.title('Distribution of Users by Handset Type (Top 10)')
+
+plt.xlabel('Count')
+
+plt.ylabel('Handset Type')
+
+plt.show()
+
+basic_metrics = mydata.describe()
+ 
+dispersion_parameters = mydata.describe().loc[['std', 'min', '25%', '50%', '75%', 'max']]
+ 
+plt.figure(figsize=(15, 10))
+
+sns.boxplot(data=mydata.select_dtypes(include=['float64']))
+
+plt.title('Boxplot for Quantitative Variables')
+
+plt.show()
+
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+ 
+application = 'Social Media'
+ 
+subset_data = mydata[[f'{application} DL (Bytes)', f'{application} UL (Bytes)', 'Total DL (Bytes)', 'Total UL (Bytes)']]
+ 
+subset_data['Total DL+UL Data'] = subset_data['Total DL (Bytes)'] + subset_data['Total UL (Bytes)']
+ 
+plt.figure(figsize=(10, 6))
+
+sns.scatterplot(x=f'{application} DL (Bytes)', y='Total DL+UL Data', data=subset_data)
+
+plt.title(f'Relationship between {application} and Total DL+UL Data')
+
+plt.xlabel(f'{application} DL (Bytes)')
+
+plt.ylabel('Total DL+UL Data')
+
+plt.show()
+ 
+customer_engagement = mydata.groupby('MSISDN/Number').agg({
+  'Bearer Id': 'count',
+  'Dur. (ms)': 'sum',
+  'Total UL (Bytes)': 'sum',
+  'Total DL (Bytes)': 'sum'
+
+}).reset_index()
+ 
+customer_engagement.columns = ['MSISDN', 'Session Count', 'Total Duration', 'Total UL (Bytes)', 'Total DL (Bytes)']
+ 
+customer_engagement['Total Traffic (Bytes)'] = customer_engagement['Total UL (Bytes)'] + customer_engagement['Total DL (Bytes)']
+ 
+top_10_session_count = customer_engagement.sort_values(by='Session Count', ascending=False).head(10)
+
+top_10_duration = customer_engagement.sort_values(by='Total Duration', ascending=False).head(10)
+
+top_10_total_traffic = customer_engagement.sort_values(by='Total Traffic (Bytes)', ascending=False).head(10)
+ 
+print("Top 10 Customers by Session Count:")
+
+print(top_10_session_count[['MSISDN', 'Session Count']])
+
+print("\nTop 10 Customers by Total Duration:")
+
+print(top_10_duration[['MSISDN', 'Total Duration']])
+
+print("\nTop 10 Customers by Total Traffic:")
+
+print(top_10_total_traffic[['MSISDN', 'Total Traffic (Bytes)']])
+
+import matplotlib.pyplot as plt
+ 
+def plot_top_10(data, metric, title):
+  plt.figure(figsize=(10, 6))
+  plt.bar(data['MSISDN'], data[metric], color='skyblue')
+  plt.xlabel('MSISDN')
+  plt.ylabel(metric)
+  plt.title(title)
+  plt.xticks(rotation=45, ha='right')
+  plt.tight_layout()
+  plt.show()
+ 
+plot_top_10(top_10_session_count, 'Session Count', 'Top 10 Customers by Session Count')
+ 
+plot_top_10(top_10_duration, 'Total Duration', 'Top 10 Customers by Total Duration')
+ 
+plot_top_10(top_10_total_traffic, 'Total Traffic (Bytes)', 'Top 10 Customers by Total Traffic')
+
+import pandas as pd
+
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+
+from sqlalchemy import create_engine
+
+from sklearn.preprocessing import StandardScaler
+
+from sklearn.decomposition import PCA
+
+from sklearn.impute import SimpleImputer
+ 
+db_params = {
+  'dbname': 'week1',
+  'user': 'postgres',
+  'password': 'habte',
+  'host': 'localhost',
+  'port': '5432'
+
+}
+ 
+engine = create_engine(f'postgresql+psycopg2://{db_params["user"]}:{db_params["password"]}@{db_params["host"]}:{db_params["port"]}/{db_params["dbname"]}')
+ 
+sql_query = "SELECT * FROM xdr_data;"
+ 
+mydata = pd.read_sql_query(sql_query, engine)
+ 
+imputer = SimpleImputer(strategy='mean')
+
+imputed_data = imputer.fit_transform(mydata.select_dtypes(include=['float64']))
+ 
+scaler = StandardScaler()
+
+scaled_data = scaler.fit_transform(imputed_data)
+ 
+pca = PCA()
+
+principal_components = pca.fit_transform(scaled_data)
+ 
+pca_df = pd.DataFrame(data=principal_components, columns=[f'PC{i}' for i in range(1, pca.n_components_ + 1)])
+ 
+pca_interpretation = [
+  "Principal components capture the variance in the data.",
+  "Each principal component is a linear combination of the original features.",
+  "The first few principal components explain a significant portion of the total variance.",
+  "PCA is useful for dimensionality reduction and identifying patterns in high-dimensional data."
+
+]
+ 
+from pptx import Presentation
+
+from pptx.util import Inches
+
+import os
+ 
+presentation = Presentation()
+ 
+def add_slide(title, content):
+  slide = presentation.slides.add_slide(presentation.slide_layouts[1])   title_box = slide.shapes.title
+  content_box = slide.placeholders[1]
+  title_box.text = title
+  content_box.text = content
+ 
+variable_description = mydata.dtypes.reset_index()
+
+variable_description.columns = ['Variable', 'Data Type']
+
+add_slide("Variable Description", variable_description.to_string(index=False))
+ 
+basic_metrics = mydata.describe()
+
+add_slide("Basic Metrics", basic_metrics.to_string())
+ 
+dispersion_parameters = mydata.describe().loc[['std', 'min', '25%', '50%', '75%', 'max']]
+
+add_slide("Non-Graphical Univariate Analysis", dispersion_parameters.to_string())
+ 
+image_path = 'univariate_analysis_plot.png'
+
+plt.figure(figsize=(15, 10))
+
+sns.boxplot(data=mydata.select_dtypes(include=['float64']))
+
+plt.title('Boxplot for Quantitative Variables')
+
+plt.savefig(image_path)
+
+plt.close()
+
+presentation.slides.add_slide(presentation.slide_layouts[5])  
+presentation.slides[-1].shapes.add_picture(image_path, Inches(1), Inches(1), width=Inches(8))
+
+os.remove(image_path)  
+application_cols = ['Social Media DL (Bytes)', 'Google DL (Bytes)', 'Email DL (Bytes)',
+  'Youtube DL (Bytes)', 'Netflix DL (Bytes)', 'Gaming DL (Bytes)', 'Other DL (Bytes)',
+  'Social Media UL (Bytes)', 'Google UL (Bytes)', 'Email UL (Bytes)',
+  'Youtube UL (Bytes)', 'Netflix UL (Bytes)', 'Gaming UL (Bytes)', 'Other UL (Bytes)']
+ 
+total_data_cols = ['Total DL (Bytes)', 'Total UL (Bytes)']
+
+bivariate_analysis = mydata[application_cols + total_data_cols].corr()
+
+add_slide("Bivariate Analysis", bivariate_analysis.to_string())
+ 
+mydata['Total_Session_Duration'] = mydata['Dur. (ms).1'] / 1000  
+mydata['Decile_Class'] = pd.qcut(mydata['Total_Session_Duration'], q=5, labels=False, duplicates='drop')
+
+total_data_per_decile = mydata.groupby('Decile_Class')[total_data_cols].sum()
+
+add_slide("Variable Transformations", total_data_per_decile.to_string())
+ 
+correlation_matrix = mydata[['Social Media DL (Bytes)', 'Google DL (Bytes)', 'Email DL (Bytes)',
+  'Youtube DL (Bytes)', 'Netflix DL (Bytes)', 'Gaming DL (Bytes)', 'Other DL (Bytes)',
+  'Social Media UL (Bytes)', 'Google UL (Bytes)', 'Email UL (Bytes)',
+  'Youtube UL (Bytes)', 'Netflix UL (Bytes)', 'Gaming UL (Bytes)', 'Other UL (Bytes)']].corr()
+
+add_slide("Correlation Analysis", correlation_matrix.to_string())
+ 
+add_slide("PCA Interpretation", "\n".join(pca_interpretation))
+ 
+presentation.save("telecom_analysis_results.pptx")
+
+import pandas as pd
+
+from sklearn.cluster import KMeans
+
+from sklearn.preprocessing import StandardScaler
+
+import matplotlib.pyplot as plt
+ 
+engagement_metrics = mydata.groupby('MSISDN/Number').agg({
+  'Bearer Id': 'count',   'Dur. (ms).1': 'sum',   'Total UL (Bytes)': 'sum',   'Total DL (Bytes)': 'sum'  
+}).reset_index()
+ 
+engagement_metrics.columns = ['MSISDN', 'Session Frequency', 'Total Session Duration', 'Total UL Traffic', 'Total DL Traffic']
+ 
+top_10_session_frequency = engagement_metrics.sort_values(by='Session Frequency', ascending=False).head(10)
+
+top_10_duration = engagement_metrics.sort_values(by='Total Session Duration', ascending=False).head(10)
+
+top_10_ul_traffic = engagement_metrics.sort_values(by='Total UL Traffic', ascending=False).head(10)
+
+top_10_dl_traffic = engagement_metrics.sort_values(by='Total DL Traffic', ascending=False).head(10)
+ 
+print("Top 10 Customers by Session Frequency:")
+
+print(top_10_session_frequency)
+ 
+print("\nTop 10 Customers by Total Session Duration:")
+
+print(top_10_duration)
+ 
+print("\nTop 10 Customers by Total UL Traffic:")
+
+print(top_10_ul_traffic)
+ 
+print("\nTop 10 Customers by Total DL Traffic:")
+
+print(top_10_dl_traffic)
+ 
+scaler = StandardScaler()
+
+normalized_metrics = scaler.fit_transform(engagement_metrics.iloc[:, 1:])
+ 
+kmeans = KMeans(n_clusters=3, random_state=42)
+
+engagement_metrics['Cluster'] = kmeans.fit_predict(normalized_metrics)
+ 
+cluster_stats = engagement_metrics.groupby('Cluster').agg({
+  'Session Frequency': ['min', 'max', 'mean', 'sum'],
+  'Total Session Duration': ['min', 'max', 'mean', 'sum'],
+  'Total UL Traffic': ['min', 'max', 'mean', 'sum'],
+  'Total DL Traffic': ['min', 'max', 'mean', 'sum']
+
+}).reset_index()
+ 
+print("\nCluster Statistics:")
+
+print(cluster_stats)
+ 
+app_traffic = mydata.groupby('MSISDN/Number').agg({
+  'Social Media DL (Bytes)': 'sum',
+  'Google DL (Bytes)': 'sum',
+  'Email DL (Bytes)': 'sum',
+  'Youtube DL (Bytes)': 'sum',
+  'Netflix DL (Bytes)': 'sum',
+  'Gaming DL (Bytes)': 'sum',
+  'Other DL (Bytes)': 'sum',
+  'Social Media UL (Bytes)': 'sum',
+  'Google UL (Bytes)': 'sum',
+  'Email UL (Bytes)': 'sum',
+  'Youtube UL (Bytes)': 'sum',
+  'Netflix UL (Bytes)': 'sum',
+  'Gaming UL (Bytes)': 'sum',
+  'Other UL (Bytes)': 'sum'
+
+}).reset_index()
+ 
+top_10_social_media = app_traffic.sort_values(by='Social Media DL (Bytes) + Social Media UL (Bytes)', ascending=False).head(10)
+
+top_10_youtube = app_traffic.sort_values(by='Youtube DL (Bytes) + Youtube UL (Bytes)', ascending=False).head(10)
+
+top_10_gaming = app_traffic.sort_values(by='Gaming DL (Bytes) + Gaming UL (Bytes)', ascending=False).head(10)
+ 
+print("\nTop 10 Most Engaged Users (Social Media):")
+
+print(top_10_social_media)
+ 
+print("\nTop 10 Most Engaged Users (YouTube):")
+
+print(top_10_youtube)
+ 
+print("\nTop 10 Most Engaged Users (Gaming):")
+
+print(top_10_gaming)
+ 
+top_3_apps = app_traffic.sum().nlargest(3)
+ 
+plt.figure(figsize=(10, 6))
+
+top_3_apps.plot(kind='bar', color='skyblue')
+
+plt.title('Top 3 Most Used Applications')
+
+plt.xlabel('Application')
+
+plt.ylabel('Total Traffic (Bytes)')
+
+plt.show()
+ 
+inertia_values = []
+
+possible_k_values = range(1, 11)
+ 
+for k in possible_k_values:
+  kmeans = KMeans(n_clusters=k, random_state=42)
+  kmeans.fit(normalized_metrics)
+  inertia_values.append(kmeans.inertia_)
+ 
+plt.figure(figsize=(10, 6))
+
+plt.plot(possible_k_values, inertia_values, marker='o')
+
+plt.title('Elbow Method for Optimal k')
+
+plt.xlabel('Number of Clusters (k)')
+
+plt.ylabel('Inertia')
+
+plt.show()
+
+import pandas as pd
+
+from sklearn.preprocessing import StandardScaler
+
+from sklearn.cluster import KMeans
+
+from sklearn.impute import SimpleImputer
+
+from kneed import KneeLocator
+ 
+identifier_column = 'MSISDN/Number'
+ 
+print(mydata.columns)
+ 
+engagement_metrics = mydata.groupby(identifier_column)['Bearer Id'].agg(['count', 'sum', 'mean'])
+
+engagement_metrics.columns = ['Session Frequency', 'Total Session Duration', 'Total Traffic']
+ 
+imputer = SimpleImputer(strategy='mean')
+
+engagement_metrics_imputed = imputer.fit_transform(engagement_metrics)
+ 
+scaler = StandardScaler()
+
+normalized_metrics = scaler.fit_transform(engagement_metrics_imputed)
+ 
+print("Length of mydata:", len(mydata))
+
+print("Length of normalized_metrics:", len(normalized_metrics))
+ 
+kmeans = KMeans(n_clusters=3, random_state=42)
+
+engagement_clusters = kmeans.fit_predict(normalized_metrics)
+ 
+print("Length of engagement_clusters:", len(engagement_clusters))
+ 
+if len(mydata) == len(engagement_clusters):
+  mydata['Engagement Cluster'] = engagement_clusters
+
+else:
+  print("Length mismatch! Unable to assign 'Engagement Cluster'.")
+ 
+print("Missing values in mydata:")
+
+print(mydata.isnull().sum())
+
+engagement_metrics = mydata.groupby(identifier_column)['Bearer Id'].agg(['count', 'sum', 'mean'])
+
+print("Length of engagement_metrics:", len(engagement_metrics))
+ 
+engagement_metrics_imputed = imputer.fit_transform(engagement_metrics)
+
+print("Length of engagement_metrics_imputed:", len(engagement_metrics_imputed))
+ 
+normalized_metrics = scaler.fit_transform(engagement_metrics_imputed)
+
+print("Length of normalized_metrics:", len(normalized_metrics))
+
+print("Duplicate rows based on identifier column:")
+
+print(mydata[mydata.duplicated(subset=identifier_column, keep=False)])
+import pandas as pd
+ 
+application_columns = ['Social Media DL (Bytes)', 'Google DL (Bytes)', 'Email DL (Bytes)',
+  'Youtube DL (Bytes)', 'Netflix DL (Bytes)', 'Gaming DL (Bytes)', 'Other DL (Bytes)',
+  'Social Media UL (Bytes)', 'Google UL (Bytes)', 'Email UL (Bytes)',
+  'Youtube UL (Bytes)', 'Netflix UL (Bytes)', 'Gaming UL (Bytes)', 'Other UL (Bytes)']
+ 
+total_data_per_user = mydata.groupby('MSISDN/Number')[application_columns].sum()
+ 
+total_data_per_user['Total Data Usage'] = total_data_per_user.sum(axis=1)
+ 
+top_engaged_users = total_data_per_user.nlargest(10, 'Total Data Usage')
+ 
+print(top_engaged_users)
+
+import matplotlib.pyplot as plt
+ 
+engagement_metric = 'Total Data Usage'
+ 
+plt.figure(figsize=(10, 6))
+
+top_engaged_users[engagement_metric].plot(kind='bar', color='skyblue')
+
+plt.title('Top 10 Engaged Users per Application')
+
+plt.xlabel('Bearer Id')
+
+plt.ylabel(engagement_metric)
+
+plt.show()
+ 
+mydata.hist(figsize=(20, 30))
+
+plt.show()
+
+sns.boxplot(data=mydata)
+
+plt.show()
+import numpy as np
+
+import pandas as pd
+
+import psycopg2
+
+import pandas as pd
+
+from sqlalchemy import create_engine
+
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+
+from sklearn.model_selection import train_test_split
+
+from sklearn.linear_model import LinearRegression
+
+from sklearn.metrics import mean_squared_error, r2_score
+
+from sklearn.preprocessing import StandardScaler
+ 
+db_params = {
+  'dbname': 'week1',
+  'user': 'postgres',
+  'password': 'habte',
+  'host': 'localhost',
+  'port': '5432'
+
+}
+ 
+engine = create_engine(f'postgresql+psycopg2://{db_params["user"]}:{db_params["password"]}@{db_params["host"]}:{db_params["port"]}/{db_params["dbname"]}')
+ 
+sql_query = "SELECT * FROM xdr_data;"
+ 
+mydata = pd.read_sql_query(sql_query, engine)
+
+mydata = mydata.dropna()
+mydata['Start'] = pd.to_datetime(mydata['Start'], errors='coerce')
+
+mydata['End'] = pd.to_datetime(mydata['End'], errors='coerce')
+
+numeric_columns = mydata.select_dtypes(include='number').columns
+
+mydata[numeric_columns] = mydata[numeric_columns].fillna(mydata[numeric_columns].mean())
+mydata.columns
+
+plt.figure(figsize=(12, 8))
+
+sns.histplot(mydata['Avg Bearer TP DL (kbps)'], bins=30, kde=True, color='blue')
+
+plt.title('Distribution of Avg Bearer TP DL (kbps)')
+
+plt.xlabel('Avg Bearer TP DL (kbps)')
+
+plt.ylabel('Frequency')
+
+plt.show()
+
+numeric_columns = mydata.select_dtypes(include=['float64', 'int64']).columns
+
+correlation_matrix = mydata[numeric_columns].corr()
+ 
+plt.figure(figsize=(15, 10))
+
+sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', fmt=".2f")
+
+plt.title('Correlation Matrix')
+
+plt.show()
+ 
+plt.figure(figsize=(12, 8))
+
+sns.boxplot(x='Handset Type', y='Avg RTT DL (ms)', data=mydata)
+
+plt.title('Avg RTT DL (ms) by Handset Type')
+
+plt.xlabel('Handset Type')
+
+plt.ylabel('Avg RTT DL (ms)')
+
+plt.show()
+
+plt.figure(figsize=(12, 8))
+
+sns.scatterplot(x='Total UL (Bytes)', y='Total DL (Bytes)', data=mydata, hue='Handset Manufacturer')
+
+plt.title('User Engagement: Total UL vs Total DL')
+
+plt.xlabel('Total UL (Bytes)')
+
+plt.ylabel('Total DL (Bytes)')
+
+plt.legend()
+
+plt.show()
+
+print(mydata.columns)
+ 
+features = mydata[['Avg Bearer TP DL (kbps)', 'Avg Bearer TP UL (kbps)', 'Avg RTT DL (ms)', 'Avg RTT UL (ms)']]
+
+target = mydata['cluster']  
+scaler = StandardScaler()
+
+features_scaled = scaler.fit_transform(features)
+ 
+X_train, X_test, y_train, y_test = train_test_split(features_scaled, target, test_size=0.2, random_state=42)
+ 
+model = LinearRegression()
+
+model.fit(X_train, y_train)
+ 
+y_pred = model.predict(X_test)
+ 
+mse = mean_squared_error(y_test, y_pred)
+
+r2 = r2_score(y_test, y_pred)
+ 
+print(f'Mean Squared Error: {mse}')
+
+print(f'R-squared: {r2}')
+
+import matplotlib.pyplot as plt
+ 
+plt.scatter(y_test, y_pred, color='blue', alpha=0.5)
+
+plt.plot([min(y_test), max(y_test)], [min(y_test), max(y_test)], linestyle='--', color='red', linewidth=2, label='Perfect Prediction')
+ 
+plt.title('Actual vs. Predicted Values - Linear Regression')
+
+plt.xlabel('Actual Values')
+
+plt.ylabel('Predicted Values')
+
+plt.legend()
+
+plt.grid(True)
+ 
+plt.show()
+
+from sklearn.cluster import KMeans
+
+from sklearn.preprocessing import StandardScaler
+ 
+cluster_features = mydata[['Avg Bearer TP DL (kbps)', 'Avg Bearer TP UL (kbps)', 'Avg RTT DL (ms)', 'Avg RTT UL (ms)']]
+ 
+scaler = StandardScaler()
+
+cluster_features_scaled = scaler.fit_transform(cluster_features)
+ 
+kmeans = KMeans(n_clusters=3, random_state=42)  
+mydata['cluster'] = kmeans.fit_predict(cluster_features_scaled)
+ 
+print(mydata['cluster'].value_counts())
+
+from sklearn.cluster import KMeans
+
+from sklearn.preprocessing import StandardScaler
+
+from sklearn.model_selection import train_test_split
+
+from sklearn.metrics import mean_squared_error, r2_score
+ 
+cluster_features = mydata[['Avg Bearer TP DL (kbps)', 'Avg Bearer TP UL (kbps)', 'Avg RTT DL (ms)', 'Avg RTT UL (ms)']]
+ 
+scaler = StandardScaler()
+
+cluster_features_scaled = scaler.fit_transform(cluster_features)
+ 
+kmeans = KMeans(n_clusters=3, random_state=42)  
+mydata['cluster'] = kmeans.fit_predict(cluster_features_scaled)
+ 
+features = mydata[['Avg Bearer TP DL (kbps)', 'Avg Bearer TP UL (kbps)', 'Avg RTT DL (ms)', 'Avg RTT UL (ms)']]
+
+target = mydata['cluster']
+ 
+scaler = StandardScaler()
+
+features_scaled = scaler.fit_transform(features)
+ 
+X_train, X_test, y_train, y_test = train_test_split(features_scaled, target, test_size=0.2, random_state=42)
+ 
+print(mydata[['Avg Bearer TP DL (kbps)', 'Avg Bearer TP UL (kbps)', 'Avg RTT DL (ms)', 'Avg RTT UL (ms)', 'cluster']].head())
+import pandas as pd
+import seaborn as sns
+import numpy as np
+import psycopg2
+import matplotlib.pyplot as plt
+from sqlalchemy import create_engine
+from sklearn.cluster import KMeans
+
+class UserExperienceAnalysis:
+  def __init__(self, db_params):
+  self.db_params = db_params
+  self.mydata = self.load_data_from_database()
+  def load_data_from_database(self):
+  engine = create_engine(f'postgresql+psycopg2://{self.db_params["user"]}:{self.db_params["password"]}@{self.db_params["host"]}:{self.db_params["port"]}/{self.db_params["dbname"]}')
+  sql_query = "SELECT * FROM xdr_data;"
+  mydata = pd.read_sql_query(sql_query, engine)
+  return mydata
+  def clean_and_preprocess(self):
+  cleaned_data = self.mydata.dropna()
+  cleaned_data['Start'] = pd.to_datetime(cleaned_data['Start'], errors='coerce')
+  cleaned_data['End'] = pd.to_datetime(cleaned_data['End'], errors='coerce')
+  numeric_columns = cleaned_data.select_dtypes(include='number').columns
+  cleaned_data.loc[:, numeric_columns] = cleaned_data.loc[:, numeric_columns].fillna(cleaned_data[numeric_columns].mean())
+  return cleaned_data
+  def perform_user_experience_analysis(self):
+  user_experience_metrics = pd.DataFrame({'MSISDN/Number': self.mydata['MSISDN/Number'].unique()})
+  user_experience_metrics['AvgTCPRetransmission'] = self.aggregate_average_tcp_retransmission()['TCP DL Retrans. Vol (Bytes)']
+  user_experience_metrics['AvgRTT'] = self.aggregate_average_rtt()['Avg RTT DL (ms)']
+  user_experience_metrics['HandsetType'] = self.get_handset_type()['Handset Type']
+  user_experience_metrics['SimpleTCPThroughput'] = self.calculate_simple_tcp_throughput()['SimpleTCPThroughput']
+  return user_experience_metrics
+  def aggregate_average_tcp_retransmission(self):
+  return self.mydata.groupby('MSISDN/Number')['TCP DL Retrans. Vol (Bytes)'].mean().reset_index()
+  def aggregate_average_rtt(self):
+  return self.mydata.groupby('MSISDN/Number')['Avg RTT DL (ms)'].mean().reset_index()
+  def get_handset_type(self):
+  return self.mydata.groupby('MSISDN/Number')['Handset Type'].first().reset_index()
+  def calculate_simple_tcp_throughput(self):
+  throughput = self.mydata['Avg Bearer TP DL (kbps)'] / (self.mydata['TCP DL Retrans. Vol (Bytes)'] + 1)
+  return pd.DataFrame({'MSISDN/Number': self.mydata['MSISDN/Number'], 'SimpleTCPThroughput': throughput})
+
+db_params = {
+  'dbname': 'week1',
+  'user': 'postgres',
+  'password': 'habte',
+  'host': 'localhost',
+  'port': '5432'
+}
+import pandas as pd
+from sklearn.cluster import KMeans
+from sklearn.impute import SimpleImputer
+from sqlalchemy import create_engine
+
+class UserSatisfactionAnalysis:
+  engagement_columns = [
+  'Dur. (ms)',
+  'TCP DL Retrans. Vol (Bytes)',
+  'DL TP < 50 Kbps (%)',
+  '50 Kbps < DL TP < 250 Kbps (%)',
+  '250 Kbps < DL TP < 1 Mbps (%)',
+  'DL TP > 1 Mbps (%)',
+  'Activity Duration DL (ms)',
+  'Activity Duration UL (ms)',
+  'Social Media DL (Bytes)',
+  'Google DL (Bytes)',
+  'Email DL (Bytes)',
+  'Youtube DL (Bytes)',
+  'Netflix DL (Bytes)',
+  'Gaming DL (Bytes)',
+  'Other DL (Bytes)',
+  'Total UL (Bytes)',
+  'Total DL (Bytes)'
+  ]
+  def __init__(self, db_params):
+  self.db_params = db_params
+  self.mydata = self.load_data_from_database()
+  def load_data_from_database(self):
+  """
+  Load data from the PostgreSQL database into a Pandas DataFrame.
+  """
+  engine = create_engine(f'postgresql+psycopg2://{self.db_params["user"]}:{self.db_params["password"]}@{self.db_params["host"]}:{self.db_params["port"]}/{self.db_params["dbname"]}')
+  sql_query = "SELECT * FROM xdr_data;"
+  mydata = pd.read_sql_query(sql_query, engine)
+  return mydata
+  def perform_user_satisfaction_analysis(self):
+  """
+  Perform user satisfaction analysis by calculating engagement and experience scores,
+  deriving a satisfaction score, identifying the top 10 satisfied customers, and clustering users.
+  """
+  engagement_score, experience_score = self.calculate_scores()
+  satisfaction_score = (engagement_score + experience_score) / 2
+  self.mydata['SatisfactionScore'] = satisfaction_score
+  top_satisfied_customers = self.mydata.nlargest(10, 'SatisfactionScore')
+  kmeans_clusters = self.run_kmeans()
+  cluster_aggregates = self.aggregate_scores_by_cluster(kmeans_clusters)
+  return top_satisfied_customers, cluster_aggregates
+  def calculate_scores(self):
+  """
+  Calculate engagement and experience scores based on relevant columns in the dataset.
+  """
+  engagement_score = self.mydata[self.engagement_columns].mean(axis=1)
+  experience_score = 0
+  return engagement_score, experience_score
+  def run_kmeans(self):
+  """
+  Run k-means clustering on engagement and experience scores.
+  """
+  imputer = SimpleImputer(strategy='mean')
+  kmeans_data_imputed = imputer.fit_transform(self.mydata[self.engagement_columns])
+  kmeans_model = KMeans(n_clusters=2, random_state=42)
+  kmeans_clusters = kmeans_model.fit_predict(kmeans_data_imputed)
+  return kmeans_clusters
+  def aggregate_scores_by_cluster(self, kmeans_clusters):
+  """
+  Aggregate average satisfaction scores per cluster.
+  """
+  cluster_data = self.mydata.copy()
+  cluster_data['Cluster'] = kmeans_clusters
+  cluster_aggregates = cluster_data.groupby('Cluster').agg({
+  'SatisfactionScore': 'mean'
+  }).reset_index()
+  return cluster_aggregates
+
+db_params = {
+  'dbname': 'week1',
+  'user': 'postgres',
+  'password': 'habte',
+  'host': 'localhost',
+  'port': '5432'
+}

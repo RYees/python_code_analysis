@@ -1,0 +1,221 @@
+import pandas as pd
+
+from sqlalchemy import create_engine
+
+import numpy as p
+
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+
+from seaborn import scatterplot
+ 
+database_name = 'telecom'
+
+table_name= 'xdr_data'
+ 
+connection_params = { "host": "localhost", "user": "postgres", "password": "admin",
+  "port": "5432", "database": database_name}
+ 
+engine = create_engine(f"postgresql+psycopg2://{connection_params['user']}:{connection_params['password']}@{connection_params['host']}:{connection_params['port']}/{connection_params['database']}")
+ 
+sql_query = 'SELECT * FROM xdr_data'
+ 
+df = pd.read_sql(sql_query, con= engine)
+
+df.info()
+
+pd.set_option('display.max_rows', None)
+
+df.head(10)
+
+print(df.columns)
+
+df.isna().sum()
+
+df.describe()
+
+print(df.shape)
+
+top_10_of_handsets =df['Handset Type'].value_counts().head(10)
+
+print("Top 10 Handsets:")
+
+print(top_10_of_handsets)
+
+top_3_manufacturers = df['Handset Manufacturer'].value_counts().head(3)
+ 
+print("Top 3 Handset Manufacturers:")
+
+print(top_3_manufacturers)
+
+top_3_manufacturers = df['Handset Manufacturer'].value_counts().head(3).index.tolist()
+
+filtered_df = df[df['Handset Manufacturer'].isin(top_3_manufacturers)]
+
+top_5_handsets_per_manufacturer = filtered_df.groupby('Handset Manufacturer')['Handset Type'].value_counts().groupby('Handset Manufacturer').head(5)
+ 
+print("Top 5 Handsets per Top 3 of the Handset Manufacturers:")
+
+print(top_5_handsets_per_manufacturer)
+
+bottom_3_manufacturers = df['Handset Manufacturer'].value_counts().tail(3).index.tolist()
+
+filtered_df = df[df['Handset Manufacturer'].isin(bottom_3_manufacturers)]
+
+bottom_5_handsets_per_manufacturer = filtered_df.groupby('Handset Manufacturer')['Handset Type'].value_counts().groupby('Handset Manufacturer').tail(5)
+ 
+print("Botttom 5 Handsets per bottom 3 of the Handset Manufacturers:")
+
+print(bottom_5_handsets_per_manufacturer)
+ 
+user_app_columns = ['Bearer Id', 'Handset Manufacturer', 'Handset Type', 'Social Media DL (Bytes)',
+  'Social Media UL (Bytes)', 'Google DL (Bytes)', 'Google UL (Bytes)',
+  'Email DL (Bytes)', 'Email UL (Bytes)', 'Youtube DL (Bytes)', 'Youtube UL (Bytes)',
+  'Netflix DL (Bytes)', 'Netflix UL (Bytes)', 'Gaming DL (Bytes)', 'Gaming UL (Bytes)',
+  'Other DL (Bytes)', 'Other UL (Bytes)']
+df_user_apps = df[user_app_columns]
+ 
+df_user_apps['Number of xDR Sessions'] = df_user_apps.groupby('Bearer Id')['Bearer Id'].transform('count')
+
+result_columns = ['Bearer Id', 'Number of xDR Sessions']
+ 
+result = df_user_apps[result_columns].drop_duplicates().reset_index(drop=True)
+
+print(result)
+
+session_dur_per_user = df.groupby('Bearer Id')['Dur. (ms)'].sum().reset_index(name='Session Duration (ms)')
+ 
+print(session_dur_per_user)
+
+total_data_per_user =pd.DataFrame (df.groupby('Bearer Id')[['Total DL (Bytes)', 'Total UL (Bytes)']].sum().reset_index())
+ 
+print(total_data_per_user)
+
+application_columns = ['Bearer Id', 'Social Media DL (Bytes)', 'Social Media UL (Bytes)',
+  'Google DL (Bytes)', 'Google UL (Bytes)', 'Email DL (Bytes)',
+  'Email UL (Bytes)', 'Youtube DL (Bytes)', 'Youtube UL (Bytes)',
+  'Netflix DL (Bytes)', 'Netflix UL (Bytes)', 'Gaming DL (Bytes)',
+  'Gaming UL (Bytes)', 'Other DL (Bytes)', 'Other UL (Bytes)'
+  ]
+ 
+total_data_per_user_app = df[application_columns].groupby('Bearer Id').sum().reset_index()
+ 
+print(total_data_per_user_app)
+
+num_col = df.select_dtypes (include = ['number']).columns
+
+cat_col = df.select_dtypes (include = ['object']).columns
+ 
+df_num = df[num_col]
+
+df_cat = df[cat_col]
+ 
+print("Numerical Columns:", num_col)
+
+print("Categorical Columns:", cat_col)
+
+df_num = df_num.fillna(df_num.mean())
+
+df_num.isna().sum()
+ 
+def replace_outliers_with_mean(df_num, threshold=3):
+  for col in df_num.columns:
+  z_scores = (df_num[col] - df_num[col].mean()) / df_num[col].std()
+  outlier_mask = (z_scores > threshold) | (z_scores < -threshold)
+  df_num[col][outlier_mask] = df_num[col].mean()
+  return df_num
+ 
+df_num = replace_outliers_with_mean(df_num)
+
+df_num.describe()
+correlation_matrix = df_num.corr()
+
+print(correlation_matrix)
+ 
+columns_to_plot = ['Dur. (ms)', 'Avg RTT DL (ms)',
+  'Avg RTT UL (ms)', 'Avg Bearer TP DL (kbps)', 'Avg Bearer TP UL (kbps)',   'Social Media DL (Bytes)', 'Social Media UL (Bytes)',
+  'Google DL (Bytes)', 'Google UL (Bytes)', 'Email DL (Bytes)',
+  'Email UL (Bytes)', 'Youtube DL (Bytes)', 'Youtube UL (Bytes)',
+  'Netflix DL (Bytes)', 'Netflix UL (Bytes)', 'Gaming DL (Bytes)',
+  'Gaming UL (Bytes)', 'Other DL (Bytes)', 'Other UL (Bytes)']
+ 
+num_plots = len(columns_to_plot)
+
+fig, axes = plt.subplots(nrows=num_plots, ncols=1, figsize=(10, 4 * num_plots))
+ 
+for i, column in enumerate(columns_to_plot):
+  axes[i].hist(df_num[column], bins=20, color='skyblue', edgecolor='black')
+  axes[i].set_title(f'Histogram of {column}')
+  axes[i].set_xlabel(column)
+  axes[i].set_ylabel('Frequency')
+ 
+plt.tight_layout()
+
+plt.show()
+ 
+columns_to_plot = ['Dur. (ms)', 'Avg RTT DL (ms)',
+  'Avg RTT UL (ms)', 'Avg Bearer TP DL (kbps)', 'Avg Bearer TP UL (kbps)',
+  'Social Media DL (Bytes)', 'Social Media UL (Bytes)',
+  'Google DL (Bytes)', 'Google UL (Bytes)', 'Email DL (Bytes)',
+  'Email UL (Bytes)', 'Youtube DL (Bytes)', 'Youtube UL (Bytes)',
+  'Netflix DL (Bytes)', 'Netflix UL (Bytes)', 'Gaming DL (Bytes)',
+  'Gaming UL (Bytes)', 'Other DL (Bytes)', 'Other UL (Bytes)']
+ 
+num_plots = len(columns_to_plot)
+
+fig, axes = plt.subplots(nrows=num_plots, ncols=1, figsize=(10, 4 * num_plots))
+ 
+for i, column in enumerate(columns_to_plot):
+  axes[i].boxplot(df_num[column])
+  axes[i].set_title(f'Box Plot of {column}')
+  axes[i].set_xlabel(column)
+  axes[i].set_ylabel('Value')
+ 
+plt.tight_layout()
+
+plt.show()
+df_num['Total Bytes Sum'] = df_num['Total DL (Bytes)'] + df_num['Total UL (Bytes)']
+
+print(df_num['Total Bytes Sum'])
+ 
+application_columns2 = ['Social Media DL (Bytes)', 'Social Media UL (Bytes)',
+  'Google DL (Bytes)', 'Google UL (Bytes)', 'Email DL (Bytes)',
+  'Email UL (Bytes)', 'Youtube DL (Bytes)', 'Youtube UL (Bytes)',
+  'Netflix DL (Bytes)', 'Netflix UL (Bytes)', 'Gaming DL (Bytes)',
+  'Gaming UL (Bytes)', 'Other DL (Bytes)', 'Other UL (Bytes)'
+  ]
+ 
+correlations = df_num[application_columns2 + ['Total Bytes Sum']]. corr()
+
+correlations
+ 
+for app_column in application_columns2:
+  plt.figure(figsize=(8, 6))
+  sns.scatterplot(x='Total Bytes Sum', y=app_column, data=df_num)   plt.title(f'Scatter Plot: {app_column} vs Total Bytes Sum')
+  plt.xlabel('Total Bytes Sum')
+  plt.ylabel(app_column)
+  plt.show()
+
+correlation_matrix = df_num[application_columns2 + ['Total Bytes Sum']].corr()
+
+sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', fmt='.2f')
+
+plt.show()  
+df_num['Total Duration'] = df_num['Dur. (ms)']
+ 
+df_num['Duration Decile'] = pd.qcut(df_num['Total Duration'], q=[0, 0.2, 0.4, 0.6, 0.8, 1], labels=False, precision=0)
+ 
+decile_totals = df_num.groupby(['MSISDN/Number', 'Duration Decile'])['Total Bytes Sum'].sum().reset_index()
+ 
+top_five_deciles = decile_totals.groupby('Duration Decile')['Total Bytes Sum'].sum().nlargest(5).index
+ 
+top_five_deciles_data = decile_totals[decile_totals['Duration Decile'].isin(top_five_deciles)]
+ 
+print(top_five_deciles_data)
+
+subset_df = df_num[application_columns2]
+ 
+correlation_matrix = subset_df.corr
+ 
+print(correlation_matrix)

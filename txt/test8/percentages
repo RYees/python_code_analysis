@@ -1,0 +1,8 @@
+{0: {'Basic': 9.52},
+ 1: {'Advanced': 4.76, 'Basic': 9.52, 'Intermediate': 4.76},
+ 2: {'Advanced': 4.76, 'Basic': 14.29, 'Intermediate': 4.76},
+ 3: {'Basic': 9.52, 'Intermediate': 9.52},
+ 4: {'Intermediate': 9.52},
+ 5: {'Intermediate': 4.76},
+ 6: {'Intermediate': 4.76},
+ 7: {'Basic': 4.76, 'Intermediate': 4.76}}

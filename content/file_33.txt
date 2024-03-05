@@ -1,0 +1,1162 @@
+import pandas as pd
+from sqlalchemy import create_engine
+
+dbname = "telecom"
+user = "postgres"
+password = "12345"
+host = "localhost"
+port = "5432"
+
+connection_string = f"postgresql://{user}:{password}@{host}:{port}/{dbname}"
+  engine = create_engine(connection_string)
+  query = "SELECT * FROM xdr_data;"
+
+df = pd.read_sql(query, engine)
+
+telecomdata = df.to_csv('./data/telecom.csv')
+import pandas as pd
+
+import numpy as np
+
+import seaborn as sns
+
+import matplotlib.pyplot as plt
+
+import os, sys
+
+sys.path.insert(0,'../scripts/')
+
+from process import *
+
+import warnings
+
+warnings.filterwarnings('ignore')
+
+telcom_df = pd.read_csv('../data/telecom.csv', na_values=['?',"n.a.","NA","n/a", "na", None])
+
+telcom_df.drop("Unnamed: 0",axis=1,inplace=True)
+telcom_df.head()
+
+discribe = get_df_discribe(telcom_df)
+ 
+discribe
+telcom_df_information = get_df_information(telcom_df)
+
+telcom_df.shape
+telcom_df.columns
+view_df_null_count = get_df_null_count(telcom_df)
+
+view_df_null_count
+telecom_missing = get_df_percent_missing(telcom_df)
+
+telecom_missing
+telecom_column_percentage = get_missing_colum_percentage(telcom_df)
+ 
+telecom_column_percentage
+telecom_clean = telcom_df.drop(['TCP DL Retrans. Vol (Bytes)','TCP UL Retrans. Vol (Bytes)', 'HTTP DL (Bytes)','HTTP UL (Bytes)','Nb of sec with 1250B < Vol UL < 6250B', 'Nb of sec with 6250B < Vol UL < 37500B', 'Nb of sec with 6250B < Vol DL < 31250B', 'Nb of sec with 125000B < Vol DL', 'Nb of sec with 37500B < Vol UL', 'Nb of sec with 31250B < Vol DL < 125000B'], axis=1)
+
+telecom_clean.shape
+telecom_clean.info()
+ 
+telecom_clean = telecom_clean.dropna(subset=['Bearer Id', 'Start', 'End', 'IMSI', 'MSISDN/Number'])
+ 
+telecom_clean.isna().sum()
+missing_columns_lists = ['DL TP < 50 Kbps (%)','50 Kbps < DL TP < 250 Kbps (%)',
+
+'250 Kbps < DL TP < 1 Mbps (%)','DL TP > 1 Mbps (%)','UL TP < 10 Kbps (%)','10 Kbps < UL TP < 50 Kbps (%)','50 Kbps < UL TP < 300 Kbps (%)','UL TP > 300 Kbps (%)','Last Location Name','Avg RTT DL (ms)','Avg RTT UL (ms)','Nb of sec with Vol DL < 6250B','Nb of sec with Vol UL < 1250B']
+ 
+for value in missing_columns_lists:
+  if(value!="Last Location Name"):
+  telecom_clean[value] = telecom_clean[value].fillna(telecom_clean[value].mean())
+  else:
+  telecom_clean[value] = telecom_clean[value].fillna(telecom_clean[value].mode()[0])
+telecom_clean.info()
+
+telecom_clean.to_csv("../data/telecom_clean_data.csv")
+ 
+from sklearn.preprocessing import MinMaxScaler
+ 
+minmax_scaler = MinMaxScaler()
+ 
+original_data = pd.DataFrame(np.random.exponential(200, size=2000))
+ 
+original_data.sample(5)
+count, bins, ignored = plt.hist(original_data, 14)
+
+plt.show()
+ 
+def scaler(df):
+  scaled_data = minmax_scaler.fit_transform(df)
+  fig, ax = plt.subplots(1,2, figsize=(10, 6))
+  sns.histplot(original_data, ax=ax[0])
+  ax[0].set_title("Original Data")
+  sns.histplot(scaled_data, ax=ax[1])
+  ax[1].set_title("Scaled data")
+ 
+scaler(original_data)
+from sklearn.preprocessing import Normalizer
+ 
+def normalizer(df):
+  norm = Normalizer()
+  normalized_data = norm.fit_transform(df)
+  fig, ax=plt.subplots(1,2, figsize=(10, 6))
+  sns.histplot(df, ax=ax[0])
+  ax[0].set_title("Original Data")
+  sns.histplot(normalized_data[0], ax=ax[1])
+  ax[1].set_title("Normalized data")
+ 
+normalizer(original_data)
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+ 
+def get_df_percent_missing(df: pd.DataFrame) -> str:
+  totalCells = np.product(df.shape)
+  missingCount = df.isnull().sum()
+  totalMissing = missingCount.sum()
+  return f"The telecom contains {round(((totalMissing/totalCells) * 100), 2)}% missing values."
+
+def get_df_discribe(df:pd.DataFrame)->pd.DataFrame:
+  return df.describe()
+
+def get_df_null_count(df:pd.DataFrame)->pd.DataFrame:
+  return df.isna().sum()
+
+def get_df_information(df:pd.DataFrame)->pd.DataFrame:
+  return df.info()
+
+def get_missing_colum_percentage(df: pd.DataFrame) -> pd.DataFrame:
+  num_missing = df.isnull().sum()
+  num_rows = df.shape[0]
+  data = {
+  'num_missing': num_missing,   'percent_missing (%)': [round(x, 2) for x in num_missing / num_rows * 100]
+  }
+  stats = pd.DataFrame(data)
+  return stats[stats['num_missing'] != 0]
+ 
+def plot_scatter(df: pd.DataFrame, x_col: str, y_col: str,title:str) -> None:
+  plt.figure(figsize=(12, 7))
+  sns.scatterplot(data = df, x=x_col, y=y_col)
+  plt.title(f'{title}')
+  plt.xticks(fontsize=14)
+  plt.yticks( fontsize=14)
+  plt.show()
+
+def plot_heatmap(df:pd.DataFrame, title:str, cbar=False)->None:
+  plt.figure(figsize=(12, 7))
+  sns.heatmap(df, annot=True, cmap='viridis', vmin=0, vmax=1, fmt='.2f', linewidths=.7, cbar=cbar )
+  plt.title(title, size=18, fontweight='bold')
+  plt.show()
+
+def plot_hist(df:pd.DataFrame, column:str, color:str)->None:
+  sns.displot(data=df, x=column, color=color, kde=True, height=7, aspect=2)
+  plt.title(f'Distribution of {column}', size=20, fontweight='bold')
+  plt.show()
+
+def mult_hist(sr, rows, cols, title_text, subplot_titles, interactive=False):
+  fig = make_subplots(rows=rows, cols=cols, subplot_titles=subplot_titles)
+  for i in range(rows):
+  for j in range(cols):
+  x = ["-> " + str(i) for i in sr[i+j].index]
+  fig.add_trace(go.Bar(x=x, y=sr[i+j].values), row=i+1, col=j+1)
+  fig.update_layout(showlegend=False, title_text=title_text)
+  if(interactive):
+  fig.show()
+  else:
+  return Image(pio.to_image(fig, format='png', width=1200))
+Telecommunication Analysis
+
+This project centers on a thorough analysis of a telecommunication dataset to evaluate growth opportunities and provide a recommendation on whether TellCo is a viable candidate for acquisition or divestment.
+
+The dataset encompasses crucial information about customer demographics and network activities. Through exploratory data analysis (EDA), we will clean and explore the data, deriving key insights and trends.
+
+The deliverables include an interactive web-based dashboard for visual exploration and a comprehensive written report outlining findings and strategic recommendations. Stakeholders can leverage these insights to make informed decisions regarding TellCo's potential for growth or divestment.
+import pandas as pd
+
+import os, sys
+
+import numpy as np
+
+import matplotlib.pylab as plt
+
+import seaborn as sns
+
+import statistics as st
+
+sys.path.insert(0,'../scripts/')
+
+telecom_df = pd.read_csv('../data/telecom_clean_data.csv')
+
+telecom_df.drop("Unnamed: 0",axis=1,inplace=True)
+
+pd.set_option('display.float_format', lambda x: '{:,.0f}'.format(x))
+telecom_df.head(5)
+telecom_df.head(5)
+
+handset_type= telecom_df['Handset Type'].value_counts()[0:10]
+
+handset_type.plot.bar(x='Handset Type', title="Top 10 handsets used by customers", stacked=True, color='
+handset_type
+
+Handset_manufacturers = telecom_df['Handset Manufacturer'].value_counts()[0:3]
+
+Handset_manufacturers.plot.bar(x='Handset Manufacturer', title="Top 3 handset manufacturers", stacked=True, color='
+Handset_manufacturers
+top_apple = telecom_df.loc[telecom_df['Handset Manufacturer'] == 'Apple']
+
+top_apple = top_apple.groupby(['Handset Manufacturer', 'Handset Type']).agg({'Handset Type': ['count']})
+
+top_apple.columns = ['count']
+
+top_apple=top_apple.nlargest(5, 'count')
+
+top_apple.plot.bar(y='count', title="Top 5 Apple Handsets", stacked=True, color='
+top_apple
+top_samsung = telecom_df.loc[telecom_df['Handset Manufacturer'] == 'Samsung']
+
+top_samsung = top_samsung.groupby(['Handset Manufacturer', 'Handset Type']).agg({'Handset Type': ['count']})
+
+top_samsung.columns = ['count']
+
+top_samsung=top_samsung.nlargest(5, 'count')
+
+top_samsung.plot.bar(y='count', title="Top 5 Samsung Handsets", stacked=True, color='
+top_samsung
+top_huawei = telecom_df.loc[telecom_df['Handset Manufacturer'] == 'Huawei']
+
+top_huawei = top_huawei.groupby(['Handset Manufacturer', 'Handset Type']).agg({'Handset Type': ['count']})
+
+top_huawei.columns = ['count']
+
+top_huawei=top_huawei.nlargest(5, 'count')
+
+top_huawei.plot.bar(y='count', title="Top 5 Huawei Handsets", stacked=True, color='
+top_huawei
+ 
+xDR_session_per_user = telecom_df.groupby('MSISDN/Number')['Bearer Id'].sum()
+
+xDR_session_per_user
+session_duration_per_user = telecom_df.groupby('MSISDN/Number')['Dur. (ms)'].sum()
+
+session_duration_per_user
+
+total_ul = telecom_df.groupby('MSISDN/Number')['Total UL (Bytes)'].sum()
+
+total_dl = telecom_df.groupby('MSISDN/Number')['Total DL (Bytes)'].sum()
+
+print(f'total upload:\n{total_ul}\n\ntotal download:\n{total_dl}\n\ntotal upload + download: {total_dl+total_ul}')
+ 
+total_google = telecom_df['Google DL (Bytes)'] + telecom_df['Google UL (Bytes)']
+
+total_email = telecom_df['Email DL (Bytes)'] + telecom_df['Email UL (Bytes)']
+
+total_gaming = telecom_df['Gaming DL (Bytes)'] + telecom_df['Gaming UL (Bytes)']
+ 
+total_youtube = telecom_df['Youtube DL (Bytes)'] + telecom_df['Youtube UL (Bytes)']
+
+total_netflix = telecom_df['Netflix DL (Bytes)'] + telecom_df['Netflix UL (Bytes)']
+
+total_social = telecom_df['Social Media DL (Bytes)'] + telecom_df['Social Media UL (Bytes)']
+
+total_other = telecom_df['Other DL (Bytes)'] + telecom_df['Other UL (Bytes)']
+ 
+telecom_df['total_google'] = total_google
+
+telecom_df['total_email'] = total_email
+
+telecom_df['total_gaming'] = total_gaming
+ 
+telecom_df['total_youtube'] = total_youtube
+
+telecom_df['total_netflix'] = total_netflix
+
+telecom_df['total_social'] = total_social
+
+telecom_df['total_other'] = total_other
+ 
+total_data_volume_per_user_google = telecom_df.groupby('MSISDN/Number')['total_google'].sum()
+
+print(f'{total_data_volume_per_user_google}\n')
+ 
+total_data_volume_per_user_email = telecom_df.groupby('MSISDN/Number')['total_email'].sum()
+
+print(f'{total_data_volume_per_user_email}\n')
+ 
+total_data_volume_per_user_gaming = telecom_df.groupby('MSISDN/Number')['total_gaming'].sum()
+
+print(f'{total_data_volume_per_user_gaming}\n')
+ 
+total_data_volume_per_user_youtube = telecom_df.groupby('MSISDN/Number')['total_youtube'].sum()
+
+print(f'{total_data_volume_per_user_youtube}\n')
+ 
+total_data_volume_per_user_netflix = telecom_df.groupby('MSISDN/Number')['total_netflix'].sum()
+
+print(f'{total_data_volume_per_user_netflix}\n')  
+total_data_volume_per_user_social = telecom_df.groupby('MSISDN/Number')['total_social'].sum()
+
+print(f'{total_data_volume_per_user_social}\n')
+ 
+total_data_volume_per_user_other = telecom_df.groupby('MSISDN/Number')['total_other'].sum()
+
+print(f'{total_data_volume_per_user_other}\n')
+
+relevant_features = ['Dur. (ms)', 'Activity Duration DL (ms)', 'Activity Duration UL (ms)', 'Social Media DL (Bytes)', 'Social Media UL (Bytes)', 'Google DL (Bytes)', 'Google UL (Bytes)', 'Email DL (Bytes)', 'Email UL (Bytes)', 'Youtube DL (Bytes)', 'Youtube UL (Bytes)', 'Netflix DL (Bytes)', 'Netflix UL (Bytes)', 'Gaming DL (Bytes)', 'Gaming UL (Bytes)', 'Other DL (Bytes)', 'Other UL (Bytes)', 'Total UL (Bytes)', 'Total DL (Bytes)', 'total_google', 'total_email', 'total_gaming', 'total_youtube', 'total_netflix', 'total_social', 'total_other']
+ 
+print("Mean\n", telecom_df[relevant_features].mean(), '\n')
+
+print("Median\n", telecom_df[relevant_features].median(), '\n')
+ 
+mode_series = pd.Series(telecom_df[relevant_features].mode().values[0], index=relevant_features)
+
+print("Mode\n", mode_series, '\n')
+ 
+print("Highest\n", telecom_df[relevant_features].max(), '\n')
+
+print("lowest\n", telecom_df[relevant_features].min(), '\n')
+ 
+sub_relevant_features = ['MSISDN/Number','Dur. (ms)','Total UL (Bytes)', 'Total DL (Bytes)', 'total_google','total_email','total_gaming','total_youtube','total_netflix','total_social', 'total_other']
+ 
+telecom_df[sub_relevant_features].describe()
+ 
+telecom_df[['Dur. (ms).1']].describe()
+plot_hist(telecom_df, 'Dur. (ms).1', 'dodgerblue')
+telecom_df[['Total UL (Bytes)']].describe()
+plot_hist(telecom_df, 'Total UL (Bytes)', '
+telecom_df[['Total DL (Bytes)']].describe()
+plot_hist(telecom_df, 'Total DL (Bytes)', '
+telecom_df["Social_Media_Total_Data"].describe()
+plot_hist(telecom_df, 'Social_Media_Total_Data', '
+
+telecom_df[['Google_Total_Data']].describe()
+plot_hist(telecom_df, 'Google_Total_Data', '
+telecom_df[['Email_Total_Data']].describe()
+
+plot_hist(telecom_df, 'Email_Total_Data', '
+telecom_df[['Youtube_Total_Data']].describe()
+
+plot_hist(telecom_df, 'Youtube_Total_Data', '
+ 
+telecom_df[['Netflix_Total_Data']].describe()
+
+plot_hist(telecom_df, 'Netflix_Total_Data', color="
+plot_hist(telecom_df, 'Gaming_Total_Data', 'indigo')
+ 
+telecom_df[['Other_Total_Data']].describe()
+plot_hist(telecom_df, 'Other_Total_Data', 'sample_data = telecom_df.sample(frac=0.000099)
+
+print(sample_data.shape)
+
+sum_column = sample_data["Total DL (Bytes)"] + sample_data["Total UL (Bytes)"]
+telecom_df["Youtube_Total_Data"]=telecom_df["Youtube DL (Bytes)"]+telecom_df["Youtube UL (Bytes)"]
+
+telecom_df["Google_Total_Data"]=telecom_df["Google DL (Bytes)"]+telecom_df["Google UL (Bytes)"]
+
+telecom_df["Email_Total_Data"]=telecom_df["Email DL (Bytes)"]+telecom_df["Email UL (Bytes)"]
+
+telecom_df["Social_Media_Total_Data"]=telecom_df["Social Media DL (Bytes)"]+telecom_df["Social Media UL (Bytes)"]
+
+telecom_df["Netflix_Total_Data"]=telecom_df["Netflix DL (Bytes)"]+telecom_df["Netflix UL (Bytes)"]
+
+telecom_df["Gaming_Total_Data"]=telecom_df["Gaming DL (Bytes)"]+telecom_df["Gaming UL (Bytes)"]
+
+telecom_df["Other_Total_Data"]=telecom_df["Other DL (Bytes)"]+telecom_df["Other UL (Bytes)"]
+
+telecom_df["Total UL and DL"]=telecom_df["Total UL (Bytes)"]+telecom_df["Total DL (Bytes)"]
+
+columns = ['MSISDN/Number', 'Youtube_Total_Data', 'Google_Total_Data', 'Email_Total_Data','Social_Media_Total_Data', 'Netflix_Total_Data', 'Gaming_Total_Data', 'Other_Total_Data', 'Total UL and DL']
+ 
+user_ratio_usage= telecom_df[columns].groupby('MSISDN/Number').sum()
+
+user_ratio_usage.head(10)
+apps_columns = ['Dur. (ms)','MSISDN/Number', 'Youtube_Total_Data', 'Google_Total_Data', 'Email_Total_Data','Social_Media_Total_Data', 'Netflix_Total_Data', 'Gaming_Total_Data', 'Other_Total_Data', 'Total UL and DL']
+
+user_ratio_usage = telecom_df[apps_columns]
+ 
+user_ratio_usage.columns
+plot_scatter(user_ratio_usage,'Gaming_Total_Data', 'Total UL and DL', 'Total Data Vs. Gaming Data usage (MegaBytes)')
+
+plot_scatter(user_ratio_usage.sample(10000), 'Youtube_Total_Data', 'Total UL and DL', 'Total Data Vs. Youtube_Total_Data (MegaBytes)')
+ 
+plot_scatter(user_ratio_usage.sample(10000), 'Email_Total_Data', 'Total UL and DL', 'Total Data Vs. Email_Total_Data (MegaBytes)')
+ 
+plot_scatter(user_ratio_usage.sample(10000), 'Social_Media_Total_Data', 'Total UL and DL', 'Total Data Vs. Social_Media_Total_Data (MegaBytes)')
+ 
+plot_scatter(user_ratio_usage.sample(10000), 'Netflix_Total_Data', 'Total UL and DL', 'Total Data Vs. Netflix_Total_Data (MegaBytes)')
+
+plot_scatter(user_ratio_usage.sample(10000), 'Other_Total_Data', 'Total UL and DL', 'Total Data Vs. Other_Total_Data ')
+ 
+telecom_df['total_data'] = telecom_df["Total DL (Bytes)"] + telecom_df["Total UL (Bytes)"]
+ 
+telecom_df['decile'] = pd.qcut(telecom_df['Dur. (ms)'],10, duplicates='drop')
+ 
+ax=telecom_df.groupby('decile')['total_data'].sum().head(5).plot(kind='bar', xticks=[0,1,2,3,4])
+
+ax.set_xticklabels(['First','Second','Third','Fourth','Fifth'])
+
+ax.set_ylabel('Data Durations')
+
+columns = ['Youtube_Total_Data', 'Google_Total_Data', 'Email_Total_Data','Social_Media_Total_Data', 'Netflix_Total_Data', 'Gaming_Total_Data', 'Other_Total_Data', 'Total UL and DL']
+
+corr = user_ratio_usage[columns].corr()
+
+corr
+
+plot_heatmap(corr, "Correlation of Usage of User Data Volume")
+ 
+numeric_df = user_ratio_usage.select_dtypes(include='float64') 
+numeric_df.describe()
+from sklearn.preprocessing import StandardScaler
+
+scaler = StandardScaler()
+
+scaler.fit(numeric_df)
+
+scaled_data = scaler.transform(numeric_df)
+
+from sklearn.decomposition import PCA
+
+pca = PCA(n_components=10)
+
+pca.fit(scaled_data)
+
+x_pca = pca.transform(scaled_data)
+
+plt.figure(figsize=(8,6))
+
+plt.scatter(x_pca[:,4],x_pca[:,1],c=user_ratio_usage['Total UL and DL'],cmap='rainbow')
+
+plt.xlabel('First principal component')
+
+plt.ylabel('Second Principal Component')
+
+from sklearn.decomposition import PCA
+
+pca = PCA().fit(numeric_df)
+
+plt.plot(np.cumsum(pca.explained_variance_ratio_))
+
+plt.xlim(0,7.1)
+
+plt.xlabel('Number of components')
+
+plt.ylabel('Cumulative explained variance')
+ 
+from sklearn.decomposition import PCA  
+sklearn_pca = PCA(n_components=6)
+
+Y_sklearn = sklearn_pca.fit_transform(numeric_df)
+
+Y_sklearn
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import plotly.graph_objects as go
+import plotly.io as pio
+from IPython.display import Image
+from plotly.subplots import make_subplots
+def get_df_percent_missing(df: pd.DataFrame) -> str:
+  totalCells = np.product(df.shape)
+  missingCount = df.isnull().sum()
+  totalMissing = missingCount.sum()
+  return f"The telecom contains {round(((totalMissing/totalCells) * 100), 2)}% missing values."
+
+def get_df_discribe(df:pd.DataFrame)->pd.DataFrame:
+  return df.describe()
+
+def get_df_null_count(df:pd.DataFrame)->pd.DataFrame:
+  return df.isna().sum()
+
+def get_df_information(df:pd.DataFrame)->pd.DataFrame:
+  return df.info()
+
+def get_missing_colum_percentage(df: pd.DataFrame) -> pd.DataFrame:
+  num_missing = df.isnull().sum()
+  num_rows = df.shape[0]
+  data = {
+  'num_missing': num_missing,   'percent_missing (%)': [round(x, 2) for x in num_missing / num_rows * 100]
+  }
+  stats = pd.DataFrame(data)
+  return stats[stats['num_missing'] != 0]
+ 
+def plot_scatter(df: pd.DataFrame, x_col: str, y_col: str,title:str) -> None:
+  plt.figure(figsize=(12, 7))
+  sns.scatterplot(data = df, x=x_col, y=y_col)
+  plt.title(f'{title}')
+  plt.xticks(fontsize=14)
+  plt.yticks( fontsize=14)
+  plt.show()
+
+def plot_heatmap(df:pd.DataFrame, title:str, cbar=False)->None:
+  plt.figure(figsize=(12, 7))
+  sns.heatmap(df, annot=True, cmap='viridis', vmin=0, vmax=1, fmt='.2f', linewidths=.7, cbar=cbar )
+  plt.title(title, size=18, fontweight='bold')
+  plt.show()
+
+def plot_hist(df:pd.DataFrame, column:str, color:str)->None:
+  sns.displot(data=df, x=column, color=color, kde=True, height=7, aspect=2)
+  plt.title(f'Distribution of {column}', size=20, fontweight='bold')
+  plt.show()
+
+def mult_hist(sr, rows, cols, title_text, subplot_titles, interactive=False):
+  fig = make_subplots(rows=rows, cols=cols, subplot_titles=subplot_titles)
+  for i in range(rows):
+  for j in range(cols):
+  x = ["-> " + str(i) for i in sr[i+j].index]
+  fig.add_trace(go.Bar(x=x, y=sr[i+j].values), row=i+1, col=j+1)
+  fig.update_layout(showlegend=False, title_text=title_text)
+  if(interactive):
+  fig.show()
+  else:
+  return Image(pio.to_image(fig, format='png', width=1200))
+import numpy as np
+
+import matplotlib.pyplot as plt
+
+%matplotlib inline
+
+import math
+
+import seaborn as sns
+
+import plotly.io as pio
+
+from plotly import *
+
+import plotly.express as px
+
+import plotly.graph_objects as go  
+import pandas as pd
+
+from IPython.display import Image
+
+from sklearn import preprocessing
+
+from sklearn.cluster import KMeans
+
+from scipy.spatial.distance import cdist
+
+from sklearn.preprocessing import StandardScaler, normalize
+
+import os,sys
+
+import kaleido
+
+from plotly.subplots import make_subplots
+
+sys.path.insert(0,'../scripts/')
+
+from process import *
+df = pd.read_csv('../data/telecom_clean_data.csv', na_values=['?',"n.a.","NA","n/a", "na", None])
+
+df.drop("Unnamed: 0",axis=1,inplace=True)
+
+pd.set_option('display.float_format', lambda x: '{:,.0f}'.format(x))
+
+df.head(5)
+ 
+users_data = df.groupby('MSISDN/Number')
+ 
+users_sessions= users_data['Bearer Id'].count()
+
+users_sessions.head(10)
+ 
+users_sessions= users_data['Dur. (ms)'].sum()
+
+users_sessions
+
+df["Total Uploads"]=df["Google UL (Bytes)"]+df["Email UL (Bytes)"]+df["Social Media UL (Bytes)"]+df["Youtube UL (Bytes)"]+df["Netflix UL (Bytes)"]+df["Gaming UL (Bytes)"]+df["Other UL (Bytes)"]
+
+df["Total Downloads"]=df["Google DL (Bytes)"]+df["Email DL (Bytes)"]+df["Social Media DL (Bytes)"]+df["Youtube DL (Bytes)"]+df["Netflix DL (Bytes)"]+df["Gaming DL (Bytes)"]+df["Other DL (Bytes)"]
+
+df['Total UL and DL']=df['Total DL (Bytes)']+df["Total UL (Bytes)"]
+ 
+df["Youtube_Total_Data"]=df["Youtube DL (Bytes)"]+df["Youtube UL (Bytes)"]
+
+df["Google_Total_Data"]=df["Google DL (Bytes)"]+df["Google UL (Bytes)"]
+
+df["Email_Total_Data"]=df["Email DL (Bytes)"]+df["Email UL (Bytes)"]
+
+df["Social_Media_Total_Data"]=df["Social Media DL (Bytes)"]+df["Social Media UL (Bytes)"]
+
+df["Netflix_Total_Data"]=df["Netflix DL (Bytes)"]+df["Netflix UL (Bytes)"]
+
+df["Gaming_Total_Data"]=df["Gaming DL (Bytes)"]+df["Gaming UL (Bytes)"]
+
+df["Other_Total_Data"]=df["Other DL (Bytes)"]+df["Other UL (Bytes)"]
+
+users = df[['MSISDN/Number', 'Bearer Id', 'Dur. (ms).1', 'Total UL and DL']].copy().rename(columns={'Dur. (ms).1': 'time_duration'})
+
+users
+
+users = users.groupby('MSISDN/Number').agg({'Bearer Id': 'count', 'time_duration': 'sum', 'Total UL and DL': 'sum'})
+
+users = users.rename(columns={'Bearer Id': 'sessions'})
+
+users.head(10)
+
+users.nlargest(10, 'time_duration')
+ 
+users.nlargest(10, 'time_duration')
+sessions = users.nlargest(10, "sessions")['sessions']
+
+duration = users.nlargest(10, "time_duration")['time_duration']
+
+data_volume = users.nlargest(10, "Total UL and DL")['Total UL and DL']
+ 
+mult_hist([sessions, duration, data_volume], 1,3, "User metrix", ['sessions', 'time_duration','Total UL and DL'])
+
+users.boxplot()
+scaler = StandardScaler()
+
+scaled_array = scaler.fit_transform(users)
+
+pd.DataFrame(scaled_array).head(5)
+ 
+data_normalized = normalize(scaled_array)
+
+pd.DataFrame(data_normalized).head(5)
+ 
+data_normalized
+kmeans = KMeans(n_clusters=3, random_state=0).fit(data_normalized)
+
+kmeans.labels_
+users.insert(0, 'Cluster', kmeans.labels_)
+
+users.head(5)
+fig = px.scatter(users, x='Total UL and DL', y="time_duration", color='Cluster', size='sessions')
+
+Image(pio.to_image(fig, format='png', width=1200))
+ 
+cluster1 = users[users["Cluster"]==0]
+
+cluster1.describe()
+cluster1 = users[users["Cluster"]==1]
+
+cluster1.describe()
+ 
+apps_df = df.groupby('MSISDN/Number').agg({'Gaming_Total_Data': 'sum', 'Youtube_Total_Data': 'sum', 'Netflix_Total_Data': 'sum',\
+  'Google_Total_Data': 'sum', 'Email_Total_Data': 'sum', 'Social_Media_Total_Data': 'sum', 'Other_Total_Data': 'sum'})
+
+apps_df.head(10)
+Gaming_Data = apps_df.nlargest(10, "Gaming_Total_Data")['Gaming_Total_Data']
+
+Youtube_Data = apps_df.nlargest(10, "Youtube_Total_Data")['Youtube_Total_Data']
+
+Netflix_Data = apps_df.nlargest(10, "Netflix_Total_Data")['Netflix_Total_Data']
+
+Google_Data = apps_df.nlargest(10, "Google_Total_Data")['Google_Total_Data']
+
+Email_Data = apps_df.nlargest(10, "Email_Total_Data")['Email_Total_Data']
+
+Social_Media = apps_df.nlargest(10, "Social_Media_Total_Data")['Social_Media_Total_Data']
+
+Other_Data = apps_df.nlargest(10, "Other_Total_Data")['Other_Total_Data']
+ 
+mult_hist([Gaming_Data, Youtube_Data, Netflix_Data], 1,
+  3, "User metrix", ["Gaming_Data", "Youtube_Data", "Netflix_Data"])
+ 
+top_3 = apps_df.sum()
+
+type(top_3)
+ 
+top_3
+import matplotlib.pyplot as plt
+ 
+applications = ['Gaming', 'Youtube', 'Netflix', 'Google', 'Email', 'Social Media', 'Other']
+
+data_values = [63910124731666, 3362537620065, 3360563670772, 1159544186717, 335503000148, 271478798103, 63770726326023]
+ 
+sorted_data = sorted(zip(applications, data_values), key=lambda x: x[1], reverse=True)
+ 
+top_applications = [app for app, _ in sorted_data[:3]]
+
+top_values = [value for _, value in sorted_data[:3]]
+ 
+plt.figure(figsize=(8, 6))
+ 
+plt.bar(top_applications, top_values, color=['blue', 'green', 'orange'])
+
+plt.title('Top 3 Most Used Applications')
+
+plt.xlabel('Applications')
+
+plt.ylabel('Total Data (in bytes)')
+ 
+for i, value in enumerate(top_values):
+  plt.text(i, value + 0.002 * max(top_values), f'{value:,}', ha='center')
+ 
+plt.show()
+ 
+def choose_kmeans(df: pd.DataFrame, num: int):
+  distortions = []
+  inertias = []
+  K = range(1, num)
+  for k in K:
+  kmeans = KMeans(n_clusters=k, random_state=0).fit(df)
+  distortions.append(sum(
+  np.min(cdist(df, kmeans.cluster_centers_, 'euclidean'), axis=1)) / df.shape[0])
+  inertias.append(kmeans.inertia_)
+  return (distortions, inertias)
+
+distortions, inertias = choose_kmeans(data_normalized, 1)
+fig = make_subplots(
+  rows=1, cols=2, subplot_titles=("Distortion", "Inertia")
+
+)
+
+fig.add_trace(go.Scatter(x=np.array(range(1, 15)), y=distortions), row=1, col=1)
+
+fig.add_trace(go.Scatter(x=np.array(range(1, 15)), y=inertias), row=1, col=2)
+
+fig.update_layout(title_text="The Elbow Method")
+ 
+Image(pio.to_image(fig, format='png', width=1200))
+ 
+kmeans = KMeans(n_clusters=4, random_state=0).fit(data_normalized)
+
+users["cluster"]= kmeans.labels_
+
+users
+import pickle
+with open("../models/users.pkl", "wb") as f:
+  pickle.dump(kmeans, f)
+import numpy as np
+
+import matplotlib.pyplot as plt
+
+%matplotlib inline
+
+import math
+
+import seaborn as sns
+
+import plotly.io as pio
+
+from plotly import *
+
+import plotly.express as px
+
+import plotly.graph_objects as go  
+import pandas as pd
+
+from sklearn import preprocessing
+
+from sklearn.cluster import KMeans
+
+from scipy.spatial.distance import cdist
+
+from sklearn.preprocessing import StandardScaler, normalize
+
+from IPython.display import Image
+
+import os,sys
+
+import kaleido
+
+from plotly.subplots import make_subplots
+
+sys.path.insert(0,'../scripts/')
+
+from process import *
+telecom_df = pd.read_csv('../data/telecom.csv')
+
+telecom_df.drop("Unnamed: 0",axis=1,inplace=True)
+
+pd.set_option('display.float_format', lambda x: '{:,.0f}'.format(x))
+telecom_df.head()
+ 
+df = telecom_df[['MSISDN/Number','Handset Type','Avg RTT DL (ms)','Avg RTT UL (ms)',
+  'TCP DL Retrans. Vol (Bytes)','TCP UL Retrans. Vol (Bytes)',
+  'Avg Bearer TP DL (kbps)','Avg Bearer TP UL (kbps)']]
+
+df['MSISDN/Number'].fillna(value=df['MSISDN/Number'].mean(), inplace=True)
+ 
+df.head(10)
+
+df['Avg RTT DL (ms)'].fillna(value=df['Avg RTT DL (ms)'].mean(), inplace=True)
+
+df['Avg Bearer TP DL (kbps)'].fillna(value=df['Avg Bearer TP DL (kbps)'].mean(), inplace=True)
+
+df['Avg Bearer TP UL (kbps)'].fillna(value=df['Avg Bearer TP UL (kbps)'].mean(), inplace=True)
+
+df['TCP DL Retrans. Vol (Bytes)'].fillna(value=df['TCP DL Retrans. Vol (Bytes)'].mean(), inplace=True)
+
+df['TCP UL Retrans. Vol (Bytes)'].fillna(value=df['TCP UL Retrans. Vol (Bytes)'].mean(), inplace=True)
+
+df['Avg Bearer TP DL (kbps)'].fillna(value=df['Avg Bearer TP DL (kbps)'].mean(), inplace=True)
+
+df['Avg Bearer TP UL (kbps)'].fillna(value=df['Avg Bearer TP UL (kbps)'].mean(), inplace=True)
+
+df['Total_Avg_RTT'].fillna(value=df['Total_Avg_RTT'].mean(),inplace=True)
+ 
+plt.figure(figsize=(12, 7))
+
+sns.boxplot(data=df, x='Avg RTT DL (ms)')
+
+plt.title("box plot for Avg RTT DL (ms)", size=20)
+
+plt.show()
+ 
+plt.figure(figsize=(12, 7))
+
+sns.boxplot(data=df, x='Avg RTT UL (ms)')
+
+plt.title("box plot for Avg RTT UL (ms)", size=20)
+
+plt.show()
+plt.figure(figsize=(12, 7))
+
+sns.boxplot(data=df, x='Avg Bearer TP DL (kbps)')
+
+plt.title("TCP DL Retrans. Vol (Bytes)", size=20)
+
+plt.show()
+df['Avg RTT DL (ms)'] = np.where(df['Avg RTT DL (ms)'] > 220, 54, df['Avg RTT DL (ms)'])
+
+df['Avg RTT UL (ms)'].describe()
+
+df['Avg RTT DL (ms)'].describe()
+
+avg_tp_uldl_columns = [
+  'Avg Bearer TP DL (kbps)',
+  'Avg Bearer TP UL (kbps)'
+
+]
+
+avg_tp_uldl = df[avg_tp_uldl_columns].sum()
+
+handsets_data = df.groupby('Handset Type')
+ 
+handsets_tp = handsets_data[avg_tp_uldl_columns].mean().sum(axis=1)
+
+handsets_tp.plot()
+ 
+df['Total_Avg_RTT'] = df['Avg RTT DL (ms)'] + \
+  df['Avg RTT UL (ms)']
+ 
+df['Total_Avg_Bearer_TP'] = df['Avg Bearer TP DL (kbps)'] + \
+  df['Avg Bearer TP DL (kbps)']
+ 
+df['Total_Avg_TCP'] = df['TCP DL Retrans. Vol (Bytes)'] + \
+  df['TCP UL Retrans. Vol (Bytes)']
+ 
+df['Total_Avg_RTT'].fillna(value=df['Total_Avg_RTT'].mean(),inplace=True)
+ 
+sorted_by_tcp = df.sort_values(
+  'Total_Avg_TCP', ascending=False)
+
+top_10 = sorted_by_tcp.head(10)['Total_Avg_TCP']
+
+last_10 = sorted_by_tcp.tail(10)['Total_Avg_TCP']
+
+most_10 = df['Total_Avg_TCP'].value_counts().head(10)
+def mult_hist(sr, rows, cols, title_text, subplot_titles, interactive=False):
+  fig = make_subplots(rows=rows, cols=cols, subplot_titles=subplot_titles)
+  for i in range(rows):
+  for j in range(cols):
+  x = ["-> " + str(i) for i in sr[i+j].index]
+  fig.add_trace(go.Bar(x=x, y=sr[i+j].values), row=i+1, col=j+1)
+  fig.update_layout(showlegend=False, title_text=title_text)
+  if(interactive):
+  fig.show()
+  else:
+  return Image(pio.to_image(fig, format='png', width=1200))
+
+mult_hist([top_10, last_10, most_10], 1,
+  3, "TCP values in the dataset", ['Top 10', 'Last 10', 'Most 10'])
+sorted_by_RTT = df.sort_values(
+  'Total_Avg_RTT', ascending=False)
+
+top_10 = sorted_by_RTT.head(10)['Total_Avg_RTT']
+
+last_10 = sorted_by_RTT.tail(10)['Total_Avg_RTT']
+
+most_10 = df['Total_Avg_RTT'].value_counts().head(10)
+ 
+mult_hist([top_10, last_10, most_10], 1,
+  3, "RTT values in the dataset", ['Top 10', 'Last 10', 'Most 10'])
+
+sorted_by_Bearer_TP = df.sort_values(
+  'Total_Avg_Bearer_TP', ascending=False)
+
+top_10 = sorted_by_Bearer_TP.head(10)['Total_Avg_Bearer_TP']
+
+last_10 = sorted_by_Bearer_TP.tail(10)['Total_Avg_Bearer_TP']
+
+most_10 = df['Total_Avg_Bearer_TP'].value_counts().head(10)
+mult_hist([top_10, last_10, most_10, top_10], 1,
+  3, "Throughput values in the dataset", ['Top 10', 'Last 10', 'Most 10'])
+ 
+handset_type_agg = df.groupby('Handset Type').agg(
+  {'Total_Avg_Bearer_TP': 'mean', 'Total_Avg_TCP': 'mean'})
+
+handset_type_agg.head()
+ 
+sorted_by_tp = handset_type_agg.sort_values('Total_Avg_Bearer_TP', ascending=False)
+
+top_tp = sorted_by_tp['Total_Avg_Bearer_TP']
+ 
+sns.distplot(top_tp)
+
+pd.DataFrame(top_tp.describe()) 
+metrics = df[[
+  "Total_Avg_RTT",
+  "Total_Avg_Bearer_TP",
+  "Total_Avg_TCP"]].copy()
+
+metrics.head()
+scaler = StandardScaler()
+
+scaled_array = scaler.fit_transform(metrics)
+
+pd.DataFrame(scaled_array).head()
+ 
+data_normalized = normalize(scaled_array)
+
+pd.DataFrame(data_normalized).head(5)
+
+kmeans = KMeans(n_clusters=3, random_state=0).fit(data_normalized)
+
+kmeans.labels_
+df.insert(0, 'Cluster', kmeans.labels_)
+
+df.head(10)
+
+import pickle
+
+with open("../models/user_exp.pkl", "wb") as f:
+  pickle.dump(kmeans, f)
+import os
+import sys
+import streamlit as st
+import os, sys
+sys.path.insert(0, './dashboard')
+
+from multiapp import MultiApp
+import model, user_engagement_analysis, user_experience_analytics, user_satisfaction_analysis,user_overview_analysis
+
+st.set_page_config(page_title="Telecom User Data Visualization", layout="wide")
+
+app = MultiApp()
+
+st.sidebar.markdown("""
+""")
+
+app.add_app("user_overview",user_overview_analysis.app)
+app.add_app("user_engagement", user_engagement_analysis.app)
+app.add_app("experience_analytics", user_experience_analytics.app)
+app.add_app("satisfaction_analysis", user_satisfaction_analysis.app)
+app.add_app("Model", model.app)
+
+app.run()
+import streamlit as st
+import pandas as pd
+import os
+import sys
+import matplotlib.pylab as plt
+sys.path.insert(0,'../scripts/')
+df_session = pd.read_csv('data/top10_user_session.csv')
+
+def app():
+  st.title("Telecommunication User Engagement Analysis")
+  df_email = pd.read_csv('data/top10_email_users.csv')
+  df_game = pd.read_csv('data/top10_gameApp_users.csv')
+  df_google = pd.read_csv('data/top10_google_users.csv')
+  df_netflix = pd.read_csv('data/top10_netflix_users.csv')
+  df_otherAct = pd.read_csv('data/top10_otherAct_users.csv')
+  df_social = pd.read_csv('data/top10_socialMedia_users.csv')
+  df_youtube = pd.read_csv('data/top10_youtube_users.csv')
+  df_session = pd.read_csv('data/top10_user_session.csv')
+  df_DLUL = pd.read_csv('data/top10_DLUL_users.csv')
+  st.header("Data transfers and overall data usage correlation.")
+  st.image('data/corellation.png')
+  st.markdown(
+  'There is a correlation between data transfers and total data usage in games and other apps.')
+  st.header("Top 10 Users Engaged Per Application")
+  st.subheader("Email App users")
+  st.dataframe(df_email)
+  st.bar_chart(df_email.Email_Total_Data)
+  st.subheader("Game App users")
+  st.dataframe(df_game)
+  st.bar_chart(df_game.Gaming_Total_Data)
+  st.subheader("Google App users")
+  st.dataframe(df_google)
+  st.bar_chart(df_google.Google_Total_Data)
+  st.subheader("Netflix App users")
+  st.dataframe(df_netflix)
+  st.bar_chart(df_netflix.Netflix_Total_Data)
+  st.subheader("Other App users")
+  st.dataframe(df_otherAct)
+  st.bar_chart(df_otherAct.Other_Total_Data)
+  st.subheader("Social Media App users")
+  st.dataframe(df_social)
+  st.bar_chart(df_social.Social_Media_Total_Data)
+  st.subheader("Youtube App users")
+  st.dataframe(df_youtube)
+  st.bar_chart(df_youtube.Youtube_Total_Data)
+  st.subheader("Top 10 users based on session count")
+  df_session = df_session.drop(columns=['Unnamed: 0'])
+  st.dataframe(df_session)
+  st.bar_chart(df_session['Dur. (ms)'])
+  st.subheader("Top 10 users based on download and upload count")
+  st.dataframe(df_DLUL)
+  st.bar_chart(df_DLUL['Total UL and DL'])
+  st.header("3 groups k-means clustering")
+  st.image('data/engclusters.png')
+import streamlit as st
+import pandas as pd
+import matplotlib.pyplot as plt
+import os
+import sys
+import seaborn as sns
+import numpy as np
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+
+def app():
+  st.title("Telecommunication User Over View Analysis")
+  df_over_view = pd.read_csv('data/telecom_clean_data.csv')
+  st.header("Top 10 handsets used by the customers")
+  st.bar_chart(df_over_view['Handset Type'].value_counts()[0:10])
+  st.header("Top 3 handset manufacturers")
+  st.bar_chart(df_over_view['Handset Manufacturer'].value_counts()[0:3])
+  st.header("Top 5 handsets per top 3 handset manufacturer")
+  top_apple = df_over_view.loc[df_over_view['Handset Manufacturer'] == 'Apple']
+  top_apple = df_over_view.loc[df_over_view['Handset Manufacturer'] == 'Apple']
+  top_apple = top_apple.groupby(['Handset Manufacturer', 'Handset Type']).agg({'Handset Type': ['count']})
+  top_apple.columns = ['count']
+  top_apple = top_apple.nlargest(5, 'count')
+  fig, ax = plt.subplots()
+  top_apple.plot.bar(y='count', ax=ax, stacked=True, color='   ax.set_title("Top 5 Apple Handsets")
+  ax.set_xlabel("Handset Type")
+  ax.set_ylabel("Count")
+  st.pyplot(fig)
+  st.header('Top 5 Samsung Handsets')
+  top_samsung = df_over_view.loc[df_over_view['Handset Manufacturer'] == 'Samsung']
+  top_samsung = top_samsung.groupby(['Handset Manufacturer', 'Handset Type']).agg({'Handset Type': ['count']})
+  top_samsung.columns = ['count']
+  top_samsung = top_samsung.nlargest(5, 'count')
+  fig, ax = plt.subplots()
+  top_samsung.plot.bar(y='count', ax=ax, stacked=True, color='   plt.xlabel("Handset Type")
+  plt.ylabel("Count")
+  st.pyplot(fig)
+  st.header('Top 5 Huawei Handsets')
+  top_huawei = df_over_view.loc[df_over_view['Handset Manufacturer'] == 'Huawei']
+  top_huawei = top_huawei.groupby(['Handset Manufacturer', 'Handset Type']).size().reset_index(name='count')
+  top_huawei = top_huawei.nlargest(5, 'count')
+  fig, ax = plt.subplots()
+  ax.bar(top_huawei['Handset Type'], top_huawei['count'], color='   ax.set_title("Top 5 Huawei Handsets")
+  ax.set_xlabel("Handset Type")
+  ax.set_ylabel("Count")
+  st.pyplot(fig)
+  st.set_option('deprecation.showPyplotGlobalUse', False)
+  st.title('number of xDR sessions')
+  column_to_plot = 'Dur. (ms).1'   plt.figure(figsize=(8, 6))
+  sns.histplot(df_over_view[column_to_plot], color='dodgerblue', kde=True)
+  plt.title(f'Distrubution of {column_to_plot}')
+  plt.xlabel(column_to_plot)
+  plt.ylabel('Frequency')
+  st.pyplot()
+  st.header('Total Upload')
+  column_to_plot = 'Total UL (Bytes)'   plt.figure(figsize=(8, 6))
+  sns.histplot(df_over_view[column_to_plot], color='dodgerblue', kde=True)
+  plt.title(f'Distrubution of {column_to_plot}')
+  plt.xlabel(column_to_plot)
+  plt.ylabel('Frequency')
+  st.pyplot()
+  st.header('Total Downloads Bytes')
+  column_to_plot = 'Total DL (Bytes)'   plt.figure(figsize=(8, 6))
+  sns.histplot(df_over_view[column_to_plot], color='dodgerblue', kde=True)
+  plt.title(f'Distrubution of {column_to_plot}')
+  plt.xlabel(column_to_plot)
+  plt.ylabel('Frequency')
+  st.pyplot()
+  st.header('Social Media Total Upload and Download Data')
+  column_to_plot = 'Social_Media_Total_Data'   df_over_view['Social_Media_Total_Data'] = df_over_view['Social Media DL (Bytes)'] + df_over_view['Social Media UL (Bytes)']
+  plt.figure(figsize=(8, 6))
+  sns.histplot(df_over_view[column_to_plot], color='dodgerblue', kde=True)
+  plt.title(f'Distrubution of {column_to_plot}')
+  plt.xlabel(column_to_plot)
+  plt.ylabel('Frequency')
+  st.pyplot()
+  st.header('Google Total Data')
+  column_to_plot = 'Google_Total_Data'   df_over_view['Google_Total_Data'] = df_over_view['Google DL (Bytes)'] + df_over_view['Google UL (Bytes)']
+  plt.figure(figsize=(8, 6))
+  sns.histplot(df_over_view[column_to_plot], color='dodgerblue', kde=True)
+  plt.title(f'Distrubution of {column_to_plot}')
+  plt.xlabel(column_to_plot)
+  plt.ylabel('Frequency')
+  st.pyplot()
+  st.header('Total Email Data')
+  column_to_plot = 'Email_Total_Data'   df_over_view['Email_Total_Data'] = df_over_view['Email DL (Bytes)'] + df_over_view['Email UL (Bytes)']
+  plt.figure(figsize=(8, 6))
+  sns.histplot(df_over_view[column_to_plot], color='dodgerblue', kde=True)
+  plt.title(f'Distrubution of {column_to_plot}')
+  plt.xlabel(column_to_plot)
+  plt.ylabel('Frequency')
+  st.pyplot()
+  st.header('Total Youtube Data')
+  column_to_plot = 'Youtube_Total_Data'   df_over_view['Youtube_Total_Data'] = df_over_view['Youtube DL (Bytes)'] + df_over_view['Youtube UL (Bytes)']
+  plt.figure(figsize=(8, 6))
+  sns.histplot(df_over_view[column_to_plot], color='dodgerblue', kde=True)
+  plt.title(f'Distrubution of {column_to_plot}')
+  plt.xlabel(column_to_plot)
+  plt.ylabel('Frequency')
+  st.pyplot()
+  st.header('Total Netflix Data')
+  column_to_plot = 'Netflix_Total_Data'   df_over_view['Netflix_Total_Data'] = df_over_view['Netflix DL (Bytes)'] + df_over_view['Netflix UL (Bytes)']
+  plt.figure(figsize=(8, 6))
+  sns.histplot(df_over_view[column_to_plot], color='dodgerblue', kde=True)
+  plt.title(f'Distrubution of {column_to_plot}')
+  plt.xlabel(column_to_plot)
+  plt.ylabel('Frequency')
+  st.pyplot()
+  st.header('Total Gaming Data')
+  column_to_plot = 'Gaming_Total_Data'   df_over_view['Gaming_Total_Data'] = df_over_view['Gaming DL (Bytes)'] + df_over_view['Gaming UL (Bytes)']
+  plt.figure(figsize=(8, 6))
+  sns.histplot(df_over_view[column_to_plot], color='dodgerblue', kde=True)
+  plt.title(f'Distrubution of {column_to_plot}')
+  plt.xlabel(column_to_plot)
+  plt.ylabel('Frequency')
+  st.pyplot()
+  st.header('Other Total Data')
+  column_to_plot = 'Other_Total_Data'   df_over_view["Other_Total_Data"]=df_over_view["Other DL (Bytes)"]+df_over_view["Other UL (Bytes)"]
+  plt.figure(figsize=(8, 6))
+  sns.histplot(df_over_view[column_to_plot], color='dodgerblue', kde=True)
+  plt.title(f'Distrubution of {column_to_plot}')
+  plt.xlabel(column_to_plot)
+  plt.ylabel('Frequency')
+  st.pyplot()
+  st.header('Total Data Vs Gaming Data Usage')
+  x_column = df_over_view["Gaming_Total_Data"]=df_over_view["Gaming DL (Bytes)"]+df_over_view["Gaming UL (Bytes)"]
+  y_column = df_over_view["Total UL and DL"]=df_over_view["Total UL (Bytes)"]+df_over_view["Total DL (Bytes)"]
+  st.scatter_chart(df_over_view[['Gaming_Total_Data', 'Total UL and DL']].sample(1000))
+  st.header('Total Data Vs Youtube Total Data')
+  x_column = df_over_view["Youtube_Total_Data"]=df_over_view["Youtube DL (Bytes)"]+df_over_view["Youtube UL (Bytes)"]
+  y_column = df_over_view["Total UL and DL"]=df_over_view["Total UL (Bytes)"]+df_over_view["Total DL (Bytes)"]
+  st.scatter_chart(df_over_view[['Youtube_Total_Data', 'Total UL and DL']].sample(1000))
+  st.header('Total Data Vs Email Total Data')
+  x_column = df_over_view["Email_Total_Data"]=df_over_view["Email DL (Bytes)"]+df_over_view["Email UL (Bytes)"]
+  y_column = df_over_view["Total UL and DL"]=df_over_view["Total UL (Bytes)"]+df_over_view["Total DL (Bytes)"]
+  st.scatter_chart(df_over_view[['Email_Total_Data', 'Total UL and DL']].sample(1000))
+  st.header('Total Data Vs Social Media Total Data')
+  x_column = df_over_view["Social_Media_Total_Data"]=df_over_view["Social Media DL (Bytes)"]+df_over_view["Social Media UL (Bytes)"]
+  y_column = df_over_view["Total UL and DL"]=df_over_view["Total UL (Bytes)"]+df_over_view["Total DL (Bytes)"]
+  st.scatter_chart(df_over_view[['Social_Media_Total_Data', 'Total UL and DL']].sample(1000))
+  st.header('Total Data Vs Netflix Data')
+  x_column = df_over_view["Netflix_Total_Data"]=df_over_view["Netflix DL (Bytes)"]+df_over_view["Netflix UL (Bytes)"]
+  y_column = df_over_view["Total UL and DL"]=df_over_view["Total UL (Bytes)"]+df_over_view["Total DL (Bytes)"]
+  st.scatter_chart(df_over_view[['Netflix_Total_Data', 'Total UL and DL']].sample(1000))
+  st.header('Total Data Vs Other_Total_Data')
+  x_column = df_over_view['Other_Total_Data'] = df_over_view["Other DL (Bytes)"] + df_over_view['Other UL (Bytes)']
+  y_column = df_over_view["Total UL and DL"]=df_over_view["Total UL (Bytes)"]+df_over_view["Total DL (Bytes)"]
+  st.scatter_chart(df_over_view[['Other_Total_Data', 'Total UL and DL']].sample(1000))
+  columns = ['Youtube_Total_Data', 'Google_Total_Data', 'Email_Total_Data','Social_Media_Total_Data', 'Netflix_Total_Data', 'Gaming_Total_Data', 'Other_Total_Data', 'Total UL and DL']
+  corr = df_over_view[columns].corr()
+  st.title("Correlation of Usage of User Data Volume")
+  st.write("Correlation Matrix:")
+  st.write(corr)

@@ -1,0 +1,1186 @@
+import seaborn as sns
+import matplotlib.pyplot as plt
+import pandas as pd
+
+def set_seaborn_style():
+  """
+  Set a custom Seaborn style.
+  """
+  sns.set(style="whitegrid")
+
+def plot_histogram_kde(data, title, x_label, y_label, color='skyblue'):
+  """
+  Plot a histogram with KDE.
+  Parameters:
+  - data: Series or array-like
+  Data to be plotted.
+  - title: str
+  Plot title.
+  - x_label: str
+  Label for the x-axis.
+  - y_label: str
+  Label for the y-axis.
+  - color: str, optional
+  Color for the plot.
+  Returns:
+  - None
+  """
+  plt.figure(figsize=(10, 6))
+  sns.histplot(data, kde=True, color=color, edgecolor='black')
+  plt.title(title, fontsize=16)
+  plt.xlabel(x_label, fontsize=14)
+  plt.ylabel(y_label, fontsize=14)
+  plt.xticks(fontsize=12)
+  plt.yticks(fontsize=12)
+  plt.grid(axis='y', linestyle='--', alpha=0.7)
+  plt.show()
+
+def plot_boxplot(data, title, x_label, color='lightcoral'):
+  """
+  Plot a boxplot.
+  Parameters:
+  - data: Series or array-like
+  Data to be plotted.
+  - title: str
+  Plot title.
+  - x_label: str
+  Label for the x-axis.
+  - color: str, optional
+  Color for the plot.
+  Returns:
+  - None
+  """
+  plt.figure(figsize=(8, 6))
+  sns.boxplot(x=data, color=color)
+  plt.title(title, fontsize=16)
+  plt.xlabel(x_label, fontsize=14)
+  plt.xticks(fontsize=12)
+  plt.yticks(fontsize=12)
+  plt.grid(axis='y', linestyle='--', alpha=0.7)
+  plt.show()
+
+def plot_time_series(data, time_column, title, x_label, y_label, color='skyblue'):
+  """
+  Plot a time series using Matplotlib.
+  Parameters:
+  - data: DataFrame
+  Data containing a time series.
+  - time_column: str
+  Column representing the time.
+  - title: str
+  Plot title.
+  - x_label: str
+  Label for the x-axis.
+  - y_label: str
+  Label for the y-axis.
+  - color: str, optional
+  Color for the plot.
+  Returns:
+  - None
+  """
+  plt.figure(figsize=(12, 6))
+  sns.lineplot(data=data.resample('D').size(), color=color, marker='o')
+  plt.title(title, fontsize=16)
+  plt.xlabel(x_label, fontsize=14)
+  plt.ylabel(y_label, fontsize=14)
+  plt.xticks(fontsize=12)
+  plt.yticks(fontsize=12)
+  plt.grid(axis='y', linestyle='--', alpha=0.7)
+  plt.show()
+
+def plot_countplot(data, x_column, title, x_label, rotation=45, color='skyblue'):
+  """
+  Plot a countplot using Seaborn.
+  Parameters:
+  - data: DataFrame
+  Data to be plotted.
+  - x_column: str
+  Column for the x-axis.
+  - title: str
+  Plot title.
+  - x_label: str
+  Label for the x-axis.
+  - rotation: int, optional
+  Rotation angle for x-axis labels.
+  - color: str, optional
+  Color for the plot.
+  Returns:
+  - None
+  """
+  plt.figure(figsize=(10, 6))
+  sns.countplot(x=data[x_column], color=color)
+  plt.title(title, fontsize=16)
+  plt.xlabel(x_label, fontsize=14)
+  plt.xticks(rotation=rotation, fontsize=12)
+  plt.yticks(fontsize=12)
+  plt.grid(axis='y', linestyle='--', alpha=0.7)
+  plt.show()
+
+def create_table(table_data):
+  """
+  Create a table using Plotly.
+  Parameters:
+  - table_data: DataFrame
+  Data for the table.
+  Returns:
+  - None
+  """
+  table = go.Figure(data=[go.Table(
+  header=dict(values=list(table_data.columns),
+  fill_color='lightblue',
+  align='center',
+  font=dict(color='black', size=14)),
+  cells=dict(values=[table_data['Handset Manufacturer'], table_data['Handset Type'], table_data['count']],
+  fill=dict(color=['white', 'lightcyan', 'lightcyan']),
+  align='center',
+  font=dict(color='black', size=12)))
+  ])
+  table.update_layout(width=800, height=400, margin=dict(l=0, r=0, t=0, b=0))
+  table.show()
+import pandas as pd
+
+import numpy as np
+
+import seaborn as sns
+
+import matplotlib.pyplot as pl
+
+from sqlalchemy import create_engine, text
+
+from scipy.stats import zscore
+
+import psycopg2
+
+import os
+
+import plotly.graph_objects as go
+
+import plotly.express as px
+os.chdir('..')
+from db.connection import DatabaseConnection
+
+from db.sql_preprocessor import DBFilter
+
+from src.plot_utils import set_seaborn_style, plot_histogram_kde, plot_boxplot, plot_time_series, plot_countplot
+db_connection = DatabaseConnection()
+db_connection.connect()
+query = "SELECT * FROM xdr_data"
+
+df = db_connection.execute_query(query)
+df.head()
+df.columns
+missing_values = df.isnull().sum()
+
+print(missing_values)
+duplicates = df.duplicated()
+
+print("Number of duplicate rows:", duplicates.sum())
+top_handsets = df.groupby(['Handset Manufacturer', 'Handset Type']).size().reset_index(name='count')
+
+top_handsets = top_handsets.sort_values(by='count', ascending=False).head(10)
+table_data = top_handsets[['Handset Manufacturer', 'Handset Type', 'count']]
+ 
+table = go.Figure(data=[go.Table(
+  header=dict(values=list(table_data.columns),
+  fill_color='lightblue',
+  align='center',
+  font=dict(color='black', size=14)),
+  cells=dict(values=[table_data['Handset Manufacturer'], table_data['Handset Type'], table_data['count']],
+  fill=dict(color=['lightcyan', 'lightcyan', 'lightcyan']),
+  align='center',
+  font=dict(color='black', size=12)))
+
+])
+ 
+table.update_layout(width=800, height=400, margin=dict(l=0, r=0, t=0, b=0))
+ 
+table.show()
+top_handsets = df.query("`Handset Manufacturer` != 'undefined' and `Handset Type` != 'undefined'")[['Handset Manufacturer', 'Handset Type']]
+top_handsets = top_handsets.groupby(['Handset Manufacturer', 'Handset Type']).size().reset_index(name='count')
+
+top_handsets = top_handsets.sort_values(by='count', ascending=False).head(10)
+top_handsets[['Handset Manufacturer', 'Handset Type', 'count']]
+
+fig = px.bar(top_handsets, x='Handset Type', y='count', color='Handset Manufacturer',
+  labels={'count': 'Count', 'Handset Type': 'Handset Type'},
+  title='Top Handsets by Manufacturer and Type',
+  template='plotly_white',   color_discrete_sequence=px.colors.qualitative.Set1)  
+fig.update_layout(
+  xaxis=dict(title='Handset Type'),
+  yaxis=dict(title='Count'),
+  legend=dict(title='Manufacturer'),
+  barmode='group',
+  showlegend=True
+
+)
+ 
+fig.show()
+top_manufacturers = df[df['Handset Manufacturer'] != 'undefined']
+top_manufacturers = top_manufacturers['Handset Manufacturer'].value_counts().head(3).reset_index(name='count')
+top_manufacturers.columns = ['Handset Manufacturer', 'count']
+
+top_manufacturers
+len(top_manufacturers)
+
+total_rows = len(df)
+
+top_manufacturers['percentage'] = (top_manufacturers['count'] / total_rows) * 100
+ 
+print(top_manufacturers)
+
+total_handsets = df['Handset Type'].count()
+ 
+print("Total number of handsets:", total_handsets)
+
+top_manufacturers = df[df['Handset Manufacturer'] != 'undefined']
+top_manufacturers = top_manufacturers['Handset Manufacturer'].value_counts().head(3).index
+filtered_df = df[df['Handset Manufacturer'].isin(top_manufacturers)]
+top_handsets_per_manufacturer = (
+  filtered_df.groupby(['Handset Manufacturer', 'Handset Type'])
+  .size()
+  .reset_index(name='count')
+  .sort_values(by=['Handset Manufacturer', 'count'], ascending=[True, False])
+  .groupby('Handset Manufacturer')
+  .head(5)
+
+)
+top_handsets_per_manufacturer
+import pandas as pd
+import numpy as np
+import sqlite3
+
+class DBFilter:
+  def __init__(self, dataframe):
+  self.df = dataframe
+  def filter_numeric_columns(self, threshold=0):
+  numeric_columns = self.df.select_dtypes(include=[np.number]).columns
+  filtered_df = self.df[numeric_columns].apply(lambda x: x[x > threshold])
+  return filtered_df
+  def load_data_from_db(self, db_path, sql_query):
+  connection = sqlite3.connect(db_path)
+  df = pd.read_sql_query(sql_query, connection)
+  connection.close()
+  return df
+  def get_unique_values(self, column):
+  unique_values = self.df[column].unique()
+  return unique_values
+  def most_repeated_value(self, column):
+  return self.df[column].mode().values[0]
+  def calculate_average(self, column):
+  return self.df[column].mean()
+  def close_connection(self):
+  pass
+from sqlalchemy import create_engine
+import os
+from dotenv import load_dotenv
+import pandas as pd
+
+class DatabaseConnection:
+  def __init__(self):
+  load_dotenv()
+  self.username = os.getenv("DB_USERNAME")
+  self.password = os.getenv("DB_PASSWORD")
+  self.host = os.getenv("DB_HOST")
+  self.port = os.getenv("DB_PORT")
+  self.database = os.getenv("DB_DATABASE")
+  if None in (self.username, self.password, self.host, self.port, self.database):
+  raise ValueError("One or more database credentials are missing.")
+  self.connection_url = f"postgresql+psycopg2://{self.username}:{self.password}@{self.host}:{self.port}/{self.database}"
+  self.engine = None
+  self.connection = None
+  def connect(self):
+  try:
+  self.engine = create_engine(self.connection_url)
+  self.connection = self.engine.connect()
+  print("Connected to the database.")
+  except Exception as e:
+  print(f"Error connecting to the database: {str(e)}")
+  def execute_query(self, query):
+  try:
+  df = pd.read_sql_query(query, self.connection)
+  return df
+  except Exception as e:
+  print(f"Error executing query: {str(e)}")
+  def execute_update_query(self, query):
+  try:
+  self.connection.execute(query)
+  print("Query executed successfully.")
+  except Exception as e:
+  print(f"Error executing query: {str(e)}")
+  def close_connection(self):
+  try:
+  self.connection.close()
+  print("Connection closed.")
+  except Exception as e:
+  print(f"Error closing connection: {str(e)}")
+import pandas as pd
+
+import numpy as np
+
+import seaborn as sns
+
+import matplotlib.pyplot as plt
+
+from sqlalchemy import create_engine, text
+
+from scipy.stats import zscore
+
+import psycopg2
+
+import os
+
+import plotly.express as px
+
+import random
+
+from sklearn.decomposition import PCA
+
+from sklearn.preprocessing import StandardScaler
+
+from sklearn.cluster import KMeans
+
+import tabulate
+
+import plotly.graph_objects as go
+
+from scipy.spatial import distance
+
+from sklearn.metrics import pairwise_distances_argmin_min
+
+from functools import reduce
+
+from tabulate import tabulate
+
+from scipy.stats.mstats import winsorize
+from sklearn.model_selection import train_test_split
+
+from sklearn.linear_model import LinearRegression
+
+from sklearn.metrics import mean_squared_error, r2_score
+
+from sklearn.linear_model import Ridge
+
+from sklearn.model_selection import cross_val_score
+
+from sklearn.linear_model import RidgeCV
+
+from sklearn.ensemble import RandomForestRegressor
+
+from sklearn.ensemble import GradientBoostingRegressor
+os.chdir('..')
+from db.connection import DatabaseConnection
+
+from db.sql_preprocessor import DBFilter
+
+from src.utils import missing_values_table, find_agg, convert_bytes_to_megabytes, fix_outlier, remove_outliers
+
+from src.plot_utils import set_seaborn_style, plot_histogram_kde, plot_boxplot, plot_time_series, plot_countplot, create_table
+db_connection = DatabaseConnection()
+
+set_seaborn_style()
+db_connection.connect()
+query = "SELECT * FROM xdr_data"
+
+df = db_connection.execute_query(query)
+df.columns
+
+features = ['Avg Bearer TP DL (kbps)', 'Avg Bearer TP UL (kbps)']
+
+df['Start'] = pd.to_datetime(df['Start'])
+
+df['End'] = pd.to_datetime(df['End'])
+ 
+df['Session Duration (ms)'] = (df['End'] - df['Start']).dt.total_seconds() * 1000
+ 
+df['Total Traffic (Bytes)'] = df['Total DL (Bytes)'] + df['Total UL (Bytes)']
+ 
+user_engagement = df.groupby('MSISDN/Number').agg({
+  'Start': 'count',   'Session Duration (ms)': 'mean',   'Total Traffic (Bytes)': 'sum'  
+})
+ 
+user_engagement = user_engagement.rename(columns={
+  'Start': 'Sessions Frequency',
+  'Session Duration (ms)': 'Average Session Duration (ms)',
+  'Total Traffic (Bytes)': 'Total Traffic (Bytes)'
+
+})
+ 
+print(user_engagement)
+
+scaler = StandardScaler()
+
+normalized_engagement = scaler.fit_transform(user_engagement)
+ 
+kmeans = KMeans(n_clusters=3, random_state=42)
+
+user_engagement['Cluster'] = kmeans.fit_predict(normalized_engagement)
+ 
+print("Customers Classified into 3 Groups of Engagement:")
+
+print(user_engagement)
+
+kmeans = KMeans(n_clusters=3, random_state=42)
+
+user_engagement['Cluster'] = kmeans.fit_predict(normalized_engagement)
+ 
+less_engaged_cluster = user_engagement.groupby('Cluster')['Sessions Frequency'].mean().idxmin()
+ 
+distances = pairwise_distances_argmin_min(normalized_engagement, kmeans.cluster_centers_)[1]
+ 
+user_engagement.reset_index(inplace=True)
+ 
+user_engagement['Engagement Score'] = distances if less_engaged_cluster == 0 else -distances
+
+print("Customers with Engagement Scores:")
+
+print(user_engagement[['MSISDN/Number', 'Engagement Score']])
+
+top_10_engaged_customers = user_engagement['Engagement Score'].sort_values(ascending=False).head(10)
+ 
+top_10_df = pd.DataFrame({'Engagement Score': top_10_engaged_customers.values})
+ 
+top_10_df.reset_index(inplace=True, drop=True)
+ 
+fig = px.bar(top_10_df, x=top_10_df.index + 1, y='Engagement Score', title='Top 10 Engaged Customers')
+ 
+fig.update_layout(xaxis_title='Rank', yaxis_title='Engagement Score')
+ 
+fig.show()
+top_10_engaged_customers
+
+grouped_data_throughput = df.groupby('MSISDN/Number').agg({
+  'Avg Bearer TP DL (kbps)': 'mean',
+  'Avg Bearer TP UL (kbps)': 'mean'
+
+}).reset_index()
+ 
+grouped_data_throughput['Avg Bearer TP DL (kbps)'].fillna(grouped_data_throughput['Avg Bearer TP DL (kbps)'].mean(), inplace=True)
+
+grouped_data_throughput['Avg Bearer TP UL (kbps)'].fillna(grouped_data_throughput['Avg Bearer TP UL (kbps)'].mean(), inplace=True)
+ 
+print(grouped_data_throughput)
+grouped_data_rtt = df.groupby('MSISDN/Number')['Avg RTT DL (ms)'].mean().reset_index()
+ 
+grouped_data_rtt['Avg RTT DL (ms)'].fillna(grouped_data_rtt['Avg RTT DL (ms)'].mean(), inplace=True)
+ 
+mean_value_rtt = grouped_data_rtt['Avg RTT DL (ms)'].mean()
+
+std_dev_rtt = grouped_data_rtt['Avg RTT DL (ms)'].std()
+ 
+outlier_threshold_rtt = 3
+ 
+grouped_data_rtt['Avg RTT DL (ms)'] = grouped_data_rtt['Avg RTT DL (ms)'].apply(
+  lambda x: mean_value_rtt if abs(x - mean_value_rtt) > outlier_threshold_rtt * std_dev_rtt else x
+
+)
+ 
+print(grouped_data_rtt)
+grouped_data_retrans = df.groupby('MSISDN/Number')['TCP DL Retrans. Vol (Bytes)'].mean().reset_index()
+ 
+grouped_data_retrans['TCP DL Retrans. Vol (Bytes)'].fillna(grouped_data_retrans['TCP DL Retrans. Vol (Bytes)'].mean(), inplace=True)
+ 
+mean_value = grouped_data_retrans['TCP DL Retrans. Vol (Bytes)'].mean()
+
+std_dev = grouped_data_retrans['TCP DL Retrans. Vol (Bytes)'].std()
+ 
+outlier_threshold = 3
+ 
+grouped_data_retrans['TCP DL Retrans. Vol (Bytes)'] = grouped_data_retrans['TCP DL Retrans. Vol (Bytes)'].apply(
+  lambda x: mean_value if abs(x - mean_value) > outlier_threshold * std_dev else x
+
+)
+ 
+print(grouped_data_retrans)
+
+grouped_data_handset = df.groupby('MSISDN/Number')['Handset Type'].agg(lambda x: x.mode().iat[0] if not x.mode().empty else None).reset_index()
+ 
+grouped_data_tcp = df.groupby('Handset Type')['TCP DL Retrans. Vol (Bytes)'].mean().reset_index()
+ 
+merged_data = pd.merge(grouped_data_handset, grouped_data_tcp, on='Handset Type')
+ 
+print(merged_data)
+
+consolidated_data = pd.merge(grouped_data_handset, grouped_data_retrans, on='MSISDN/Number')
+
+consolidated_data = pd.merge(consolidated_data, grouped_data_rtt, on='MSISDN/Number')
+
+consolidated_data = pd.merge(consolidated_data, grouped_data_throughput, on='MSISDN/Number')
+
+consolidated_data = pd.merge(consolidated_data, user_engagement, on='MSISDN/Number')
+ 
+print(consolidated_data.dtypes)
+ 
+features_for_clustering = ['TCP DL Retrans. Vol (Bytes)', 'Avg RTT DL (ms)', 'Avg Bearer TP DL (kbps)', 'Avg Bearer TP UL (kbps)']
+ 
+consolidated_data.dropna(subset=features_for_clustering, inplace=True)
+ 
+scaler = StandardScaler()
+
+consolidated_data_scaled = scaler.fit_transform(consolidated_data[features_for_clustering])
+ 
+n_clusters = 3
+
+kmeans = KMeans(n_clusters=n_clusters, random_state=42)
+
+consolidated_data['cluster'] = kmeans.fit_predict(consolidated_data_scaled)
+ 
+consolidated_data['euclidean_distance'] = consolidated_data.apply(
+  lambda row: distance.euclidean(row[features_for_clustering], kmeans.cluster_centers_[row['cluster']]),
+  axis=1
+
+)
+ 
+consolidated_data['experience_score'] = 1 / (1 + consolidated_data['euclidean_distance'])
+ 
+print(consolidated_data[['MSISDN/Number', 'experience_score']])
+ 
+top_10_experience_customers = consolidated_data.sort_values(by='experience_score', ascending=False).head(10)
+ 
+top_10_experience_df = pd.DataFrame({'experience_score': top_10_experience_customers['experience_score'].values})
+ 
+top_10_experience_df.reset_index(inplace=True, drop=True)
+ 
+fig = px.bar(top_10_experience_df, x=top_10_experience_df.index + 1, y='experience_score', title='Top 10 Customers by Experience Score')
+ 
+fig.update_layout(xaxis_title='Rank', yaxis_title='Experience Score')
+ 
+fig.show()
+top_10_experience_customers = consolidated_data.sort_values(by='experience_score', ascending=False).head(10)
+ 
+columns_to_include = [
+  'MSISDN/Number',
+  'experience_score',
+
+]
+ 
+result_df = top_10_experience_customers[columns_to_include]
+ 
+print(result_df)
+top_10_experience_scores
+
+columns_to_handle_outliers = ['Engagement Score', 'experience_score']
+ 
+def handle_outliers_iqr(consolidated_data, columns):
+  for column in columns:
+  Q1 = consolidated_data[column].quantile(0.25)
+  Q3 = consolidated_data[column].quantile(0.75)
+  IQR = Q3 - Q1
+  lower_limit = Q1 - 1.5 * IQR
+  upper_limit = Q3 + 1.5 * IQR
+  consolidated_data[column] = consolidated_data[column].apply(lambda x: max(lower_limit, min(x, upper_limit)))
+  return consolidated_data
+ 
+consolidated_data = handle_outliers_iqr(consolidated_data, columns_to_handle_outliers)
+
+consolidated_data['satisfaction_score'] = (user_engagement['Engagement Score'] + consolidated_data['experience_score']) / 2
+ 
+top_satisfied_customers = consolidated_data.sort_values(by='satisfaction_score', ascending=False)
+ 
+top_10_satisfied_customers = top_satisfied_customers.head(10)
+
+print("Top 10 Satisfied Customers:")
+
+print(top_10_satisfied_customers[['MSISDN/Number', 'satisfaction_score']])
+
+consolidated_data
+
+sorted_data = consolidated_data.sort_values(by='satisfaction_score', ascending=False)
+ 
+top_10 = sorted_data.head(10)
+ 
+fig = go.Figure(data=[go.Table(
+  header=dict(values=list(top_10.columns),
+  fill_color='paleturquoise',
+  align='left'),
+  cells=dict(values=[top_10[col] for col in top_10.columns],
+  fill_color='lavender',
+  align='left'))
+
+])
+ 
+fig.show()
+
+fig1 = px.scatter(consolidated_data, x='satisfaction_score', y='Engagement Score',
+  title='Satisfaction Score vs Engagement Score',
+  labels={'satisfaction_score': 'Satisfaction Score',
+  'engagement_score': 'Engagement Score'})
+ 
+fig2 = px.scatter(consolidated_data, x='satisfaction_score', y='experience_score',
+  title='Satisfaction Score vs Experience Score',
+  labels={'satisfaction_score': 'Satisfaction Score',
+  'experience_score': 'Experience Score'})
+ 
+fig3 = px.scatter(consolidated_data, x='Engagement Score', y='experience_score',
+  title='Engagement Score vs Experience Score',
+  labels={'engagement_score': 'Engagement Score',
+  'experience_score': 'Experience Score'})
+ 
+fig1.show()
+
+fig2.show()
+
+fig3.show()
+consolidated_data
+
+max_satisfaction_score = consolidated_data['satisfaction_score'].max()
+ 
+low_satisfaction_threshold = 0.1
+ 
+0 * max_satisfaction_score
+
+moderate_satisfaction_threshold = 0.25 * max_satisfaction_score
+
+high_satisfaction_threshold = 0.50 * max_satisfaction_score
+ 
+consolidated_data['Satisfaction Level'] = pd.cut(consolidated_data['satisfaction_score'],
+  bins=[-float('inf'), low_satisfaction_threshold, moderate_satisfaction_threshold, high_satisfaction_threshold, float('inf')],
+  labels=['Low Satisfied', 'Moderately Satisfied', 'Satisfied', 'Highly Satisfied'])
+ 
+satisfaction_counts = consolidated_data['Satisfaction Level'].value_counts()
+ 
+satisfaction_percentage = (satisfaction_counts / len(df)) * 100
+ 
+fig = px.pie(satisfaction_percentage, names=satisfaction_percentage.index, values=satisfaction_percentage.values,
+  title='Percentage Distribution of Satisfaction Levels',
+  labels={'index': 'Satisfaction Level', 'values': 'Percentage of Individuals'})
+ 
+fig.show()
+
+columns_to_handle_outliers = ['Engagement Score', 'experience_score', 'satisfaction_score']
+ 
+def handle_outliers_iqr(consolidated_data, columns):
+  for column in columns:
+  Q1 = consolidated_data[column].quantile(0.25)
+  Q3 = consolidated_data[column].quantile(0.75)
+  IQR = Q3 - Q1
+  lower_limit = Q1 - 1.5 * IQR
+  upper_limit = Q3 + 1.5 * IQR
+  consolidated_data[column] = consolidated_data[column].apply(lambda x: max(lower_limit, min(x, upper_limit)))
+  return consolidated_data
+ 
+consolidated_data = handle_outliers_iqr(consolidated_data, columns_to_handle_outliers)
+
+consolidated_data.to_csv('consolidated_data.csv', index=False)
+
+top_satisfied_customers = consolidated_data.sort_values(by='satisfaction_score', ascending=False)
+ 
+top_10_satisfied_customers = top_satisfied_customers.head(10)
+
+print("Top 10 Satisfied Customers:")
+
+print(top_10_satisfied_customers[['MSISDN/Number', 'satisfaction_score']])
+
+max_satisfaction_score = consolidated_data['satisfaction_score'].max()
+ 
+low_satisfaction_threshold = 0.25 * max_satisfaction_score
+
+moderate_satisfaction_threshold = 0.50 * max_satisfaction_score
+
+high_satisfaction_threshold = 0.75 * max_satisfaction_score
+ 
+consolidated_data['Satisfaction Level'] = pd.cut(consolidated_data['satisfaction_score'],
+  bins=[-float('inf'), low_satisfaction_threshold, moderate_satisfaction_threshold, high_satisfaction_threshold, float('inf')],
+  labels=['Low Satisfied', 'Moderately Satisfied', 'Satisfied', 'Highly Satisfied'])
+ 
+satisfaction_counts = consolidated_data['Satisfaction Level'].value_counts()
+ 
+satisfaction_percentage = (satisfaction_counts / len(df)) * 100
+ 
+fig = px.pie(satisfaction_percentage, names=satisfaction_percentage.index, values=satisfaction_percentage.values,
+  title='Percentage Distribution of Satisfaction Levels',
+  labels={'index': 'Satisfaction Level', 'values': 'Percentage of Individuals'})
+ 
+fig.show()
+
+regression_features = ['Engagement Score', 'experience_score']
+ 
+regression_data = consolidated_data.dropna(subset=regression_features)
+ 
+X_train, X_test, y_train, y_test = train_test_split(
+  regression_data[regression_features],
+  regression_data['satisfaction_score'],
+  test_size=0.2, random_state=42
+
+)
+ 
+scaler = StandardScaler()
+
+X_train_scaled = scaler.fit_transform(X_train)
+
+X_test_scaled = scaler.transform(X_test)
+ 
+model = RidgeCV(alphas=[0.1, 1.0, 10.0], cv=5)
+ 
+model.fit(X_train_scaled, y_train)
+ 
+y_pred = model.predict(X_test_scaled)
+ 
+mse = mean_squared_error(y_test, y_pred)
+
+r2 = r2_score(y_test, y_pred)
+ 
+cv_scores = cross_val_score(model, X_train_scaled, y_train, cv=5)
+ 
+consolidated_data['predicted_satisfaction_score'] = model.predict(consolidated_data[regression_features])
+ 
+print(consolidated_data[['MSISDN/Number', 'satisfaction_score', 'predicted_satisfaction_score']])
+
+print(f'Cross-validated R-squared scores: {cv_scores}')
+
+print(f'Mean Squared Error: {mse}')
+
+print(f'R-squared: {r2}')
+
+plt.scatter(y_test, y_pred)
+
+plt.xlabel('Actual Satisfaction Score')
+
+plt.ylabel('Predicted Satisfaction Score')
+
+plt.title('Actual vs. Predicted Satisfaction Score')
+
+plt.show()
+
+scores = cross_val_score(model, X_train_scaled, y_train, cv=5)
+
+print(f'Cross-validated R-squared scores: {scores}')
+
+regression_features = ['Engagement Score', 'experience_score']
+ 
+regression_data = consolidated_data.dropna(subset=regression_features)
+ 
+X_train, X_test, y_train, y_test = train_test_split(
+  regression_data[regression_features],
+  regression_data['satisfaction_score'],
+  test_size=0.2, random_state=42
+
+)
+ 
+model = RandomForestRegressor(n_estimators=100, random_state=42)
+ 
+model.fit(X_train, y_train)
+ 
+y_pred = model.predict(X_test)
+ 
+mse = mean_squared_error(y_test, y_pred)
+
+r2 = r2_score(y_test, y_pred)
+ 
+consolidated_data['predicted_satisfaction_score'] = model.predict(consolidated_data[regression_features])
+ 
+print(consolidated_data[['MSISDN/Number', 'satisfaction_score', 'predicted_satisfaction_score']])
+ 
+cv_scores = cross_val_score(model, X_train, y_train, cv=5)
+
+print(f'Cross-validated R-squared scores: {cv_scores}')
+
+print(f'Mean Squared Error: {mse}')
+
+print(f'R-squared: {r2}')
+
+plt.scatter(y_test, y_pred)
+
+plt.xlabel('Actual Satisfaction Score')
+
+plt.ylabel('Predicted Satisfaction Score')
+
+plt.title('Actual vs. Predicted Satisfaction Score')
+
+plt.show()
+
+regression_features = ['Engagement Score', 'experience_score']
+ 
+regression_data = consolidated_data.dropna(subset=regression_features)
+ 
+X_train, X_test, y_train, y_test = train_test_split(
+  regression_data[regression_features],
+  regression_data['satisfaction_score'],
+  test_size=0.2, random_state=42
+
+)
+ 
+model = GradientBoostingRegressor(n_estimators=100, random_state=42)
+ 
+model.fit(X_train, y_train)
+ 
+y_pred = model.predict(X_test)
+ 
+mse = mean_squared_error(y_test, y_pred)
+
+r2 = r2_score(y_test, y_pred)
+ 
+consolidated_data['predicted_satisfaction_score'] = model.predict(consolidated_data[regression_features])
+ 
+print(consolidated_data[['MSISDN/Number', 'satisfaction_score', 'predicted_satisfaction_score']])
+ 
+cv_scores = cross_val_score(model, X_train, y_train, cv=5)
+
+print(f'Cross-validated R-squared scores: {cv_scores}')
+
+print(f'Mean Squared Error: {mse}')
+
+print(f'R-squared: {r2}')
+
+clustering_features = ['Engagement Score', 'experience_score']
+ 
+clustering_data = consolidated_data.dropna(subset=clustering_features)
+ 
+scaler = StandardScaler()
+
+clustering_data_scaled = scaler.fit_transform(clustering_data[clustering_features])
+ 
+kmeans = KMeans(n_clusters=2, random_state=42)
+
+clustering_data['cluster'] = kmeans.fit_predict(clustering_data_scaled)
+ 
+print("Results of K-means Clustering (k=2):")
+
+print(clustering_data[['MSISDN/Number', 'Engagement Score', 'experience_score', 'cluster']])
+
+clustering_features = ['Engagement Score', 'experience_score']
+ 
+clustering_data = consolidated_data.dropna(subset=clustering_features)
+ 
+scaler = StandardScaler()
+
+clustering_data_scaled = scaler.fit_transform(clustering_data[clustering_features])
+ 
+kmeans = KMeans(n_clusters=3, random_state=42)
+
+clustering_data['cluster'] = kmeans.fit_predict(clustering_data_scaled)
+ 
+print("Results of K-means Clustering (k=2):")
+
+print(clustering_data[['MSISDN/Number', 'Engagement Score', 'experience_score', 'cluster']])
+
+clustering_features = ['Engagement Score', 'experience_score']
+ 
+clustering_data = consolidated_data.dropna(subset=clustering_features)
+ 
+scaler = StandardScaler()
+
+clustering_data_scaled = scaler.fit_transform(clustering_data[clustering_features])
+ 
+kmeans = KMeans(n_clusters=4, random_state=42)
+
+clustering_data['cluster'] = kmeans.fit_predict(clustering_data_scaled)
+ 
+print("Results of K-means Clustering (k=2):")
+
+print(clustering_data[['MSISDN/Number', 'Engagement Score', 'experience_score', 'cluster']])
+
+cluster_aggregation = clustering_data.groupby('cluster').agg({
+  'satisfaction_score': 'mean',
+  'experience_score': 'mean'
+
+}).reset_index()
+ 
+print("Average Scores per Cluster:")
+
+print(cluster_aggregation)
+
+create_table_query = """
+
+CREATE TABLE user_scores (
+  user_id VARCHAR(255),
+  engagement_score FLOAT,
+  experience_score FLOAT,
+  satisfaction_score FLOAT
+
+);
+
+"""
+
+db_connection.execute_query(create_table_query)
+user_scores_df = consolidated_data[['MSISDN/Number', 'Engagement Score', 'experience_score', 'satisfaction_score']]
+
+user_scores_df.to_sql('user_scores', con=db_connection.engine, index=False, if_exists='append')
+ 
+db_connection.close_connection()
+import pandas as pd
+
+import numpy as np
+
+import seaborn as sns
+
+import matplotlib.pyplot as plt
+
+from sqlalchemy import create_engine, text
+
+from scipy.stats import zscore
+
+import psycopg2
+
+import os
+
+import plotly.express as px
+
+import random
+
+from sklearn.decomposition import PCA
+
+from sklearn.preprocessing import StandardScaler
+
+from sklearn.cluster import KMeans
+
+import tabulate
+
+import plotly.graph_objects as go
+os.chdir('..')
+from db.connection import DatabaseConnection
+
+from db.sql_preprocessor import DBFilter
+
+from src.utils import missing_values_table, find_agg, convert_bytes_to_megabytes, fix_outlier, remove_outliers
+
+from src.plot_utils import set_seaborn_style, plot_histogram_kde, plot_boxplot, plot_time_series, plot_countplot, create_table
+db_connection = DatabaseConnection()
+
+set_seaborn_style()
+db_connection.connect()
+query = "SELECT * FROM xdr_data"
+
+df = db_connection.execute_query(query)
+
+missing_values_df = missing_values_table(df)
+
+print("Missing Values in df:")
+
+print(missing_values_df)
+grouped_data = df.groupby('MSISDN/Number')['TCP DL Retrans. Vol (Bytes)'].mean().reset_index()
+ 
+grouped_data['TCP DL Retrans. Vol (Bytes)'].fillna(grouped_data['TCP DL Retrans. Vol (Bytes)'].mean(), inplace=True)
+ 
+mean_value = grouped_data['TCP DL Retrans. Vol (Bytes)'].mean()
+
+std_dev = grouped_data['TCP DL Retrans. Vol (Bytes)'].std()
+ 
+outlier_threshold = 3
+ 
+grouped_data['TCP DL Retrans. Vol (Bytes)'] = grouped_data['TCP DL Retrans. Vol (Bytes)'].apply(
+  lambda x: mean_value if abs(x - mean_value) > outlier_threshold * std_dev else x
+
+)
+ 
+print(grouped_data)
+ grouped_data_rtt = df.groupby('MSISDN/Number')['Avg RTT DL (ms)'].mean().reset_index()
+ 
+grouped_data_rtt['Avg RTT DL (ms)'].fillna(grouped_data_rtt['Avg RTT DL (ms)'].mean(), inplace=True)
+ 
+mean_value_rtt = grouped_data_rtt['Avg RTT DL (ms)'].mean()
+
+std_dev_rtt = grouped_data_rtt['Avg RTT DL (ms)'].std()
+ 
+outlier_threshold_rtt = 3
+ 
+grouped_data_rtt['Avg RTT DL (ms)'] = grouped_data_rtt['Avg RTT DL (ms)'].apply(
+  lambda x: mean_value_rtt if abs(x - mean_value_rtt) > outlier_threshold_rtt * std_dev_rtt else x
+
+)
+ 
+print(grouped_data_rtt)
+grouped_data_handset = df.groupby('MSISDN/Number')['Handset Type'].agg(lambda x: x.mode().iat[0] if not x.mode().empty else None).reset_index()
+ 
+grouped_data_handset['Handset Type'].fillna(grouped_data_handset['Handset Type'].mode().iat[0], inplace=True)
+ 
+print(grouped_data_handset)
+
+grouped_data_throughput = df.groupby('MSISDN/Number').agg({
+  'Avg Bearer TP DL (kbps)': 'mean',
+  'Avg Bearer TP UL (kbps)': 'mean'
+
+}).reset_index()
+ 
+grouped_data_throughput['Avg Bearer TP DL (kbps)'].fillna(grouped_data_throughput['Avg Bearer TP DL (kbps)'].mean(), inplace=True)
+
+grouped_data_throughput['Avg Bearer TP UL (kbps)'].fillna(grouped_data_throughput['Avg Bearer TP UL (kbps)'].mean(), inplace=True)
+ 
+print(grouped_data_throughput)
+
+top_10_tcp_values = grouped_data['TCP DL Retrans. Vol (Bytes)'].nlargest(10)
+ 
+bottom_10_tcp_values = grouped_data['TCP DL Retrans. Vol (Bytes)'].nsmallest(10)
+ 
+most_frequent_tcp_values = grouped_data['TCP DL Retrans. Vol (Bytes)'].value_counts().head(10)
+ 
+print("Top 10 TCP values:")
+
+print(top_10_tcp_values)
+ 
+print("\nBottom 10 TCP values:")
+
+print(bottom_10_tcp_values)
+ 
+print("\nMost frequent TCP values:")
+
+print(most_frequent_tcp_values)
+ 
+top_10_data = pd.DataFrame({'Top 10 TCP Values': top_10_tcp_values.values}, index=top_10_tcp_values.index)
+
+bottom_10_data = pd.DataFrame({'Bottom 10 TCP Values': bottom_10_tcp_values.values}, index=bottom_10_tcp_values.index)
+
+most_frequent_data = pd.DataFrame({'Frequency': most_frequent_tcp_values.values}, index=most_frequent_tcp_values.index)
+ 
+most_frequent_tcp_values = most_frequent_tcp_values[~(most_frequent_tcp_values.index == "16853393.739320666")]
+ 
+fig, axes = plt.subplots(3, 1, figsize=(12, 15))
+ 
+bottom_10_data.plot(kind='bar', ax=axes[1], legend=False)
+
+axes[1].set_ylabel('TCP DL Retrans. Vol (Bytes)')
+
+axes[1].set_title('Bottom 10 TCP Values')
+ 
+plt.show()
+
+bottom_10_data.plot(kind='bar', ax=axes[1], legend=False)
+
+axes[1].set_ylabel('TCP DL Retrans. Vol (Bytes)')
+
+axes[1].set_title('Bottom 10 TCP Values')
+ 
+most_frequent_data.plot(kind='bar', ax=axes[2], legend=False)
+
+axes[2].set_xlabel('Index')
+
+axes[2].set_ylabel('Frequency')
+
+axes[2].set_title('Most Frequent TCP Values')
+ 
+plt.show()
+data
+
+top_10_rtt_values = grouped_data_rtt['Avg RTT DL (ms)'].nlargest(10)
+ 
+bottom_10_rtt_values = grouped_data_rtt['Avg RTT DL (ms)'].nsmallest(10)
+ 
+most_frequent_rtt_values = grouped_data_rtt['Avg RTT DL (ms)'].value_counts().head(10)
+ 
+print("Top 10 RTT values:")
+
+print(top_10_rtt_values)
+ 
+print("\nBottom 10 RTT values:")
+
+print(bottom_10_rtt_values)
+ 
+print("\nMost frequent RTT values:")
+
+print(most_frequent_rtt_values)
+
+top_10_rtt_data = pd.DataFrame({'Top 10 RTT Values': top_10_rtt_values.values}, index=top_10_rtt_values.index)
+
+bottom_10_rtt_data = pd.DataFrame({'Bottom 10 RTT Values': bottom_10_rtt_values.values}, index=bottom_10_rtt_values.index)
+ 
+fig, axes = plt.subplots(2, 1, figsize=(12, 10))
+ 
+bottom_10_rtt_data.plot(kind='bar', ax=axes[1], legend=False, color='skyblue')
+
+axes[1].set_xlabel('Index')
+
+axes[1].set_ylabel('Avg RTT DL (ms)')
+
+axes[1].set_title('Bottom 10 RTT Values')
+ 
+plt.show()
+
+top_10_throughput_dl_values = grouped_data_throughput['Avg Bearer TP DL (kbps)'].nlargest(10)
+ 
+bottom_10_throughput_dl_values = grouped_data_throughput['Avg Bearer TP DL (kbps)'].nsmallest(10)
+ 
+most_frequent_throughput_dl_values = grouped_data_throughput['Avg Bearer TP DL (kbps)'].value_counts().head(10)
+ 
+top_10_throughput_ul_values = grouped_data_throughput['Avg Bearer TP UL (kbps)'].nlargest(10)
+ 
+bottom_10_throughput_ul_values = grouped_data_throughput['Avg Bearer TP UL (kbps)'].nsmallest(10)
+ 
+most_frequent_throughput_ul_values = grouped_data_throughput['Avg Bearer TP UL (kbps)'].value_counts().head(10)
+ 
+print("Top 10 Throughput values (DL):")
+
+print(top_10_throughput_dl_values)
+ 
+print("\nBottom 10 Throughput values (DL):")
+
+print(bottom_10_throughput_dl_values)
+ 
+print("\nMost frequent Throughput values (DL):")
+
+print(most_frequent_throughput_dl_values)
+ 
+print("\nTop 10 Throughput values (UL):")
+
+print(top_10_throughput_ul_values)
+ 
+print("\nBottom 10 Throughput values (UL):")
+
+print(bottom_10_throughput_ul_values)
+ 
+print("\nMost frequent Throughput values (UL):")
+
+print(most_frequent_throughput_ul_values)
+
+top_10_throughput_dl_data = pd.DataFrame({'Top 10 Throughput DL Values': top_10_throughput_dl_values.values}, index=top_10_throughput_dl_values.index)
+
+bottom_10_throughput_dl_data = pd.DataFrame({'Bottom 10 Throughput DL Values': bottom_10_throughput_dl_values.values}, index=bottom_10_throughput_dl_values.index)
+ 
+fig, axes = plt.subplots(2, 1, figsize=(12, 10))
+ 
+bottom_10_throughput_dl_data.plot(kind='bar', ax=axes[1], legend=False, color='purple')
+
+axes[1].set_xlabel('Index')
+
+axes[1].set_ylabel('Avg Bearer TP DL (kbps)')
+
+axes[1].set_title('Bottom 10 Throughput DL Values')
+ 
+plt.show()
+
+grouped_throughput = df.groupby('Handset Type').agg({
+  'Avg Bearer TP DL (kbps)': 'mean',
+  'Avg Bearer TP UL (kbps)': 'mean'
+
+}).reset_index()
+ 
+print(grouped_throughput)
+
+grouped_throughput_handset = pd.merge(grouped_data_handset, grouped_data_throughput, on='MSISDN/Number')
+ 
+print(grouped_throughput_handset)
+ 
+grouped_throughput_handset = grouped_throughput_handset.groupby('Handset Type').agg({
+  'Avg Bearer TP DL (kbps)': 'mean',
+  'Avg Bearer TP UL (kbps)': 'mean'
+
+}).reset_index()
+ 
+print(grouped_throughput_handset)
+
+merged_data = pd.merge(grouped_data_handset, grouped_data, on='MSISDN/Number')
+ 
+print(merged_data)
+ 
+grouped_data_handset = df.groupby('MSISDN/Number')['Handset Type'].agg(lambda x: x.mode().iat[0] if not x.mode().empty else None).reset_index()
+ 
+grouped_data_tcp = df.groupby('Handset Type')['TCP DL Retrans. Vol (Bytes)'].mean().reset_index()
+ 
+merged_data = pd.merge(grouped_data_handset, grouped_data_tcp, on='Handset Type')
+ 
+print(merged_data)
+
+top_10_mean_tcp_values = merged_data.nlargest(10, 'TCP DL Retrans. Vol (Bytes)')
+ 
+plt.figure(figsize=(12, 6))
+ 
+plt.bar(top_10_mean_tcp_values['Handset Type'], top_10_mean_tcp_values['TCP DL Retrans. Vol (Bytes)'], color='blue')
+ 
+plt.xlabel('Handset Type')
+
+plt.ylabel('Mean TCP DL Retrans. Vol (Bytes)')
+
+plt.title('Top 10 Mean TCP DL Retrans. Vol (Bytes) for Each Handset Type')
+ 
+plt.xticks(rotation=90)
+ 
+plt.show()
+top_10_mean_tcp_values

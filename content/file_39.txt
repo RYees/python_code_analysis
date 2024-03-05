@@ -1,0 +1,1223 @@
+import numpy as np
+import pandas as pd
+from scipy import stats
+
+class PreProcess:
+  def __init__(self, data):
+  self.data = data
+  def remove_duplicate(self):
+  return self.data.drop_duplicates()
+  def remove_missing(self):
+  '''
+  This function removes all columns   with missing values of above 30%
+  '''
+  self.data = self.data.dropna(thresh=len(self.data)*0.7, axis=1)
+  return self.data
+  def convert_to_timestamp(self, column_name):
+  '''
+  This function converts the date column to timestamp
+  '''
+  self.data[column_name] = pd.to_datetime(self.data[column_name])
+  return self.data
+  def impute_mean_numeric(self):
+  '''
+  This function imputes mean values to missing values in numeric columns
+  '''
+  numeric_columns = self.data.select_dtypes(include=['float64', 'number']).columns
+  self.data.loc[:, numeric_columns] = self.data.loc[:, numeric_columns].apply(lambda x: x.fillna(x.mean()))
+  return self.data
+  def impute_mean_datetime(self):
+  '''
+  This function imputes mean values to missing values in datetime columns
+  '''
+  datetime_columns = self.data.select_dtypes(include=['datetime64']).columns
+  for col in datetime_columns:
+  mean_timestamp = self.data[col].mean().timestamp()
+  self.data.loc[:, col] = self.data[col].fillna(pd.to_datetime(mean_timestamp, unit='s'))
+  return self.data
+  def impute_mode_categorical(self):
+  '''
+  This function imputes mode values to missing values in categorical columns
+  '''
+  categorical_columns = self.data.select_dtypes(include=['object']).columns
+  for col in categorical_columns:
+  self.data.loc[:, col] = self.data[col].fillna(self.data[col].mode()[0])
+  return self.data
+  def remove_outliers(self):
+  '''
+  This function removes outliers from the dataset for numeric fields
+  '''
+  numeric_columns = self.data.select_dtypes(include=['float64', 'number']).columns
+  z_scores = np.abs(stats.zscore(self.data[numeric_columns]))
+  filtered_data = self.data[(z_scores < 3).all(axis=1)]
+  self.data = filtered_data
+  return filtered_data
+%load_ext autoreload
+
+%autoreload 2
+
+import numpy as np
+
+import pandas as pd
+
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+
+import os
+
+import sys
+import warnings
+
+warnings.filterwarnings('ignore')
+
+rpath = os.path.abspath('..')
+
+if rpath not in sys.path:
+  sys.path.insert(0,rpath)
+
+from src.preprocessing import PreProcess
+
+from src.overview import Overview
+
+from src.outlier import Outlier
+
+from db_connection.database import Database
+conn = Database(host='localhost',port=5432,user='basilel',dbname='telecom',password='Basi')
+
+conn.connect()
+query = "SELECT * FROM xdr_data;"
+
+df_data = pd.read_sql(query, conn.connection)
+
+df_data.to_csv('../data/uncleanData.csv', index=False)
+df = df_data.copy()
+df.head()
+df.shape
+ 
+print(f" There are {df.shape[0]} rows and {df.shape[1]} columns")
+df.describe()
+
+df.columns.tolist()
+
+df.isna().sum()
+df.info()
+duplicated_entries = df[df.duplicated()]
+
+duplicated_entries.shape
+df.hist(bins=80, figsize=(30,25))
+overview = Overview(df)
+percent_missing = overview.percent_missing(df)
+df['MSISDN/Number'].plot(kind='density')
+
+print('This distribution has skew', df['MSISDN/Number'].skew())
+
+print('This distribution has kurtosis', df['MSISDN/Number'].kurt())
+preprocess = PreProcess(df)
+df = preprocess.clean_feature_name(df)
+df.columns
+df.dtypes
+%load_ext autoreload
+
+%autoreload 2
+
+df = preprocess.drop_duplicates(df)
+df_c, df_before_filling, missing_cols = preprocess.drop_variables(df)
+
+print(missing_cols)
+
+cols, df_single, num_cols = preprocess.fill_numerical_variables(df)
+print(len(missing_cols))
+
+df_cols, df_single, cat_cols = preprocess.fill_categorical_variables(df, cols, num_cols, df_single)
+
+df_single.columns[df_single.isnull().mean() > 0] 
+df_single.info()
+df_single.isna().sum().nlargest(10)
+df_single.head()
+df_single.columns
+df.columns
+ 
+df.to_csv('../data/cleaned_data2.csv', index=False)
+import os
+
+import sys
+
+import pandas as pd  
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+
+import numpy as np
+rpath = os.path.abspath('..')
+
+if rpath not in sys.path:
+  sys.path.insert(0,rpath)
+
+from src import utils
+
+from src.plots import Plot
+
+from src.preprocessing import PreProcess
+
+from src.overview import Overview
+df = pd.read_csv('../data/cleaned_data_outliers.csv')
+plots = Plot()
+
+preprocess = PreProcess(df)
+
+overview = Overview(df)
+
+handset_counts = df['Handset Type'].value_counts().head(10)
+
+plots.plot_bar(x=handset_counts.values, y=handset_counts.index, xlabel='Number of Users', title='Top 10 Handsets by Users',ylabel='Handset Type')
+manufacturer_counts = df['Handset Manufacturer'].value_counts().head(3)
+
+plots.plot_pie(manufacturer_counts, title='Top 3 Handset Manufacturers by Users')
+top_manufacturers = df['Handset Manufacturer'].value_counts().head(3).index
+ 
+df_top_manufacturers = df[df['Handset Manufacturer'].isin(top_manufacturers)]
+ 
+top_handsets_per_manufacturer = (
+  df_top_manufacturers
+  .groupby('Handset Manufacturer')['Handset Type']
+  .value_counts()
+  .groupby(level=0, group_keys=False)
+  .nlargest(5)
+  .reset_index(name='Count')
+
+)
+ 
+plots.plot_bar(x=top_handsets_per_manufacturer['Count'], y=top_handsets_per_manufacturer['Handset Type'], xlabel='Number of Users', title='Top 5 Handsets per Top 3 Handset Manufacturers',ylabel='Handset Type',palette='viridis')
+ 
+xDR_sess_agg = df['MSISDN/Number'].value_counts()
+
+print(xDR_sess_agg.nlargest(10))
+df.groupby('MSISDN/Number')['Dur. (ms)'].sum().nlargest(10)
+
+df.groupby('MSISDN/Number')[['Total DL (Bytes)', 'Total UL (Bytes)']].sum().nlargest(10, 'Total DL (Bytes)')
+df["social_media"] = df["Social Media DL (Bytes)"] + df['Social Media UL (Bytes)']
+
+df["google"] = df["Google DL (Bytes)"] + df["Google UL (Bytes)"]
+
+df['email'] = df["Email DL (Bytes)"] + df["Email UL (Bytes)"]
+
+df['youtube'] = df["Youtube DL (Bytes)"] + df["Youtube UL (Bytes)"]
+
+df['netflix'] = df["Netflix DL (Bytes)"] + df["Netflix UL (Bytes)"]
+
+df["gaming"] = df["Gaming DL (Bytes)"] + df["Gaming UL (Bytes)"]
+
+df['other'] = df["Other DL (Bytes)"]+df["Other UL (Bytes)"]
+
+df['total_data'] = df['Total DL (Bytes)'] + df['Total UL (Bytes)']
+ 
+quantitative_vars = df.select_dtypes(include=['float64', 'int64'])
+ 
+dispersion_parameters = pd.DataFrame({
+  'Mean': quantitative_vars.mean(),
+  'Std Deviation': quantitative_vars.std(),
+  'Min': quantitative_vars.min(),
+  '25th Percentile (Q1)': quantitative_vars.quantile(0.25),
+  'Median (Q2)': quantitative_vars.median(),
+  '75th Percentile (Q3)': quantitative_vars.quantile(0.75),
+  'Max': quantitative_vars.max(),
+  'IQR': quantitative_vars.quantile(0.75) - quantitative_vars.quantile(0.25)
+
+})
+ 
+print(dispersion_parameters)
+
+correlation_coefficients = quantitative_vars.corr(method='pearson')
+
+correlation_coefficients
+plots.plot_hist(df=df, column='Dur. (ms)', title='Distribution of Session Durations')
+plots.plot_hist(df=df, column='Bearer Id', title='Distribution of Total Data')
+plots.plot_hist(df=df, column='total_data',title='Distribution of Total Data')
+plots.plot_hist(df=df, column='social_media', title='Distribution of Social Media Data')
+plots.plot_hist(df=df, column='google', title='Distribution of Google Data')
+plots.plot_hist(df=df, column='email', title='Distribution of Email Data')
+plots.plot_hist(df=df, column='youtube', title='Distribution of Youtube Data')
+plots.plot_hist(df=df, column='gaming', title='Distribution of Gaming Data')
+
+plots.plot_scatter(df, df['google'], df['total_data'], 'Total Data Vs. Google', None, None)
+
+plots.plot_scatter(df,  df['google'], df['Dur. (ms)'], 'Content Duration Vs. Google', None, None)
+
+plots.plot_scatter(df,  df['youtube'], df['Dur. (ms)'], 'Content Duration Vs. YouTube', None, None)
+
+plots.plot_scatter(df,  df['netflix'], df['Dur. (ms)'], 'Content Duration Vs. Netflix', None, None)
+
+plots.plot_scatter(df, df['netflix'], df['total_data'], 'Total Data Vs. Netflix', None, None)
+
+plots.plot_scatter(df, df['gaming'], df['Dur. (ms)'], 'Total Duration Vs. Gaming', None, None)
+sns.relplot(data=df, x="Handset Manufacturer", y="google", hue=None, kind="line")
+sns.relplot(x="total_data", y="google", hue="Handset Manufacturer", data=df);
+preprocess = PreProcess(df)
+df2 = df.copy()
+
+df3 = pd.read_csv('../data/cleaned_data2.csv')
+feature_to_use = df3[['msisdn/number', 'social_media', 'google', 'email', 'youtube', 'netflix',
+  'gaming',  'other', 'total_data', 'handset_manufacturer']]
+feature_to_use.head()
+total_count_app = pd.DataFrame()
+
+google_total = feature_to_use.sum()[1]
+
+email_total = feature_to_use.sum()[2]
+
+youtube_total = feature_to_use.sum()[3]
+
+netflix_total = feature_to_use.sum()[4]
+
+gaming_total = feature_to_use.sum()[5]
+
+other_total = feature_to_use.sum()[6]
+total_count_app['app'] = ['google', 'email', 'youtube', 'netflix', 'gaming', 'other']
+
+total_count_app['total'] = [google_total, email_total, youtube_total, netflix_total, gaming_total,  other_total]
+total_count_app.head(6)
+total_count_app.head()
+total_count_app
+plots.plot_bar(x=total_count_app['app'], y=total_count_app['total'], title="Total data usage per app", xlabel="Application", ylabel="Total data volume")
+
+df.columns
+var_tr = df[['MSISDN/Number', 'Dur. (ms)', 'total_data']]
+var_tr_agg = var_tr.groupby('MSISDN/Number').agg({'Dur. (ms)':'sum', 'total_data': 'sum'})
+var_tr_agg.shape
+var_tr_agg_decile = overview.get_decile(var_tr_agg, 'Dur. (ms)', 5, ['First Decile', 'Second Decile', 'Third Decile', 'Fourth Decile', 'Fifth Decile'])
+var_tr_agg_decile.head()
+plots.plot_bar(x=var_tr_agg_decile['deciles'], y=var_tr_agg_decile['total_data'] , title="Total data usage per decile", xlabel="Decile", ylabel="Total data volume")
+corr_analysis = df3[['msisdn/number','social_media', 'google',
+  'email', 'youtube', 'netflix', 'gaming', 'other']]
+
+corr_analysis_agg = corr_analysis.groupby('msisdn/number').agg({'social_media':'sum', 'google':'sum', 'email':'sum', 'youtube':'sum', 'netflix':'sum', 'gaming':'sum', 'other':'sum'})
+
+plots.plot_heatmap(corr_analysis_agg, "Correlation between apps")
+
+corr_analysis_agg.corr()
+
+num_cols = df.select_dtypes(include=np.number).columns
+
+cat_cols = list(set(df.columns) - set(num_cols))
+df[num_cols].columns
+num_final = [col for col in num_cols if col not in ['msisdn/number','bearer_id', 'start_ms', 'end_ms', 'imsi', 'imei']]
+len(num_final)
+len(df.columns)
+def clean_dataset(df):
+  assert isinstance(df, pd.DataFrame), "df needs to be a pd.DataFrame"
+  df.dropna(inplace=True)
+  indices_to_keep = ~df.isin([np.nan, np.inf, -np.inf]).any(axis=1)
+  return df[indices_to_keep].astype(np.float64)
+df2 = df.copy()
+df2 = clean_dataset(df2[num_final])
+df2.shape
+from sklearn.preprocessing import StandardScaler
+ 
+scaler = StandardScaler()
+
+scaler.fit(df2)
+
+df_scaled = scaler.transform(df2)
+df_scaled.shape
+from sklearn.decomposition import PCA
+
+pca_44 = PCA(n_components=44, random_state=42)
+
+pca_44.fit(df_scaled)
+x_pca_44 = pca_44.transform(df_scaled)
+x_pca_44.shape 
+sum(pca_44.explained_variance_ratio_)
+np.cumsum(pca_44.explained_variance_ratio_ * 100)
+plt.plot(np.cumsum(pca_44.explained_variance_ratio_))
+
+plt.xlabel('Number of Components')
+
+plt.ylabel('Cumulative Explained Variance')
+print("Variance explained by first Principal components: {}".format( np.cumsum(pca_44.explained_variance_ratio_ * 100)[0]))
+
+print("Variance explained by  2 Principal components: {}".format( np.cumsum(pca_44.explained_variance_ratio_ * 100)[1]))
+
+print("Variance explained by  3 Principal components: {}".format( np.cumsum(pca_44.explained_variance_ratio_ * 100)[2]))
+
+print("Variance explained by  10 Principal components: {}".format( np.cumsum(pca_44.explained_variance_ratio_ * 100)[9]))
+
+pca_65 = PCA(n_components=0.65, random_state=42)
+
+pca_65.fit(df_scaled)
+
+df_pca_95 = pca_65.transform(df_scaled)
+df_pca_95.shape
+import os
+
+import sys
+
+import numpy as np
+
+import pandas as pd  
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+
+from kneed import KneeLocator
+rpath = os.path.abspath('..')
+
+if rpath not in sys.path:
+  sys.path.insert(0,rpath)
+
+from src.plots import Plot
+df = pd.read_csv('../data/cleaned_data_outliers.csv')
+df.head(5)
+
+column_name = 'msisdn/number'
+
+value_to_match = 33663706799.0
+
+mask = df[column_name] == value_to_match
+
+df = df[~mask]
+df.columns
+df["social_media"] = df["social_media_dl_(bytes)"] + df['social_media_ul_(bytes)']
+
+df["google"] = df["google_dl_(bytes)"] + df["google_ul_(bytes)"]
+
+df['email'] = df["email_dl_(bytes)"] + df["email_ul_(bytes)"]
+
+df['youtube'] = df["youtube_dl_(bytes)"] + df["youtube_ul_(bytes)"]
+
+df['netflix'] = df["netflix_dl_(bytes)"] + df["netflix_ul_(bytes)"]
+
+df["gaming"] = df["gaming_dl_(bytes)"] + df["gaming_ul_(bytes)"]
+
+df['other'] = df["other_dl_(bytes)"]+df["other_ul_(bytes)"]
+
+df['total_data'] = df['total_dl_(bytes)'] + df['total_ul_(bytes)']
+df = df.rename( columns={'bearer_id': 'sessions'})
+data_aggregate = df.groupby('msisdn/number').agg({'sessions': 'count', 'dur._(ms)': 'sum', 'total_data': 'sum'})
+data_aggregate.head()
+
+sessions = data_aggregate.nlargest(10, "sessions")['sessions']
+
+duration = data_aggregate.nlargest(10, "dur._(ms)")['dur._(ms)']
+
+total_data = data_aggregate.nlargest(10, "total_data")['total_data']
+sesssions_df = pd.DataFrame()
+
+sesssions_df['User_ID'] = sessions.index
+
+sesssions_df['Sessions'] = sessions.values
+
+durations_df = pd.DataFrame()
+
+durations_df['User_ID'] = duration.index
+
+durations_df['duration'] = duration.values
+
+total_data_df = pd.DataFrame()
+
+total_data_df['User_ID'] = total_data.index
+
+total_data_df['total_data'] = total_data.values
+durations_df.head()
+f, axes = plt.subplots(1, 3, figsize=(25, 5))
+
+ax1 = sns.barplot(data=sesssions_df, x='User_ID', orient='v', y='Sessions', ax=axes[0])
+
+ax2 = sns.barplot(data=durations_df, x='User_ID',orient='v', y='duration', ax=axes[1])
+
+ax3 = sns.barplot(data=total_data_df, x='User_ID',orient='v', y='total_data', ax=axes[2])
+
+ax1.set_xticklabels(ax1.xaxis.get_majorticklabels(), rotation=45)
+
+ax2.set_xticklabels(ax2.xaxis.get_majorticklabels(), rotation=45)
+
+ax3.set_xticklabels(ax3.xaxis.get_majorticklabels(), rotation=45)
+
+plt.plot()
+
+from sklearn.preprocessing import Normalizer
+
+from sklearn.cluster import KMeans
+normalizer = Normalizer()
+columns = ['sessions','dur._(ms)','total_data']
+
+selected_columns = data_aggregate[columns]
+
+normalized_data = normalizer.fit_transform(selected_columns)
+normalized_user_data = pd.DataFrame(normalized_data, columns=columns)
+
+normalized_user_data.head(5)
+normalized_user_data.describe()
+plt.figure(figsize=(15,6))
+
+plt.subplot(1,2,1)
+
+sns.violinplot(y=data_aggregate["dur._(ms)"])
+ 
+plt.subplot(1,2,2)
+
+sns.violinplot(y=data_aggregate["sessions"])
+ 
+plt.show()
+
+kmeans = KMeans(init="random",n_clusters=3,n_init=10,max_iter=300,random_state=42)
+
+label = kmeans.fit_predict(normalized_user_data)
+
+centroids = kmeans.cluster_centers_
+lables_unique = np.unique(label)
+ 
+plt.figure(figsize=(10,5))
+
+plt.title('User K-Means Classification with 3 Groups (Standardized Data)')
+
+for i in lables_unique:
+  plt.scatter(normalized_user_data[label == i].iloc[:,0] , normalized_user_data[label == i].iloc[:,1], marker='o', label = i)
+
+plt.scatter(centroids[:,0] , centroids[:,1],centroids[:,2], marker='x', color = 'black')
+
+plt.legend()
+
+plt.show()
+normalized_user_data.head()
+clustered_Df = pd.DataFrame()
+
+clustered_Df['data_index'] = normalized_user_data.index.values
+
+clustered_Df['cluster'] = kmeans.labels_
+clustered_Df.cluster.value_counts()
+u_eng = data_aggregate.copy()
+u_eng.insert(0, 'cluster', kmeans.labels_)
+
+u_eng.head(5)
+cluster1 = u_eng[u_eng["cluster"]==0]
+
+cluster1.describe()
+cluster2 = u_eng[u_eng["cluster"] == 1]
+
+cluster2.describe()
+cluster3 = u_eng[u_eng["cluster"] == 2]
+
+cluster3.describe()
+cluster3.sessions.count()
+data = [cluster1.sessions.count(), cluster2.sessions.count(), cluster3.sessions.count()]
+
+keys = ['Cluster 1', 'Cluster 2', 'Cluster 3']
+ 
+plot = Plot()
+
+plot.plot_pie(data=data, label=keys, title="Cluster Distribution Count")
+user_app_usage = df.groupby(
+  'msisdn/number').agg({ 'social_media': 'sum', 'gaming': 'sum', 'youtube': 'sum', 'netflix': 'sum', 'google': 'sum', 'email': 'sum', 'other': 'sum'})
+
+user_app_usage.reset_index(inplace=True)
+ 
+user_app_usage = user_app_usage.drop('msisdn/number', axis=1)
+
+user_app_usage
+social_media = user_app_usage.nlargest(10, "social_media")['social_media']
+
+gaming = user_app_usage.nlargest(10, "gaming")['gaming']
+
+youtube = user_app_usage.nlargest(10, "youtube")['youtube']
+
+netflix = user_app_usage.nlargest(10, "netflix")['netflix']
+
+google = user_app_usage.nlargest(10, "google")['google']
+
+email = user_app_usage.nlargest(10, "email")['email']
+
+other = user_app_usage.nlargest(10, "other")['other']
+
+social_media_df = pd.DataFrame()
+
+social_media_df['User_ID'] = social_media.index
+
+social_media_df['social_media'] = social_media.values
+
+gaming_df = pd.DataFrame()
+
+gaming_df['User_ID'] = gaming.index
+
+gaming_df['gaming'] = gaming.values
+
+youtube_df = pd.DataFrame()
+
+youtube_df['User_ID'] = youtube.index
+
+youtube_df['youtube'] = youtube.values
+ 
+netflix_df = pd.DataFrame()
+
+netflix_df['User_ID'] = netflix.index
+
+netflix_df['netflix'] = netflix.values
+
+google_df = pd.DataFrame()
+
+google_df['User_ID'] = google.index
+
+google_df['google'] = google.values
+
+email_df = pd.DataFrame()
+
+email_df['User_ID'] = email.index
+
+email_df['email'] = email.values
+
+others_df = pd.DataFrame()
+
+others_df['User_ID'] = other.index
+
+others_df['other'] = other.values
+f, axes = plt.subplots(2, 4, figsize=(25, 15))
+
+ax1 = sns.barplot(data=social_media_df, x='User_ID', orient='v', y='social_media', ax=axes[0,0], palette='Blues_d')
+
+ax2 = sns.barplot(data=gaming_df, x='User_ID',orient='v', y='gaming', ax=axes[0,1], palette='Blues_d')
+
+ax3 = sns.barplot(data=youtube_df, x='User_ID',orient='v', y='youtube', ax=axes[0,2], palette='Blues_d')
+
+ax4 = sns.barplot(data=netflix_df, x='User_ID',orient='v', y='netflix', ax=axes[0,3], palette='Blues_d')
+
+ax5 = sns.barplot(data=google_df, x='User_ID',orient='v', y='google', ax=axes[1,0], palette='Blues_d')
+
+ax6 = sns.barplot(data=email_df, x='User_ID',orient='v', y='email', ax=axes[1,1], palette='Blues_d')
+
+ax7 = sns.barplot(data=others_df, x='User_ID',orient='v', y='other', ax=axes[1,2], palette='Blues_d')
+
+ax1.set_xticklabels(ax1.xaxis.get_majorticklabels(), rotation=45)
+
+ax2.set_xticklabels(ax2.xaxis.get_majorticklabels(), rotation=45)
+
+ax3.set_xticklabels(ax3.xaxis.get_majorticklabels(), rotation=45)
+
+ax4.set_xticklabels(ax4.xaxis.get_majorticklabels(), rotation=45)
+
+ax5.set_xticklabels(ax5.xaxis.get_majorticklabels(), rotation=45)
+
+ax6.set_xticklabels(ax6.xaxis.get_majorticklabels(), rotation=45)
+
+ax7.set_xticklabels(ax7.xaxis.get_majorticklabels(), rotation=45)
+
+plt.plot()
+
+top_used_applications = user_app_usage.sum()
+top_used_applications.values
+top_3_used = top_used_applications.nlargest(3)
+top_3_used
+plot.plot_bar(top_3_used, ["Netflix", "Email", "Gaming"], top_3_used.values, "Top 3 Used Applications", "Applications", "Usage Count")
+inertias = []
+
+for i in range(1,16):
+  kmeans = KMeans(n_clusters = i, init = 'k-means++', random_state = 42)
+  kmeans.fit(normalized_user_data)
+  inertias.append(kmeans.inertia_)
+
+plt.figure(figsize = (10,8))
+
+plt.plot(range(1, 16), inertias, marker = 'o', linestyle = '--')
+
+plt.xlabel('Number of Clusters')
+
+plt.ylabel('Inertias')
+
+plt.title('K-means Clustering')
+
+plt.show()
+kl = KneeLocator(range(0, 15), inertias, curve="convex", direction="decreasing")
+
+kl.elbow
+u_eng.shape
+u_eng.to_csv('../data/user_eng.csv')
+user_app_usage.to_csv('../data/normalized_eng.csv')
+import joblib
+
+joblib.dump(kmeans,'../models/user_engagement.pkl')
+%load_ext autoreload
+
+%autoreload 2
+
+import numpy as np
+
+import pandas as pd
+
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+
+import os
+
+import sys
+rpath = os.path.abspath('..')
+
+if rpath not in sys.path:
+  sys.path.insert(0,rpath)
+
+from src.preprocessing import PreProcess
+
+from src.overview import Overview
+
+from src.outlier import Outlier
+
+from src.plots import Plot
+df = pd.read_csv('../data/cleaned_data2.csv')
+outlier = Outlier(df)
+df.head()
+df.columns
+pl = Plot()
+pl.plot_box(df, 'dur._(ms)', 'Total Duration of the xDR (in ms)')
+pl.plot_box(df, 'avg_rtt_dl_(ms)', 'Average Round Trip Time measurement Downlink direction (msecond)')
+pl.plot_box(df, 'tcp_ul_retrans._vol_(bytes)', 'TCP volume of Uplink packets detected as retransmitted (bytes)')
+display(outlier.outlier_overview(df, 'activity_duration_ul_(ms)'))
+display(outlier.outlier_overview(df, 'tcp_ul_retrans._vol_(bytes)'))
+%load_ext autoreload
+
+%autoreload 2
+
+df.dtypes
+num_cols = df.select_dtypes(include=np.number).columns
+dlist = ['bearer_id', 'start_ms', 'end_ms', 'imsi', 'msisdn/number', 'imei']
+num_cols = [el for el in num_cols if el not in dlist]
+
+for col in num_cols:
+  sample_outliers = outlier.calculate_num_outliers_zscore(df[col])
+  print(f"Outliers from Z-scores method of {col}", len(sample_outliers))
+df = outlier.handle_outliers(df, num_cols)
+
+for col in num_cols:
+  sample_outliers = outlier.calculate_num_outliers_zscore(df[col])
+  print(f"Outliers from Z-scores method of {col}", len(sample_outliers))
+outlier_columns = []
+
+for col in num_cols:
+  sample_outliers = outlier.calculate_num_outliers_zscore(df[col])
+  if len(sample_outliers) > 0:
+  outlier_columns.append(col)
+len(outlier_columns)
+df_cop = df.copy()
+from sklearn.preprocessing import MinMaxScaler
+ 
+minmax_scaler = MinMaxScaler()
+ 
+scaled_data = df.copy()
+ 
+scaled_data.sample(5)
+df_cop[outlier_columns].shape 
+scaled_data.shape
+scaled_data = minmax_scaler.fit_transform(scaled_data[outlier_columns])
+scaled_data.shape
+outlier_columns = []
+
+for col in num_cols:
+  sample_outliers = outlier.calculate_num_outliers_zscore(df_cop[col])
+  if len(sample_outliers) > 0:
+  outlier_columns.append(col)
+len(outlier_columns)
+
+for col in num_cols:
+  sample_outliers = outlier.calculate_num_outliers_zscore(df_cop[col])
+  print(f"Outliers from Z-scores method of {col}", len(sample_outliers))
+df_cop[num_cols].boxplot()
+pl.plot_box(df_cop, 'dur._(ms)', 'Total Duration of the xDR (in ms) after outlier handling')
+df_cop.describe()
+ 
+df_cop.to_csv('../data/cleaned_data_outliers.csv', index=False)
+import sys
+
+import numpy as np
+import pandas as pd
+ 
+class Outlier:
+  def __init__(self, df: pd.DataFrame):
+  """Initialize the PreProcess class.
+  Args:
+  df (pd.DataFrame): dataframe to be preprocessed
+  """
+  try:
+  self.df = df
+  except Exception:
+  sys.exit(1)
+  def handle_outliers(self, df: pd.DataFrame, cols):
+  """Handle outliers in the dataset.
+  Args:
+  df (pd.DataFrame): a dataframe to be preprocessed
+  Returns:
+  pd.DataFrame: the dataframe
+  """
+  for col in cols:
+  df[col] = [np.log(x) for x in df[col]]
+  return df
+  def calculate_num_outliers_zscore(self, col):
+  """Return the number of outliers for each numerical col.
+  Args:
+  col (pd.DataFrame): a dataframe to be analyzed
+  """
+  outliers = []
+  thres = 3
+  mean = np.mean(col)
+  std = np.std(col)
+  for i in col:
+  z_score = (i-mean)/std
+  if (np.abs(z_score) > thres):
+  outliers.append(i)
+  return outliers   def calculate_num_outliers_iqr(self, df, cols):
+  """Return the number of outliers for each col.
+  Args:
+  df (pd.DataFrame): a dataframe to be analyzed
+  cols (list): list of columns to analyze
+  """
+  outliersTot = {}
+  for col in cols:
+  outliers = []
+  df_sorted = df.sort_values(col)[col]
+  q1 = np.percentile(df_sorted, 25)
+  q3 = np.percentile(df_sorted, 75)
+  IQR = q3 - q1
+  lwr_bound = q1 - (1.5 * IQR)
+  upr_bound = q3 + (1.5 * IQR)
+  for i in df_sorted:
+  if (i < lwr_bound or i > upr_bound):
+  outliers.append(i)
+  outliersTot[col] = outliers
+  return outliersTot
+  def outlier_overview(self, df, col):
+  """Get outlier overview.
+  Args:
+  df (pd.DataFrame): a dataframe to be analyzed
+  """
+  upper_limit = df[col].mean() + 3 * df['total_ul_(bytes)'].std()
+  lower_limit = df[col].mean() - 3 * df['total_ul_(bytes)'].std()
+  return df[~((df[col] < upper_limit) & (df[col] > lower_limit))]
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import sys
+ 
+class Plot:
+  def __init__(self) -> None:
+  pass
+  def plot_bar(self, x, y, xlabel,ylabel,title,palette=None) -> None:
+  plt.figure(figsize=(12, 6))
+  sns.barplot(x=x, y=y, palette="viridis")
+  plt.title(title)
+  plt.xlabel(xlabel)
+  plt.ylabel(ylabel)
+  plt.show()
+  def plot_count(self, df: pd.DataFrame, column: str) -> None:
+  """Plot the count of the column.
+  Args:
+  df (pd.DataFrame): Dataframe to be plotted.
+  column (str): column to be plotted.
+  """
+  plt.figure(figsize=(12, 7))
+  sns.countplot(data=df, x=column)
+  plt.title(f'Distribution of {column}', size=20, fontweight='bold')
+  plt.show()
+  def plot_heatmap(self, df: pd.DataFrame, title: str, cbar=False) -> None:
+  """Plot Heat map of the dataset.
+  Args:
+  df (pd.DataFrame): Dataframe to be plotted.
+  title (str): title of chart.
+  """
+  plt.figure(figsize=(12, 7))
+  sns.heatmap(df, annot=True, cmap='viridis', vmin=0,
+  vmax=1, fmt='.2f', linewidths=.7, cbar=cbar)
+  plt.title(title, size=18, fontweight='bold')
+  plt.show()
+  def plot_box(self, df: pd.DataFrame, x_col: str, title: str) -> None:
+  """Plot box chart of the column.
+  Args:
+  df (pd.DataFrame): Dataframe to be plotted.
+  x_col (str): column to be plotted.
+  title (str): title of chart.
+  """
+  plt.figure(figsize=(12, 7))
+  sns.boxplot(data=df, x=x_col)
+  plt.title(title, size=20)
+  plt.xticks(rotation=75, fontsize=14)
+  plt.show()
+  def plot_box_multi(self, df: pd.DataFrame, x_col: str, y_col: str, title: str) -> None:
+  """Plot the box chart for multiple column.
+  Args:
+  df (pd.DataFrame): Dataframe to be plotted.
+  column (str): column to be plotted.
+  """
+  plt.figure(figsize=(12, 7))
+  sns.boxplot(data=df, x=x_col, y=y_col)
+  plt.title(title, size=20)
+  plt.xticks(rotation=75, fontsize=14)
+  plt.yticks(fontsize=14)
+  plt.show()
+  def plot_scatter(self, df: pd.DataFrame, x_col: str, y_col: str, title: str, hue: str, style: str) -> None:
+  """Plot Scatter chart of the data.
+  Args:
+  df (pd.DataFrame): Dataframe to be plotted.
+  column (str): column to be plotted.
+  """
+  plt.figure(figsize=(12, 7))
+  sns.scatterplot(data=df, x=x_col, y=y_col, hue=hue, style=style)
+  plt.title(title, size=20)
+  plt.xticks(fontsize=14)
+  plt.yticks(fontsize=14)
+  plt.show()
+  def plot_pie(self, data, title, label) -> None:
+  """Plot pie chart of the data.
+  Args:
+  data (list): Data to be plotted.
+  labels (list): labels of the data.
+  colors (list): colors of the data.
+  """
+  plt.style.context('seaborn-pastel')
+  plt.figure(figsize=(8, 8))
+  plt.pie(x=data, labels=label, autopct='%1.1f%%', startangle=140)
+  plt.title(title)
+  plt.show()
+  def plot_hist(self, df: pd.DataFrame, column: str, title: str) -> None:
+  """Plot histogram of the data.
+  Args:
+  df (pd.DataFrame): Dataframe to be plotted.
+  column (str): column to be plotted.
+  """
+  plt.figure(figsize=(12, 7))
+  sns.histplot(data=df, x=column, kde=True)
+  plt.title(title, size=20)
+  plt.xticks(fontsize=14)
+  plt.yticks(fontsize=14)
+  plt.show()
+import os
+
+import sys
+
+import numpy as np
+
+import pandas as pd  
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+
+%matplotlib inline
+rpath = os.path.abspath('..')
+
+if rpath not in sys.path:
+  sys.path.insert(0,rpath)
+
+from src.plots import Plot
+
+from src.preprocessing import PreProcess
+df = pd.read_csv('../data/cleaned_data_outliers.csv')
+column_name = 'msisdn/number'
+
+value_to_match = 33663706799.0
+
+mask = df[column_name] == value_to_match
+
+df = df[~mask]
+df.head()
+df.columns
+df['avg_tcp_retrans'] = df['tcp_dl_retrans._vol_(bytes)'] + df['tcp_ul_retrans._vol_(bytes)']
+
+df['avg_rrt'] = df['avg_rtt_dl_(ms)'] + df['avg_rtt_dl_(ms)']
+
+df['avg_bearer_tp'] = df['avg_bearer_tp_dl_(kbps)'] + df['avg_bearer_tp_ul_(kbps)']
+
+df['total_data'] = df['total_dl_(bytes)'] + df['total_ul_(bytes)']
+preprocess = PreProcess(df)
+agg_data = df.groupby('msisdn/number').agg({'avg_tcp_retrans':sum,'avg_rrt':sum,'avg_bearer_tp':sum, 'total_data':sum})
+
+preprocess.replace_neg_inf_with_mean(agg_data)
+sns.set_style('whitegrid')
+
+sns.lmplot(x='avg_tcp_retrans',y='total_data',data=agg_data,palette='coolwarm',aspect=1)
+plot = Plot()
+plot.plot_scatter(agg_data,x_col='avg_rrt',y_col='total_data',title='Total Data vs Round Trip Time',hue=None,style=None)
+plot.plot_scatter(agg_data,x_col='avg_bearer_tp',y_col='total_data',title='Total Data vs Average Bearer Throughput',hue=None,style=None)
+column_name = 'avg_rrt'
+ 
+top_values = agg_data[column_name].nlargest(10)
+ 
+bottom_values = agg_data[column_name].nsmallest(10)
+ 
+most_frequent_values = agg_data[column_name].value_counts().head(10)
+ 
+rrt_result_table = pd.DataFrame({
+  'Top Values': top_values.values,   'Bottom Values': bottom_values.values,
+  'Most Frequent Values': most_frequent_values.index.values,   'Frequency': most_frequent_values.values
+
+})
+
+rrt_result_table
+
+plot.plot_pie(rrt_result_table['Frequency'],title='Frequent Round Trip Time',label=rrt_result_table['Most Frequent Values'])
+
+column_name = 'avg_rrt'
+ 
+top_values = agg_data[column_name].nlargest(10)
+ 
+bottom_values = agg_data[column_name].nsmallest(10)
+ 
+most_frequent_values = agg_data[column_name].value_counts().head(10)
+ 
+result_table = pd.DataFrame({
+  'Top Values': top_values.values,   'Bottom Values': bottom_values.values,
+  'Most Frequent Values': most_frequent_values.index.values,   'Frequency': most_frequent_values.values
+
+})
+
+result_table
+
+column_name = 'avg_bearer_tp'
+ 
+top_values = agg_data[column_name].nlargest(10)
+ 
+bottom_values = agg_data[column_name].nsmallest(10)
+ 
+most_frequent_values = agg_data[column_name].value_counts().head(10)
+ 
+result_table = pd.DataFrame({
+  'Top Values': top_values.values,   'Bottom Values': bottom_values.values,
+  'Most Frequent Values': most_frequent_values.index.values,   'Frequency': most_frequent_values.values
+
+})
+
+result_table
+manufacturer_agg = df.groupby('handset_type').agg({'avg_tcp_retrans':'mean','avg_rrt':'mean','avg_bearer_tp':'mean', 'total_data':sum})
+manufacturer_agg.reset_index(inplace=True)
+
+top_agg = manufacturer_agg.nlargest(10,columns='avg_bearer_tp')
+
+plot.plot_bar(x=top_agg['handset_type'],y=top_agg['avg_bearer_tp'],xlabel='ReTransmission',ylabel='Manufacturer',title='Title')
+top_agg = manufacturer_agg.nlargest(10,columns='avg_bearer_tp')
+
+plot.plot_bar(x=top_agg['handset_type'],y=top_agg['avg_bearer_tp'],xlabel='Retransmission',ylabel='Manufacturer',title='Title')
+from sklearn.preprocessing import StandardScaler
+
+from sklearn.cluster import KMeans
+scaler = StandardScaler()
+
+scaled_features = scaler.fit_transform(agg_data[['avg_tcp_retrans','avg_rrt','avg_bearer_tp']])
+kmeans = KMeans(n_clusters=3, random_state=42)
+
+agg_data['Cluster'] = kmeans.fit_predict(scaled_features)
+agg_data
+cluster_centers = scaler.inverse_transform(kmeans.cluster_centers_)
+
+centroid_df = pd.DataFrame(cluster_centers, columns=['avg_tcp_retrans','avg_rrt','avg_bearer_tp'])
+print("Cluster Centers:")
+
+print(centroid_df)
+cluster_counts = agg_data['Cluster'].value_counts()
+
+print("\nCluster Counts:")
+
+print(cluster_counts)
+sns.set(style="whitegrid")
+ 
+plt.figure(figsize=(10, 6))
+ 
+plt.scatter(agg_data.loc[agg_data['Cluster'] == 0, 'avg_tcp_retrans'],
+  agg_data.loc[agg_data['Cluster'] == 0, 'avg_rrt'],
+  label='Cluster 0', alpha=0.8, s=50)
+ 
+plt.scatter(agg_data.loc[agg_data['Cluster'] == 1, 'avg_tcp_retrans'],
+  agg_data.loc[agg_data['Cluster'] == 1, 'avg_rrt'],
+  label='Cluster 1', alpha=0.8, s=50)
+ 
+plt.scatter(agg_data.loc[agg_data['Cluster'] == 2, 'avg_tcp_retrans'],
+  agg_data.loc[agg_data['Cluster'] == 2, 'avg_rrt'],
+  label='Cluster 2', alpha=0.8, s=50)
+ 
+plt.scatter(cluster_centers[:, 0], cluster_centers[:, 1], marker='X', s=200, color='red', label='Centroids')
+ 
+plt.xlabel('Avg_TCP_Retransmission')
+
+plt.ylabel('Avg_RTT')
+
+plt.title('K-Means Clustering of Telecom Users')
+ 
+plt.legend()
+ 
+plt.show()
+
+import joblib
+joblib.dump(kmeans, '../models/kmeans_model.pkl')
+import joblib
+import os
+
+import sys
+
+import numpy as np
+
+import pandas as pd  
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+
+%matplotlib inline
+rpath = os.path.abspath('..')
+
+if rpath not in sys.path:
+  sys.path.insert(0,rpath)
+
+from src.plots import Plot
+
+from src.preprocessing import PreProcess
+
+from db_connection.database import Database
+kmeans = joblib.load('../models/kmeans_model.pkl')
+
+kmeans
+df = pd.read_csv('../data/cleaned_data_outliers.csv')
+
+df['avg_tcp_retrans'] = df['tcp_dl_retrans._vol_(bytes)'] + df['tcp_ul_retrans._vol_(bytes)']
+
+df['avg_rrt'] = df['avg_rtt_dl_(ms)'] + df['avg_rtt_dl_(ms)']
+
+df['avg_bearer_tp'] = df['avg_bearer_tp_dl_(kbps)'] + df['avg_bearer_tp_ul_(kbps)']
+
+df["social_media"] = df["social_media_dl_(bytes)"] + df['social_media_ul_(bytes)']
+
+df["google"] = df["google_dl_(bytes)"] + df["google_ul_(bytes)"]
+
+df['email'] = df["email_dl_(bytes)"] + df["email_ul_(bytes)"]
+
+df['youtube'] = df["youtube_dl_(bytes)"] + df["youtube_ul_(bytes)"]
+
+df['netflix'] = df["netflix_dl_(bytes)"] + df["netflix_ul_(bytes)"]
+
+df["gaming"] = df["gaming_dl_(bytes)"] + df["gaming_ul_(bytes)"]
+
+df['other'] = df["other_dl_(bytes)"]+df["other_ul_(bytes)"]
+
+df['total_data'] = df['total_dl_(bytes)'] + df['total_ul_(bytes)']
+column_name = 'msisdn/number'
+
+value_to_match = 33663706799.0
+
+mask = df[column_name] == value_to_match
+
+df = df[~mask]
+preprocess = PreProcess(df)
+agg_data = df.groupby('msisdn/number').agg({'avg_tcp_retrans':sum,'avg_rrt':sum,'avg_bearer_tp':sum})
+
+preprocess.replace_neg_inf_with_mean(agg_data)
+from sklearn.preprocessing import StandardScaler
+scaler = StandardScaler()
+
+scaled_features = scaler.fit_transform(agg_data[['avg_tcp_retrans','avg_rrt','avg_bearer_tp']])
+cluster_centers = scaler.inverse_transform(kmeans.cluster_centers_)
+
+centroid_df = pd.DataFrame(cluster_centers, columns=['avg_tcp_retrans','avg_rrt','avg_bearer_tp'])
+print("Cluster Centers:")
+
+print(centroid_df)
+from sklearn.metrics.pairwise import euclidean_distances
+ 
+distances = euclidean_distances(scaled_features, cluster_centers)
+ 
+less_engaged_cluster_index = 0
+ 
+engagement_scores = distances[:, less_engaged_cluster_index]
+ 
+agg_data['Experience_Score'] = engagement_scores
+ 
+sns.set(style="whitegrid")
+ 
+plt.figure(figsize=(10, 6))
+
+sns.histplot(agg_data['Experience_Score'], bins=30, kde=True, color='skyblue')
+ 
+plt.xlabel('Engagement Score')
+
+plt.ylabel('Frequency')
+
+plt.title('Distribution of Experience Scores')
+ 
+plt.show()
+
+user_engagement_kmeans = joblib.load('../models/user_engagement.pkl')
+df = df.rename( columns={'bearer_id': 'sessions'})
+data_aggregate = df.groupby('msisdn/number').agg({'sessions': 'count', 'dur._(ms)': 'sum', 'total_data': 'sum'})
+
+data_aggregate.nlargest(5,'sessions')
+scaler = StandardScaler()
+
+scaled_features = scaler.fit_transform(data_aggregate[['sessions','dur._(ms)','total_data']])
+
+cluster_centers = scaler.inverse_transform(user_engagement_kmeans.cluster_centers_)
+
+centroid_df = pd.DataFrame(cluster_centers, columns=['sessions','dur._(ms)','total_data'])
+from sklearn.metrics.pairwise import euclidean_distances
+ 
+distances = euclidean_distances(scaled_features, cluster_centers)
+ 
+less_engaged_cluster_index = 0
+ 
+engagement_scores = distances[:, less_engaged_cluster_index]
+ 
+data_aggregate['Engagement_Score'] = engagement_scores
+ 
+sns.set(style="whitegrid")
+ 
+plt.figure(figsize=(10, 6))
+
+sns.histplot(data_aggregate['Engagement_Score'], bins=30, kde=True, color='skyblue')
+ 
+plt.xlabel('Engagement Score')
+
+plt.ylabel('Frequency')
+
+plt.title('Distribution of Engagement Scores')
+ 
+plt.show()
+agg_data['Engagement_Score'] = data_aggregate['Engagement_Score'] 
+agg_data['Satisfaction_Score'] = agg_data['Experience_Score'] + agg_data['Engagement_Score']
+satified_customer = agg_data.nlargest(10,'Satisfaction_Score')
+
+plt.figure(figsize=(10, 6))
+
+sns.barplot(x=satified_customer.index, y="Satisfaction_Score", data=satified_customer, palette="Blues_d")
+
+plt.title('Top 10 Satisfied Customers')
+
+plt.xlabel('Customer ID')
+
+plt.ylabel('Satisfaction Score')
+
+plt.xticks(rotation=45)
+
+plt.show()
+agg_data
+
+from sklearn.cluster import KMeans
+ 
+kmeans = KMeans(n_clusters=2, random_state=42)
+ 
+predictions = kmeans.fit_predict(agg_data[['Experience_Score','Engagement_Score']])
+
+print(predictions)
+ 
+agg_data['Cluster'] = predictions
+ 
+agg_data.groupby('Cluster').mean()
+ 
+plt.scatter(agg_data['Experience_Score'], agg_data['Engagement_Score'], c=agg_data['Cluster'], cmap='rainbow')
+
+plt.show()
+
+cluster_data = agg_data.groupby('Cluster').mean()
+ 
+plt.figure(figsize=(10, 6))
+
+sns.barplot(x=cluster_data.index, y="Satisfaction_Score", data=cluster_data, palette="Blues_d")
+
+plt.title('Average Satisfaction Score per Cluster')
+
+plt.xlabel('Cluster')
+
+plt.ylabel('Satisfaction Score')
+
+plt.xticks(rotation=45)
+
+plt.show()
